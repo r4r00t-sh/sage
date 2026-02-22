@@ -68,7 +68,19 @@ backend/generated/
 *.swo
 *~
 
-# Docker / Podman
+# Docker / Podman – only docker-compose.yml is tracked
+docker-compose.prod.yml
+podman-compose.yml
+eFMP-docker-compose*.yml
+*-compose*.yml
+!docker-compose.yml
+
+# Server / ops – not in repo
+scripts/
+suricata-rules/
+fail2ban/
+
+# Misc
 *.log
 
 # Flutter (root-level; sub-projects have their own)
