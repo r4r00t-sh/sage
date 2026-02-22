@@ -5,6 +5,7 @@ import {
   Param,
   UseGuards,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -20,6 +21,18 @@ export class NotesController {
     @Request() req,
     @Body() body: { content: string },
   ) {
+    // Permission check: INWARD_DESK and DISPATCHER cannot add notes
+    const user = await this.prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { roles: true },
+    });
+
+    if (user?.roles?.includes('INWARD_DESK') || user?.roles?.includes('DISPATCHER')) {
+      if (!user?.roles?.includes('DEPT_ADMIN') && !user?.roles?.includes('SUPER_ADMIN')) {
+        throw new ForbiddenException('Inward Desk and Dispatcher users cannot add notes to files.');
+      }
+    }
+
     return this.prisma.note.create({
       data: {
         fileId,

@@ -41,6 +41,11 @@ interface UserDetail {
   username: string;
   name: string;
   email?: string;
+  designation?: string;
+  staffId?: string;
+  phone?: string;
+  profileApprovalStatus?: string;
+  approvedAt?: string;
   roles: string[];
   isActive: boolean;
   createdAt: string;
@@ -385,6 +390,52 @@ export default function UserDetailPage() {
                   <div className="flex justify-between py-2 border-b">
                     <span className="text-muted-foreground">Last Updated</span>
                     <span>{format(new Date(user.updatedAt), 'PPP')}</span>
+                  </div>
+                  {user.designation != null && (
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-muted-foreground">Designation</span>
+                      <span>{user.designation || '—'}</span>
+                    </div>
+                  )}
+                  {user.staffId != null && (
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-muted-foreground">Staff ID</span>
+                      <span>{user.staffId || '—'}</span>
+                    </div>
+                  )}
+                  {user.phone != null && (
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-muted-foreground">Phone</span>
+                      <span>{user.phone || '—'}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between py-2 border-b items-center">
+                    <span className="text-muted-foreground">Profile</span>
+                    <span className="flex items-center gap-2">
+                      {user.profileApprovalStatus === 'PENDING_APPROVAL' ? (
+                        <Badge variant="secondary">Pending approval</Badge>
+                      ) : user.profileApprovalStatus === 'APPROVED' ? (
+                        <Badge variant="default">Approved</Badge>
+                      ) : (
+                        '—'
+                      )}
+                      {user.profileApprovalStatus === 'PENDING_APPROVAL' &&
+                        hasAnyRole(currentUser, ['SUPER_ADMIN']) && (
+                          <Button
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                await api.put(`/users/${user.id}/approve-profile`);
+                                setUser((u) => (u ? { ...u, profileApprovalStatus: 'APPROVED', approvedAt: new Date().toISOString() } : null));
+                              } catch (e: any) {
+                                alert(e?.response?.data?.message || 'Failed to approve');
+                              }
+                            }}
+                          >
+                            Approve
+                          </Button>
+                        )}
+                    </span>
                   </div>
                 </div>
               </CardContent>

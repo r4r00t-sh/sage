@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '@/lib/store';
+import { API_BASE_URL } from '@/lib/api';
 
 export function PresenceClient() {
   const socketRef = useRef<Socket | null>(null);
@@ -11,7 +12,7 @@ export function PresenceClient() {
   useEffect(() => {
     if (!user || !token) return;
 
-    const socket = io('http://localhost:3001/presence', {
+    const socket = io(`${API_BASE_URL}/presence`, {
       auth: { userId: user.id },
       transports: ['websocket'],
     });

@@ -99,7 +99,8 @@ services:
       JWT_EXPIRES_IN: "7d"
       PORT: 3001
       NODE_ENV: production
-      FRONTEND_URL: "http://localhost:3000"
+      FRONTEND_URL: "https://efmp.santhigiri.cloud"
+      ALLOWED_ORIGINS: "https://efmp.santhigiri.cloud,http://efmp.santhigiri.cloud"
     depends_on:
       postgres:
         condition: service_healthy
@@ -113,15 +114,33 @@ services:
       - efiling-network
     restart: unless-stopped
 
+  # Run database seed (Santhigiri Ashram org, departments, divisions, users).
+  # Usage: docker compose run --rm backend-seed
+  backend-seed:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: efiling-backend-seed
+    environment:
+      DATABASE_URL: "postgresql://efiling:efiling123@postgres:5432/efiling_db?schema=public"
+    command: ["npx", "tsx", "prisma/seed.ts"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - efiling-network
+
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "https://efmp.santhigiri.cloud/api"
     container_name: efiling-frontend
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: "http://localhost:3001"
+      NEXT_PUBLIC_API_URL: "https://efmp.santhigiri.cloud/api"
     depends_on:
       - backend
     networks:

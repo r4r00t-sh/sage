@@ -42,13 +42,41 @@ export class OpinionsController {
     });
   }
 
-  // Get pending opinions for current user/department
+  // Get pending opinions for current user/department (RECEIVED)
   @Get('pending')
   async getPendingOpinions(@Request() req) {
     return this.opinionsService.getPendingOpinions(
       req.user.id,
       req.user.departmentId,
     );
+  }
+
+  // Get sent opinions (opinions requested by current user/department)
+  @Get('sent')
+  async getSentOpinions(@Request() req) {
+    return this.opinionsService.getSentOpinions(
+      req.user.id,
+      req.user.departmentId,
+    );
+  }
+
+  // Forward opinion to another department
+  @Post('requests/:id/forward')
+  async forwardOpinion(
+    @Param('id') opinionRequestId: string,
+    @Request() req,
+    @Body()
+    body: {
+      requestedToDepartmentId: string;
+      requestedToDivisionId?: string;
+      requestReason?: string;
+    },
+  ) {
+    return this.opinionsService.forwardOpinion(opinionRequestId, req.user.id, {
+      requestedToDepartmentId: body.requestedToDepartmentId,
+      requestedToDivisionId: body.requestedToDivisionId,
+      requestReason: body.requestReason,
+    });
   }
 
   // Get file for opinion (view-only mode)

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:efiling_app/core/auth/auth_provider.dart';
 import 'package:efiling_app/core/theme/app_colors.dart';
 import 'package:efiling_app/core/api/api_config.dart';
@@ -24,11 +25,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
   static const _testAccounts = [
     _TestAccount(role: 'Super Admin', username: 'admin', password: 'admin123', name: 'Super Administrator', dept: 'All Departments', color: AppColors.red),
-    _TestAccount(role: 'Dept Admin', username: 'finadmin', password: 'password123', name: 'Finance Admin', dept: 'Finance Department', color: Colors.purple),
-    _TestAccount(role: 'Approval Auth', username: 'approver.fin', password: 'password123', name: 'Finance Approver', dept: 'Finance Department', color: AppColors.amber),
-    _TestAccount(role: 'Section Officer', username: 'john.budget', password: 'password123', name: 'John Smith', dept: 'Finance > Budget Section', color: AppColors.blue),
-    _TestAccount(role: 'Inward Desk', username: 'inward.fin', password: 'password123', name: 'Finance Inward Desk', dept: 'Finance Department', color: AppColors.green),
-    _TestAccount(role: 'Dispatcher', username: 'dispatch.fin', password: 'password123', name: 'Finance Dispatcher', dept: 'Finance Department', color: Colors.cyan),
+    _TestAccount(role: 'Dept Admin', username: 'fin.admin', password: 'password123', name: 'Finance Department Admin', dept: 'Finance Department', color: Colors.purple),
+    _TestAccount(role: 'Section Officer', username: 'fin.accoun0.section', password: 'password123', name: 'Accounts - Section Officer', dept: 'Finance > Accounts', color: AppColors.blue),
+    _TestAccount(role: 'Approval Auth', username: 'fin.accoun0.approver', password: 'password123', name: 'Accounts - Approval Authority', dept: 'Finance > Accounts', color: AppColors.amber),
+    _TestAccount(role: 'Dispatcher', username: 'fin.accoun0.dispatch', password: 'password123', name: 'Accounts - Dispatcher', dept: 'Finance > Accounts', color: Colors.cyan),
+    _TestAccount(role: 'Inward Desk', username: 'fin.accoun0.inward', password: 'password123', name: 'Accounts - Inward Desk', dept: 'Finance > Accounts', color: AppColors.green),
+    _TestAccount(role: 'Dept Admin', username: 'agr.admin', password: 'password123', name: 'Agriculture Department Admin', dept: 'Agriculture Department', color: Colors.green),
+    _TestAccount(role: 'Section Officer', username: 'agr.animal0.section', password: 'password123', name: 'Animal Husbandry - Section Officer', dept: 'Agriculture > Animal Husbandry', color: Colors.teal),
+    _TestAccount(role: 'Dept Admin', username: 'ops.admin', password: 'password123', name: 'Operations Department Admin', dept: 'Operations Department', color: Colors.orange),
+    _TestAccount(role: 'Section Officer', username: 'shro.medica0.section', password: 'password123', name: 'Medical Education - Section Officer', dept: 'SHRO > Medical Education', color: Colors.pink),
   ];
 
   @override
@@ -85,12 +90,108 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Future<void> _openDocs() async {
+    final uri = Uri.parse(ApiConfig.docsUrl);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _downloadAndroid() async {
+    final uri = Uri.parse(ApiConfig.downloadAndroidUrl);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open download link. Check the URL.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _downloadIos() async {
+    final uri = Uri.parse(ApiConfig.downloadIosUrl);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open download link. Check the URL.')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isWide = MediaQuery.sizeOf(context).width >= 900;
 
     return Scaffold(
+      appBar: AppBar(
+        title: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/logo.png',
+                width: 32,
+                height: 32,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => Icon(Icons.description, color: theme.colorScheme.primary),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text('EFMP', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+          ],
+        ),
+        centerTitle: false,
+        actions: [
+          TextButton.icon(
+            onPressed: _openDocs,
+            icon: const Icon(Icons.menu_book_outlined, size: 20),
+            label: const Text('Docs'),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Download',
+            offset: const Offset(0, 48),
+            itemBuilder: (context) => [
+              const PopupMenuItem<String>(
+                value: 'android',
+                child: ListTile(
+                  leading: Icon(Icons.android),
+                  title: Text('Download for Android'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'ios',
+                child: ListTile(
+                  leading: Icon(Icons.phone_iphone),
+                  title: Text('Download for iOS'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+            onSelected: (value) {
+              if (value == 'android') _downloadAndroid();
+              if (value == 'ios') _downloadIos();
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Download', style: theme.textTheme.bodyMedium),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_drop_down, size: 24),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Row(
         children: [

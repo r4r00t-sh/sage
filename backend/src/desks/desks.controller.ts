@@ -15,11 +15,15 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '@prisma/client';
 import { DesksService } from './desks.service';
+import { DeskPerformanceService } from './desk-performance.service';
 
 @Controller('desks')
 @UseGuards(JwtAuthGuard)
 export class DesksController {
-  constructor(private desksService: DesksService) {}
+  constructor(
+    private desksService: DesksService,
+    private deskPerformanceService: DeskPerformanceService,
+  ) {}
 
   // Create desk (Admin only)
   @Post()
@@ -134,5 +138,54 @@ export class DesksController {
   @Roles(UserRole.SUPER_ADMIN, UserRole.DEPT_ADMIN)
   async deleteDesk(@Param('id') id: string, @Request() req) {
     return this.desksService.deleteDesk(id, req.user.id, req.user.roles ?? []);
+  }
+
+  // ============================================
+  // DESK PERFORMANCE ANALYTICS ENDPOINTS
+  // ============================================
+
+  // Get comprehensive desk performance metrics
+  @Get(':id/performance')
+  async getDeskPerformance(
+    @Param('id') id: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    const from = dateFrom ? new Date(dateFrom) : undefined;
+    const to = dateTo ? new Date(dateTo) : undefined;
+    return this.deskPerformanceService.getDeskPerformanceMetrics(id, from, to);
+  }
+
+  // Get desk performance score
+  @Get(':id/score')
+  async getDeskScore(
+    @Param('id') id: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    const from = dateFrom ? new Date(dateFrom) : undefined;
+    const to = dateTo ? new Date(dateTo) : undefined;
+    return this.deskPerformanceService.calculateDeskScore(id, from, to);
+  }
+
+  // Get Flow Balance Ratio
+  @Get(':id/fbr')
+  async getFlowBalanceRatio(
+    @Param('id') id: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    const from = dateFrom ? new Date(dateFrom) : undefined;
+    const to = dateTo ? new Date(dateTo) : undefined;
+    return {
+      deskId: id,
+      flowBalanceRatio: await this.deskPerformanceService.calculateFlowBalanceRatio(id, from, to),
+    };
+  }
+
+  // Check desk red-list triggers
+  @Get(':id/redlist-check')
+  async checkDeskRedList(@Param('id') id: string) {
+    return this.deskPerformanceService.checkDeskRedListTriggers(id);
   }
 }

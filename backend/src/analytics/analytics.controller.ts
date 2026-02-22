@@ -13,11 +13,15 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '@prisma/client';
 import { AnalyticsService } from './analytics.service';
+import { AnalyticsVisualizationService } from './analytics-visualization.service';
 
 @Controller('analytics')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AnalyticsController {
-  constructor(private analyticsService: AnalyticsService) {}
+  constructor(
+    private analyticsService: AnalyticsService,
+    private visualizationService: AnalyticsVisualizationService,
+  ) {}
 
   @Get('dashboard')
   @Roles(UserRole.SUPER_ADMIN, UserRole.DEPT_ADMIN)
@@ -69,6 +73,33 @@ export class AnalyticsController {
     const departmentId =
       (req.user.roles ?? []).includes(UserRole.DEPT_ADMIN) ? req.user.departmentId : undefined;
     return this.analyticsService.getBottleneckAnalysis(departmentId);
+  }
+
+  @Get('activity-heatmap')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.DEPT_ADMIN)
+  async getActivityHeatmap(
+    @Request() req,
+    @Query('scope') scope?: 'user' | 'department',
+    @Query('userId') userId?: string,
+    @Query('departmentId') departmentId?: string,
+    @Query('year') year?: string,
+  ) {
+    const roles = (req.user.roles ?? []) as string[];
+    const isDeptAdmin = roles.includes(UserRole.DEPT_ADMIN);
+    const isSuperAdmin = roles.includes(UserRole.SUPER_ADMIN);
+    const scopeVal = scope === 'department' ? 'department' : 'user';
+    const deptId =
+      scopeVal === 'department'
+        ? isSuperAdmin
+          ? departmentId ?? req.user.departmentId
+          : req.user.departmentId
+        : undefined;
+    return this.analyticsService.getActivityHeatmap({
+      scope: scopeVal,
+      userId: scopeVal === 'user' ? req.user.id : undefined,
+      departmentId: deptId,
+      year: year ? parseInt(year, 10) : undefined,
+    });
   }
 
   @Get('report')
@@ -167,5 +198,55 @@ export class AnalyticsController {
     }
 
     return lines.join('\n');
+  }
+
+  // ============================================
+  // VISUALIZATION ENDPOINTS
+  // ============================================
+
+  // Executive Dashboard
+  @Get('executive-dashboard')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.DEPT_ADMIN)
+  async getExecutiveDashboard(@Request() req) {
+    const departmentId =
+      (req.user.roles ?? []).includes(UserRole.DEPT_ADMIN) ? req.user.departmentId : undefined;
+    return this.visualizationService.getExecutiveDashboard(departmentId);
+  }
+
+  // Bottleneck Heatmap
+  @Get('heatmap')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.DEPT_ADMIN)
+  async getBottleneckHeatmap(
+    @Request() req,
+    @Query('timeRange') timeRange?: 'daily' | 'weekly',
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    const departmentId =
+      (req.user.roles ?? []).includes(UserRole.DEPT_ADMIN) ? req.user.departmentId : undefined;
+    return this.visualizationService.getBottleneckHeatmap(
+      departmentId,
+      timeRange || 'daily',
+      dateFrom ? new Date(dateFrom) : undefined,
+      dateTo ? new Date(dateTo) : undefined,
+    );
+  }
+
+  // Aging Bucket Report
+  @Get('aging-buckets')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.DEPT_ADMIN)
+  async getAgingBucketReport(@Request() req) {
+    const departmentId =
+      (req.user.roles ?? []).includes(UserRole.DEPT_ADMIN) ? req.user.departmentId : undefined;
+    return this.visualizationService.getAgingBucketReport(departmentId);
+  }
+
+  // Red-List Morgue
+  @Get('redlist-morgue')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.DEPT_ADMIN)
+  async getRedListMorgue(@Request() req) {
+    const departmentId =
+      (req.user.roles ?? []).includes(UserRole.DEPT_ADMIN) ? req.user.departmentId : undefined;
+    return this.visualizationService.getRedListMorgueVisualization(departmentId);
   }
 }

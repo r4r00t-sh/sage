@@ -39,8 +39,14 @@ enum FileStatus {
 
 enum PresenceStatus {
   ACTIVE
+  IDLE
   ABSENT
   SESSION_TIMEOUT
+}
+
+enum ProfileApprovalStatus {
+  PENDING_APPROVAL
+  APPROVED
 }
 
 enum FilePriority {
@@ -103,8 +109,15 @@ model User {
   department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   divisionId   String?
   division     Division?   @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+  designation  String?     // Desk Profile: designation
+  staffId      String?     // Desk Profile: staff ID
+  phone        String?     // Desk Profile: phone number
+  maxFilesPerDay Int?       @default(10) // User-level file capacity (set by admin)
   isActive     Boolean     @default(true)
   avatarKey    String?     // MinIO object key for profile avatar
+  profileApprovalStatus ProfileApprovalStatus? // PENDING_APPROVAL until Super Admin approves
+  approvedById String?
+  approvedAt   DateTime?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   filesCreated File[]      @relation("FileCreator")
@@ -125,11 +138,15 @@ model User {
   workflowsCreated Workflow[] @relation("WorkflowCreatedBy")
   workflowsPublished Workflow[] @relation("WorkflowPublishedBy")
   workflowSteps WorkflowExecutionStep[]
+  fileMovements FileMovement[] @relation("FileMovementUser")
+  attachmentsUploaded Attachment[] @relation("AttachmentUploader")
   // Chat
   conversationsCreated ChatConversation[] @relation("ChatConversationCreatedBy")
   chatMemberships ChatConversationMember[]
   chatMessagesSent ChatMessage[]
   chatReadReceipts ChatReadReceipt[]
+  forwardQueueToMe ForwardQueue[]
+  forwardQueueFromMe ForwardQueue[] @relation("ForwardQueueFrom")
 }
 
 model File {
@@ -162,6 +179,17 @@ model File {
   timerPercentage   Int?        // 0-100 percentage of time remaining
   totalProcessingTime Int?      // Total seconds file has been in system
   
+  // File-level Red-Listing (from document)
+  redListReason     String?     // Reason code: TIME_BREACH, MISSING_DOCS, SYSTEM_ERR, POLICY_AMBIGUITY, LEGAL_HOLD
+  criticalityScore  Float?      // Dynamic score (1.0-10.0) indicating severity
+  escalationLevel   Int?        @default(0) // Current escalation level (0-3)
+  blockerOwner      String?     // Who needs to act? (e.g., "Client", "IT Dept", "Legal")
+  
+  // Complexity & SLA
+  complexityWeight  Int?        @default(1) // Optional modifier (1-5) for file difficulty
+  
+  // Queue: when forwarded to desk at/over capacity, file is assigned but held in queue until receiver has space
+  isInQueue         Boolean     @default(false)
   // Workflow flags
   isOnHold          Boolean     @default(false)
   holdReason        String?
@@ -174,12 +202,15 @@ model File {
   // Desk assignment
   deskId          String?
   desk            Desk?       @relation(fields: [deskId], references: [id], onDelete: SetNull)
+  originDeskId    String?     // Desk of origin (first desk where file was received) for display
+  originDesk      Desk?       @relation("FileOriginDesk", fields: [originDeskId], references: [id], onDelete: SetNull)
   
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   notes           Note[]
   auditLogs       AuditLog[]
   routingHistory  FileRouting[]
+  forwardQueueEntry ForwardQueue?
   extensionRequests TimeExtensionRequest[]
   attachments     Attachment[]
   opinionRequests OpinionRequest[]
@@ -189,6 +220,7 @@ model File {
   backFileLinks FileBackFileLink[] @relation("FileBackFileLinks")
   hasBackFiles Boolean @default(false) // Indicator: file has linked back files
   workflowExecutions WorkflowExecution[]
+  fileMovements FileMovement[] @relation("FileMovements")
 }
 
 // File Attachments - Support multiple file uploads
@@ -204,10 +236,12 @@ model Attachment {
   size        Int      // File size in bytes
   
   uploadedById String?  // Who uploaded this attachment
+  uploadedBy   User?    @relation("AttachmentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
   
   createdAt   DateTime @default(now())
   
   @@index([fileId])
+  @@index([uploadedById])
 }
 
 // Time Extension Request - Module 8.3
@@ -303,6 +337,25 @@ model FileRouting {
   @@index([fileId])
   @@index([fromUserId])
   @@index([toUserId])
+}
+
+// Queue for files forwarded when receiver desk is at/over capacity
+model ForwardQueue {
+  id            String   @id @default(uuid())
+  fileId        String
+  file          File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  toUserId      String
+  toUser        User     @relation(fields: [toUserId], references: [id], onDelete: Cascade)
+  toDivisionId  String
+  fromUserId    String?
+  fromUser      User?    @relation("ForwardQueueFrom", fields: [fromUserId], references: [id])
+  remarks       String?
+  createdAt     DateTime @default(now())
+  sortOrder     Int      @default(0) // FIFO
+
+  @@unique([fileId]) // One queue entry per file
+  @@index([toUserId])
+  @@index([createdAt])
 }
 
 model Note {
@@ -625,9 +678,14 @@ model Desk {
   optimumCapacity Int?     // Docks x Files (calculated)
   capacityUtilizationPercent Float? // Current utilization percentage
   
+  // SLA Configuration (from document)
+  slaNorm         Int?     // Standard allowed time (in hours) for this desk
+  
   // Status
   isActive        Boolean  @default(true)
   isAutoCreated   Boolean  @default(false) // Auto-created when capacity reached
+  isRedListed     Boolean  @default(false) // Desk-level red-listing
+  redListedAt     DateTime? // When desk was red-listed
   
   // Visual representation
   iconType        String?  @default("desk") // "desk", "cabinet", "folder"
@@ -638,12 +696,45 @@ model Desk {
   updatedAt       DateTime @updatedAt
   
   files           File[]   // Files assigned to this desk
+  filesOrigin     File[]   @relation("FileOriginDesk") // Files that originated at this desk
   performanceBadges PerformanceBadge[]
   redFlags RedFlag[]
+  fileMovements   FileMovement[] // Track file movements at this desk
   
   @@index([departmentId])
   @@index([divisionId])
   @@index([isActive])
+  @@index([isRedListed])
+}
+
+// File Movement Tracking - Track file lifecycle at each desk (from document)
+model FileMovement {
+  id              String   @id @default(uuid())
+  fileId          String
+  file            File     @relation("FileMovements", fields: [fileId], references: [id], onDelete: Cascade)
+  deskId          String
+  desk            Desk     @relation(fields: [deskId], references: [id], onDelete: Cascade)
+  userId          String?  // Specific individual operating the desk (optional)
+  user            User?    @relation("FileMovementUser", fields: [userId], references: [id], onDelete: SetNull)
+  
+  // Timestamps (from document)
+  arrivalTS       DateTime @default(now()) // When file landed in desk's "In-Tray"
+  startTS         DateTime? // When file status changed to "In-Process"
+  endTS           DateTime? // When file moved to "Out-Tray" or next desk
+  
+  // Status tracking
+  status          String   @default("PENDING") // PENDING, IN_PROCESS, COMPLETED, ON_HOLD, RED_LISTED
+  slaNorm         Int?     // The standard allowed time (in hours) for this specific desk
+  complexityWeight Int?    @default(1) // Optional modifier (1-5) if files vary in difficulty
+  
+  createdAt       DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@index([fileId])
+  @@index([deskId])
+  @@index([userId])
+  @@index([arrivalTS])
+  @@index([status])
 }
 
 // ============================================
@@ -805,6 +896,20 @@ model PerformanceConfig {
   updatedAt       DateTime @updatedAt
   
   @@index([key])
+}
+
+// Desk Profile: login session tracking for "total login time today / per period"
+model LoginSession {
+  id              String   @id @default(uuid())
+  userId          String
+  loginAt         DateTime @default(now())
+  logoutAt        DateTime? // null = still active
+  durationSeconds Int?     // set when session ends
+  logoutType      String?  // "manual", "session_timeout", "idle_reset"
+  
+  @@index([userId])
+  @@index([loginAt])
+  @@index([userId, loginAt])
 }
 
 // ============================================

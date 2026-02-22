@@ -45,9 +45,14 @@ export class UsersService {
         username: true,
         name: true,
         email: true,
+        designation: true,
+        staffId: true,
+        phone: true,
         roles: true,
         isActive: true,
         avatarKey: true,
+        profileApprovalStatus: true,
+        approvedAt: true,
         createdAt: true,
         department: { select: { id: true, name: true, code: true } },
         division: { select: { id: true, name: true } },
@@ -65,9 +70,14 @@ export class UsersService {
         username: true,
         name: true,
         email: true,
+        designation: true,
+        staffId: true,
+        phone: true,
         roles: true,
         isActive: true,
         avatarKey: true,
+        profileApprovalStatus: true,
+        approvedAt: true,
         createdAt: true,
         updatedAt: true,
         department: { select: { id: true, name: true, code: true } },
@@ -159,9 +169,13 @@ export class UsersService {
     password: string;
     name: string;
     email?: string;
+    designation?: string;
+    staffId?: string;
+    phone?: string;
     roles: string[];
     departmentId?: string;
     divisionId?: string;
+    createdBySuperAdmin?: boolean;
   }) {
     // Check if username already exists
     const existing = await this.prisma.user.findUnique({
@@ -174,6 +188,7 @@ export class UsersService {
 
     const passwordHash = await bcrypt.hash(data.password, 10);
     const roles = (data.roles?.length ? data.roles : ['USER']) as any[];
+    const profileApprovalStatus = data.createdBySuperAdmin ? 'APPROVED' : 'PENDING_APPROVAL';
 
     const user = await this.prisma.user.create({
       data: {
@@ -181,17 +196,25 @@ export class UsersService {
         passwordHash,
         name: data.name,
         email: data.email,
+        designation: data.designation,
+        staffId: data.staffId,
+        phone: data.phone,
         roles,
         departmentId: data.departmentId,
         divisionId: data.divisionId,
+        profileApprovalStatus: profileApprovalStatus as any,
       },
       select: {
         id: true,
         username: true,
         name: true,
         email: true,
+        designation: true,
+        staffId: true,
+        phone: true,
         roles: true,
         isActive: true,
+        profileApprovalStatus: true,
         department: { select: { id: true, name: true } },
         division: { select: { id: true, name: true } },
       },
@@ -214,6 +237,9 @@ export class UsersService {
     data: {
       name?: string;
       email?: string;
+      designation?: string;
+      staffId?: string;
+      phone?: string;
       roles?: string[];
       departmentId?: string;
       divisionId?: string;
@@ -225,6 +251,9 @@ export class UsersService {
       data: {
         ...(data.name && { name: data.name }),
         ...(data.email !== undefined && { email: data.email }),
+        ...(data.designation !== undefined && { designation: data.designation }),
+        ...(data.staffId !== undefined && { staffId: data.staffId }),
+        ...(data.phone !== undefined && { phone: data.phone }),
         ...(data.roles && data.roles.length > 0 && { roles: data.roles as any }),
         ...(data.departmentId !== undefined && {
           departmentId: data.departmentId,
@@ -237,10 +266,32 @@ export class UsersService {
         username: true,
         name: true,
         email: true,
+        designation: true,
+        staffId: true,
+        phone: true,
         roles: true,
         isActive: true,
+        profileApprovalStatus: true,
         department: { select: { id: true, name: true } },
         division: { select: { id: true, name: true } },
+      },
+    });
+  }
+
+  async approveProfile(userId: string, approvedById: string) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        profileApprovalStatus: 'APPROVED',
+        approvedById,
+        approvedAt: new Date(),
+      },
+      select: {
+        id: true,
+        username: true,
+        name: true,
+        profileApprovalStatus: true,
+        approvedAt: true,
       },
     });
   }

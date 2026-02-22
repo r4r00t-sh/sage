@@ -26,6 +26,7 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { hasRole } from '@/lib/auth-utils';
 import {
   FileText,
   Upload,
@@ -88,6 +89,15 @@ export default function NewFilePage() {
   const [activePreviewIndex, setActivePreviewIndex] = useState(0);
 
   useEffect(() => {
+    // Permission check: INWARD_DESK cannot create new files
+    if (user) {
+      const isInwardDesk = hasRole(user, 'INWARD_DESK') && !hasRole(user, 'DEPT_ADMIN') && !hasRole(user, 'SUPER_ADMIN');
+      if (isInwardDesk) {
+        router.push('/files');
+        toast.error('Inward Desk users cannot create new files. They can only receive and forward files.');
+        return;
+      }
+    }
     fetchUserInfo();
   }, [user]);
 
@@ -263,9 +273,7 @@ export default function NewFilePage() {
         formData.append('files', uploadFile.file);
       });
 
-      const response = await api.post('/files', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const response = await api.post('/files', formData);
 
       toast.success('File created successfully', {
         description: `File Number: ${response.data.fileNumber}`,

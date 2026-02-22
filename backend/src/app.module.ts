@@ -29,6 +29,8 @@ import { BackFilesModule } from './backfiles/backfiles.module';
 import { SecurityModule } from './security/security.module';
 import { WorkflowModule } from './workflow/workflow.module';
 import { ChatModule } from './chat/chat.module';
+import { DeskProfileModule } from './desk-profile/desk-profile.module';
+import { CapacityModule } from './capacity/capacity.module';
 
 @Module({
   imports: [
@@ -62,6 +64,8 @@ import { ChatModule } from './chat/chat.module';
     BackFilesModule,
     WorkflowModule,
     ChatModule,
+    DeskProfileModule,
+    CapacityModule,
   ],
   controllers: [AppController],
   providers: [AppService],

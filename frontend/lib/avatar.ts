@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import api from '@/lib/api';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import api, { API_BASE_URL as API_BASE } from '@/lib/api';
 
 /**
  * Get avatar URL for img src when user has avatarKey.

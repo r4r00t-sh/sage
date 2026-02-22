@@ -36,6 +36,35 @@ Cross-platform Flutter app that mirrors the EFiling-System web app: same feature
 
 4. **Logo** (optional): Copy `frontend/public/logo.png` to `flutter_app/assets/logo.png` for branding on login/shell.
 
+## Login page nav
+
+- **Docs**: Opens the web app documentation (same host as API, path `/docs`) in the browser.
+- **Download**: Dropdown with **Download for Android** and **Download for iOS**. Tapping Android opens the APK download URL (same host as API, path `/downloads/efmp-android.apk`). Host the built APK at that path on your web server so the link works.
+
+## Build APK (for “Download for Android”)
+
+**Option A – GitHub Actions (recommended)**  
+The repo has a workflow that builds the APK in CI:
+
+- **Triggers:** Push to `master` when `flutter_app/**` (or this workflow) changes, push of a tag `v*`, or **Run workflow** from the Actions tab.
+- **Steps:** Check changes → run tests → build APK → upload artifact → create GitHub Release (on master/tag/manual).
+- **Artifact:** After a run, open the workflow run and download **apk-release** from the **Build Android APK** job.
+- **Releases:** On push to master or tag (or manual run), a GitHub Release is created with the APK attached (e.g. `efiling_app-v1.0.0.apk`).
+- **API URL in APK:** In the repo **Settings → Secrets and variables → Actions**, add a secret `API_BASE_URL` (e.g. `https://efmp.santhigiri.cloud/api`). Or when using **Run workflow**, fill **API base URL**. The built APK will then use that URL by default.
+
+Workflow file: `.github/workflows/release-flutter.yml`.
+
+**Option B – Local build**
+
+```bash
+cd flutter_app
+flutter pub get
+flutter build apk --release
+# Output: build/app/outputs/flutter-apk/app-release.apk
+```
+
+Copy `app-release.apk` to your web server as `downloads/efmp-android.apk` (or the path your API base URL’s host serves), so “Download for Android” in the app triggers the download.
+
 ## Run
 
 ```bash

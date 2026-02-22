@@ -5,23 +5,32 @@ import {
   UseGuards,
   Get,
   Request,
+  Logger,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { StrictThrottle } from '../security/throttle.decorator';
+import { LoginDto } from './dto/login.dto';
 
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(private authService: AuthService) {}
 
   @StrictThrottle()
   @Post('login')
-  async login(@Body() loginDto: { username: string; password: string }) {
-    const user = await this.authService.validateUser(
-      loginDto.username,
-      loginDto.password,
-    );
-    return this.authService.login(user);
+  async login(@Body() loginDto: LoginDto) {
+    try {
+      const user = await this.authService.validateUser(
+        loginDto.username,
+        loginDto.password,
+      );
+      return this.authService.login(user);
+    } catch (err: any) {
+      this.logger.error(`Login failed: ${err?.message ?? err}`, err?.stack);
+      throw err;
+    }
   }
 
   @StrictThrottle()

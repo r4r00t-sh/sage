@@ -29,9 +29,7 @@ import {
   TrendingUp,
   ArrowRight,
   Route,
-  ChevronRight,
   Play,
-  Circle,
   Mail,
   Tag,
   Hash,
@@ -154,168 +152,23 @@ export default function FileTraceroutePage() {
   const StatusIcon = config.icon;
   const priority = priorityConfig[file.priority] || priorityConfig.NORMAL;
 
-  // Build graph structure for flowchart with branches
-  const buildFlowchartGraph = () => {
-    // Build complete timeline including creation
-    const timeline = [
-      {
-        id: 'creation',
-        action: 'CREATED',
-        remarks: `Created by ${file.createdBy.name}`,
-        createdAt: file.createdAt,
-        isCreation: true,
-        fromUserId: null,
-        toUserId: file.createdBy.id,
-      },
-      ...file.routingHistory.map(entry => ({ 
-        ...entry, 
-        isCreation: false,
-        fromUserId: entry.fromUserId || null,
-        toUserId: entry.toUserId || null,
-      })),
-    ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-    const nodes: Array<{
-      id: string;
-      action: string;
-      remarks?: string;
-      createdAt: string;
-      isCreation: boolean;
-      row: number;
-      x: number;
-      isBranch: boolean;
-      isMerge: boolean;
-      branchId?: string;
-      parentId?: string;
-      nextMainX?: number; // X position where branch merges back
-    }> = [];
-
-    let currentRow = 0;
-    let currentX = 0;
-    const activeBranches = new Map<string, { startX: number; row: number }>();
-
-    timeline.forEach((entry, index) => {
-      const isOpinionRequest = entry.action === 'OPINION_REQUESTED' || entry.action === 'CONSULTATION_SENT';
-      const isOpinionReturn = entry.action === 'OPINION_PROVIDED' || entry.action === 'CONSULTATION_RETURNED';
-      const isReturn = entry.action === 'RETURNED_TO_HOST' || entry.action === 'RETURNED_TO_PREVIOUS';
-
-      if (isOpinionRequest) {
-        // Add main flow node
-        nodes.push({
-          id: entry.id,
-          action: entry.action,
-          remarks: entry.remarks,
-          createdAt: entry.createdAt,
-          isCreation: entry.isCreation || false,
-          row: currentRow,
-          x: currentX,
-          isBranch: false,
-          isMerge: false,
-        });
-        
-        // Start branch
-        const branchId = `branch-${currentX}`;
-        const branchRow = currentRow + 1;
-        activeBranches.set(branchId, { startX: currentX, row: branchRow });
-        
-        // Add branch start node (on branch row, same X)
-        nodes.push({
-          id: `${entry.id}-branch-start`,
-          action: 'OPINION_REQUESTED',
-          remarks: entry.remarks || 'Opinion requested',
-          createdAt: entry.createdAt,
-          isCreation: false,
-          row: branchRow,
-          x: currentX,
-          isBranch: true,
-          isMerge: false,
-          branchId,
-          parentId: entry.id,
-        });
-        
-        currentX++;
-      } else if (isOpinionReturn) {
-        // Find active branch
-        const branchEntry = Array.from(activeBranches.entries()).pop();
-        if (branchEntry) {
-          const [branchId, branchInfo] = branchEntry;
-          
-          // Add opinion provided node on branch row
-          nodes.push({
-            id: entry.id,
-            action: entry.action,
-            remarks: entry.remarks || 'Opinion provided',
-            createdAt: entry.createdAt,
-            isCreation: false,
-            row: branchInfo.row,
-            x: currentX,
-            isBranch: true,
-            isMerge: false,
-            branchId,
-            nextMainX: currentX + 1,
-          });
-          
-          // Add merge node back to main flow
-          nodes.push({
-            id: `${entry.id}-merge`,
-            action: 'OPINION_PROVIDED',
-            remarks: 'Opinion returned to main flow',
-            createdAt: entry.createdAt,
-            isCreation: false,
-            row: 0,
-            x: currentX + 1,
-            isBranch: false,
-            isMerge: true,
-            branchId,
-          });
-          
-          activeBranches.delete(branchId);
-          currentX += 2;
-          currentRow = 0;
-        } else {
-          // No active branch, treat as regular node
-          nodes.push({
-            id: entry.id,
-            action: entry.action,
-            remarks: entry.remarks,
-            createdAt: entry.createdAt,
-            isCreation: entry.isCreation || false,
-            row: currentRow,
-            x: currentX,
-            isBranch: false,
-            isMerge: false,
-          });
-          currentX++;
-        }
-      } else {
-        // Regular node on main flow
-        nodes.push({
-          id: entry.id,
-          action: entry.action,
-          remarks: entry.remarks,
-          createdAt: entry.createdAt,
-          isCreation: entry.isCreation || false,
-          row: currentRow,
-          x: currentX,
-          isBranch: false,
-          isMerge: isReturn,
-        });
-        currentX++;
-        
-        if (isReturn && currentRow > 0) {
-          currentRow = 0;
-        }
-      }
-    });
-
-    return nodes.sort((a, b) => {
-      if (a.x !== b.x) return a.x - b.x;
-      return a.row - b.row;
-    });
-  };
-
-  const flowchartNodes = buildFlowchartGraph();
-  const maxRow = Math.max(...flowchartNodes.map(n => n.row), 0);
+  // Single-column vertical timeline (creation + routing, sorted by date)
+  const timelineSteps = [
+    {
+      id: 'creation',
+      action: 'CREATED',
+      remarks: `Created by ${file.createdBy.name}`,
+      createdAt: file.createdAt,
+      isCreation: true,
+    },
+    ...file.routingHistory.map((entry) => ({
+      id: entry.id,
+      action: entry.action,
+      remarks: entry.remarks,
+      createdAt: entry.createdAt,
+      isCreation: false,
+    })),
+  ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col">
@@ -356,313 +209,86 @@ export default function FileTraceroutePage() {
             </div>
           </div>
 
-          {/* Flowchart Container - Scrollable */}
+          {/* Vertical timeline - single column, aligned */}
           <ScrollArea className="flex-1">
-            <div 
-              ref={scrollRef}
-              className="p-8 min-h-full relative"
-              style={{ paddingTop: '32px' }}
-            >
-              {/* Flowchart with Branches */}
-              <div className="relative" style={{ minHeight: `${(maxRow + 1) * 240}px` }}>
-                {/* Render nodes grouped by row */}
-                {Array.from({ length: maxRow + 1 }).map((_, rowIndex) => {
-                  const rowNodes = flowchartNodes.filter(n => n.row === rowIndex).sort((a, b) => a.x - b.x);
-                  
+            <div ref={scrollRef} className="p-8 max-w-2xl mx-auto">
+              <div className="relative">
+                {/* Vertical line running down the left */}
+                <div
+                  className="absolute left-6 top-6 bottom-6 w-0.5 bg-gradient-to-b from-muted-foreground/30 via-muted-foreground/20 to-transparent"
+                  aria-hidden
+                />
+                {timelineSteps.map((step, index) => {
+                  const isLast = index === timelineSteps.length - 1;
+                  const actionCfg = actionConfig[step.action] || actionConfig.FORWARDED;
+                  const ActionIcon = actionCfg.icon;
                   return (
-                    <div 
-                      key={rowIndex}
-                      className="relative flex items-start"
-                      style={{ 
-                        marginTop: rowIndex > 0 ? '140px' : '20px',
-                        minHeight: '240px',
-                        paddingTop: rowIndex === 0 ? '20px' : '0',
-                      }}
+                    <div
+                      key={step.id}
+                      className="relative flex gap-6 pb-8 last:pb-0"
                     >
-                      {/* Horizontal flow for this row */}
-                      <div className="flex items-center min-w-max gap-4 relative z-10">
-                        {rowNodes.map((node, nodeIndex) => {
-                          const isLast = node.id === flowchartNodes[flowchartNodes.length - 1]?.id;
-                          const actionCfg = actionConfig[node.action] || actionConfig.FORWARDED;
-                          const ActionIcon = actionCfg.icon;
-                          const nextNode = rowNodes[nodeIndex + 1];
-                          const hasNextInRow = !!nextNode;
-                          
-                          // Find parent node for branch visualization
-                          const parentNode = node.parentId ? flowchartNodes.find(n => n.id === node.parentId) : null;
-                          const branchStartNode = node.branchId ? flowchartNodes.find(n => n.branchId === node.branchId && n.isBranch && !n.isMerge) : null;
+                      {/* Circle + connector */}
+                      <div className="relative flex flex-col items-center flex-shrink-0 z-10">
+                        <div
+                          className={cn(
+                            'h-12 w-12 rounded-full flex items-center justify-center border-2 bg-background shadow-md',
+                            isLast
+                              ? `${actionCfg.borderColor} ring-4 ring-offset-2 ring-offset-background`
+                              : 'border-muted-foreground/30',
+                            isLast && 'animate-pulse',
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              'h-8 w-8 rounded-full flex items-center justify-center',
+                              actionCfg.bgColor,
+                            )}
+                          >
+                            <ActionIcon className="h-4 w-4 text-white" />
+                          </div>
+                        </div>
+                        {!isLast && (
+                          <div className="w-0.5 flex-1 min-h-[24px] bg-muted-foreground/25 mt-1" />
+                        )}
+                      </div>
 
-                          return (
-                            <div key={node.id} className="flex items-center relative">
-                              {/* Vertical connector down (branch start) */}
-                              {node.isBranch && !node.isMerge && parentNode && (
-                                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-0.5 h-32 bg-indigo-500/40 -z-10"
-                                  style={{ height: '140px' }}
-                                />
-                              )}
-                              
-                              {/* Vertical connector up (merge) */}
-                              {node.isMerge && branchStartNode && (
-                                <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-0.5 h-32 bg-indigo-500/40 -z-10"
-                                  style={{ height: '140px' }}
-                                />
-                              )}
-
-                              {/* Node */}
-                              <div className="flex flex-col items-center relative">
-                                {/* "Current" label for last node - positioned to avoid overlap */}
-                                {isLast && (
-                                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-20">
-                                    <Badge variant="default" className={cn(
-                                      "whitespace-nowrap text-xs animate-bounce",
-                                      actionCfg.bgColor,
-                                      "text-white"
-                                    )}>
-                                      <MapPin className="h-3 w-3 mr-1" />
-                                      Current
-                                    </Badge>
-                                  </div>
-                                )}
-
-                                {/* Node Circle with Icon - Contained animation */}
-                                <div className={cn(
-                                  "relative flex items-center justify-center",
-                                  isLast && "animate-pulse"
-                                )} style={{ padding: '10px' }}>
-                                  {/* Outer glow ring for current location - contained */}
-                                  {isLast && (
-                                    <>
-                                      <div className={cn(
-                                        "absolute rounded-full",
-                                        actionCfg.bgColor,
-                                        "animate-ping opacity-30"
-                                      )} style={{ 
-                                        width: '56px', 
-                                        height: '56px', 
-                                        top: '50%',
-                                        left: '50%',
-                                        transform: 'translate(-50%, -50%)',
-                                        animation: 'ping 2s cubic-bezier(0, 0, 0.2, 1) infinite',
-                                      }} />
-                                      <div className={cn(
-                                        "absolute rounded-full",
-                                        actionCfg.bgColor,
-                                        "opacity-20"
-                                      )} style={{ 
-                                        width: '68px', 
-                                        height: '68px',
-                                        top: '50%',
-                                        left: '50%',
-                                        transform: 'translate(-50%, -50%)',
-                                      }} />
-                                    </>
-                                  )}
-                                  
-                                  {/* Main node circle */}
-                                  <div className={cn(
-                                    "relative h-12 w-12 rounded-full flex items-center justify-center border-2 bg-background shadow-lg z-10",
-                                    isLast ? `${actionCfg.borderColor} ring-4 ring-offset-2 ring-offset-background` : 'border-muted-foreground/30',
-                                    node.isBranch && 'ring-2 ring-indigo-500/50 border-indigo-500/50',
-                                    node.isMerge && 'ring-2 ring-indigo-500/50 border-indigo-500/50',
-                                  )}>
-                                    <div className={cn(
-                                      "h-8 w-8 rounded-full flex items-center justify-center",
-                                      actionCfg.bgColor,
-                                      node.isBranch && 'bg-indigo-500',
-                                      node.isMerge && 'bg-indigo-500',
-                                    )}>
-                                      <ActionIcon className="h-4 w-4 text-white" />
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Step Number */}
-                                <div className={cn(
-                                  "mt-2 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold",
-                                  isLast ? actionCfg.bgColor + ' text-white' : 'bg-muted text-muted-foreground',
-                                  node.isBranch && 'bg-indigo-500 text-white',
-                                  node.isMerge && 'bg-indigo-500 text-white',
-                                )}>
-                                  {node.x + 1}
-                                </div>
-
-                                {/* Node Label Card - Compact */}
-                                <div className={cn(
-                                  "mt-2 p-2 rounded-lg border bg-card text-card-foreground shadow-sm w-32",
-                                  isLast && 'ring-2 ' + actionCfg.borderColor.replace('border-', 'ring-'),
-                                  node.isBranch && 'border-indigo-500/50 bg-indigo-500/5',
-                                  node.isMerge && 'border-indigo-500/50 bg-indigo-500/5',
-                                )}>
-                                  <Badge 
-                                    variant="outline" 
-                                    className={cn(
-                                      "mb-1 text-[10px] w-full justify-center py-0.5",
-                                      actionCfg.color,
-                                      isLast ? actionCfg.bgColor + '/20' : 'bg-muted/50',
-                                      node.isBranch && 'bg-indigo-500/20 border-indigo-500/50 text-indigo-600',
-                                      node.isMerge && 'bg-indigo-500/20 border-indigo-500/50 text-indigo-600',
-                                    )}
-                                  >
-                                    {actionCfg.label}
-                                  </Badge>
-                                  
-                                  <p className="text-[10px] text-muted-foreground text-center line-clamp-2 min-h-[2rem] leading-tight">
-                                    {node.remarks || (node.isCreation ? `By ${file.createdBy.name}` : 'No remarks')}
-                                  </p>
-                                  
-                                  <div className="mt-1 pt-1 border-t">
-                                    <p className="text-[9px] text-muted-foreground text-center">
-                                      {format(new Date(node.createdAt), 'MMM d, h:mm a')}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Horizontal Arrow Connector */}
-                              {hasNextInRow && (
-                                <div className="flex items-center mx-3 -mt-16 relative">
-                                  {/* Dashed line */}
-                                  <div className="w-16 h-0.5 relative">
-                                    <div className="absolute inset-0 border-t-2 border-dashed border-muted-foreground/40" />
-                                  </div>
-                                  {/* Arrow head */}
-                                  <ChevronRight className="h-5 w-5 text-muted-foreground/50 -ml-1" />
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                      {/* Card */}
+                      <div
+                        className={cn(
+                          'flex-1 min-w-0 rounded-lg border bg-card p-4 shadow-sm',
+                          isLast && `ring-2 ${actionCfg.borderColor}`,
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              'text-xs',
+                              actionCfg.color,
+                              isLast && actionCfg.bgColor + '/20',
+                            )}
+                          >
+                            {actionCfg?.label ?? step.action}
+                          </Badge>
+                          {isLast && (
+                            <Badge className={cn('text-xs', actionCfg.bgColor, 'text-white')}>
+                              <MapPin className="h-3 w-3 mr-1" />
+                              Current
+                            </Badge>
+                          )}
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">
+                            {format(new Date(step.createdAt), 'MMM d, yyyy · h:mm a')}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
+                          {step.remarks || (step.isCreation ? `By ${file.createdBy.name}` : '—')}
+                        </p>
+                        <p className="text-xs text-muted-foreground/80 mt-2">
+                          Step {index + 1} of {timelineSteps.length}
+                        </p>
                       </div>
                     </div>
                   );
-                })}
-
-                {/* Draw horizontal connectors for branches (connecting branch rows) */}
-                {flowchartNodes.filter(n => n.isBranch && !n.isMerge).map((branchNode) => {
-                  const parentNode = flowchartNodes.find(n => n.id === branchNode.parentId);
-                  const mergeNode = flowchartNodes.find(n => n.branchId === branchNode.branchId && n.isMerge);
-                  
-                  if (parentNode && mergeNode) {
-                    // Calculate positions (approximate based on node count and spacing)
-                    const nodeWidth = 200; // Approximate width per node
-                    const startX = parentNode.x * nodeWidth;
-                    const branchX = branchNode.x * nodeWidth;
-                    const mergeX = mergeNode.x * nodeWidth;
-                    const mainY = parentNode.row * 240;
-                    const branchY = branchNode.row * 240;
-                    
-                    return (
-                      <svg
-                        key={`branch-connector-${branchNode.id}`}
-                        className="absolute top-0 left-0 w-full h-full pointer-events-none z-0"
-                        style={{ minHeight: `${(maxRow + 1) * 240}px` }}
-                      >
-                        {/* Down from parent */}
-                        <line
-                          x1={startX + 48}
-                          y1={mainY + 24}
-                          x2={startX + 48}
-                          y2={mainY + 80}
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeDasharray="4 4"
-                          className="text-indigo-500/40"
-                        />
-                        {/* Horizontal to branch */}
-                        <line
-                          x1={startX + 48}
-                          y1={mainY + 80}
-                          x2={branchX + 48}
-                          y2={mainY + 80}
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeDasharray="4 4"
-                          className="text-indigo-500/40"
-                        />
-                        {/* Down to branch row */}
-                        <line
-                          x1={branchX + 48}
-                          y1={mainY + 80}
-                          x2={branchX + 48}
-                          y2={branchY + 24}
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeDasharray="4 4"
-                          className="text-indigo-500/40"
-                        />
-                        {/* Arrow down */}
-                        <polygon
-                          points={`${branchX + 48},${branchY + 20} ${branchX + 44},${branchY + 24} ${branchX + 52},${branchY + 24}`}
-                          fill="currentColor"
-                          className="text-indigo-500/40"
-                        />
-                      </svg>
-                    );
-                  }
-                  return null;
-                })}
-
-                {/* Draw connectors from branch back to main (merge) */}
-                {flowchartNodes.filter(n => n.isMerge && n.row === 0).map((mergeNode) => {
-                  const branchNodes = flowchartNodes.filter(n => n.branchId === mergeNode.branchId && n.isBranch && !n.isMerge);
-                  const lastBranchNode = branchNodes[branchNodes.length - 1];
-                  
-                  if (lastBranchNode) {
-                    const nodeWidth = 200;
-                    const branchX = lastBranchNode.x * nodeWidth;
-                    const mergeX = mergeNode.x * nodeWidth;
-                    const branchY = lastBranchNode.row * 240;
-                    const mainY = mergeNode.row * 240;
-                    
-                    return (
-                      <svg
-                        key={`merge-connector-${mergeNode.id}`}
-                        className="absolute top-0 left-0 w-full h-full pointer-events-none z-0"
-                        style={{ minHeight: `${(maxRow + 1) * 240}px` }}
-                      >
-                        {/* Up from branch */}
-                        <line
-                          x1={branchX + 48}
-                          y1={branchY + 24}
-                          x2={branchX + 48}
-                          y2={branchY - 80}
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeDasharray="4 4"
-                          className="text-indigo-500/40"
-                        />
-                        {/* Horizontal to merge */}
-                        <line
-                          x1={branchX + 48}
-                          y1={branchY - 80}
-                          x2={mergeX + 48}
-                          y2={branchY - 80}
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeDasharray="4 4"
-                          className="text-indigo-500/40"
-                        />
-                        {/* Up to main row */}
-                        <line
-                          x1={mergeX + 48}
-                          y1={branchY - 80}
-                          x2={mergeX + 48}
-                          y2={mainY + 24}
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeDasharray="4 4"
-                          className="text-indigo-500/40"
-                        />
-                        {/* Arrow up */}
-                        <polygon
-                          points={`${mergeX + 48},${mainY + 28} ${mergeX + 44},${mainY + 24} ${mergeX + 52},${mainY + 24}`}
-                          fill="currentColor"
-                          className="text-indigo-500/40"
-                        />
-                      </svg>
-                    );
-                  }
-                  return null;
                 })}
               </div>
             </div>

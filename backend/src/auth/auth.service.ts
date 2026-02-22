@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { PresenceService } from '../presence/presence.service';
@@ -16,6 +16,9 @@ export class AuthService {
   ) {}
 
   async validateUser(username: string, password: string): Promise<any> {
+    if (!username || typeof username !== 'string' || !password || typeof password !== 'string') {
+      throw new BadRequestException('username and password are required');
+    }
     const user = await this.prisma.user.findUnique({
       where: { username },
       include: {
@@ -33,47 +36,60 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Initialize user points if not exists
-    await this.gamification.initializeUserPoints(user.id);
+    // Initialize user points if not exists (non-blocking; login still succeeds if this fails)
+    try {
+      await this.gamification.initializeUserPoints(user.id);
+    } catch (e) {
+      // Log but do not fail login (e.g. UserPoints/SystemSettings table missing)
+      console.warn('initializeUserPoints failed:', (e as Error)?.message);
+    }
 
     const { passwordHash, ...result } = user;
     return result;
   }
 
   async login(user: any) {
+    const roles = Array.isArray(user.roles)
+      ? user.roles.map((r: any) => (typeof r === 'string' ? r : (r as any)?.value ?? String(r)))
+      : user.role
+        ? [user.role]
+        : [];
     const payload = {
       username: user.username,
       sub: user.id,
-      roles: user.roles ?? (user.role ? [user.role] : []),
+      roles,
       departmentId: user.departmentId,
     };
 
-    // Update presence to active with login time
-    await this.prisma.presence.upsert({
-      where: { userId: user.id },
-      create: {
-        userId: user.id,
-        status: PresenceStatus.ACTIVE,
-        lastPing: new Date(),
-        loginTime: new Date(),
-        logoutTime: null,
-        logoutType: null,
-      },
-      update: {
-        status: PresenceStatus.ACTIVE,
-        lastPing: new Date(),
-        loginTime: new Date(),
-        logoutTime: null,
-        logoutType: null,
-      },
-    });
+    // Update presence to active with login time (non-fatal if table missing)
+    try {
+      await this.prisma.presence.upsert({
+        where: { userId: user.id },
+        create: {
+          userId: user.id,
+          status: PresenceStatus.ACTIVE,
+          lastPing: new Date(),
+          loginTime: new Date(),
+          logoutTime: null,
+          logoutType: null,
+        },
+        update: {
+          status: PresenceStatus.ACTIVE,
+          lastPing: new Date(),
+          loginTime: new Date(),
+          logoutTime: null,
+          logoutType: null,
+        },
+      });
+    } catch (e) {
+      console.warn('Presence upsert failed:', (e as Error)?.message);
+    }
 
     const userWithAvatar = await this.prisma.user.findUnique({
       where: { id: user.id },
       select: { avatarKey: true },
     });
 
-    const roles = user.roles ?? (user.role ? [user.role] : []);
     return {
       access_token: this.jwtService.sign(payload),
       user: {

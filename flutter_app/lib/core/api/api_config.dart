@@ -78,4 +78,24 @@ class ApiConfig {
     final p = path.startsWith('/') ? path.substring(1) : path;
     return '$base$p';
   }
+
+  /// Web app base URL (same host as API; port 3000 for web frontend if API is 3001).
+  static String get _webBaseUrl {
+    final uri = Uri.tryParse(baseUrl);
+    if (uri == null) return baseUrl.replaceFirst(RegExp(r'/api/?$'), '');
+    final port = uri.port == 3001 ? 3000 : uri.port;
+    final path = (uri.path.isEmpty || uri.path == '/' || uri.path.endsWith('/api'))
+        ? ''
+        : uri.path.replaceFirst(RegExp(r'/api/?$'), '');
+    return '${uri.scheme}://${uri.host}${port != uri.defaultPort ? ':$port' : ''}$path';
+  }
+
+  /// Docs page URL (opens in browser).
+  static String get docsUrl => '$_webBaseUrl${_webBaseUrl.endsWith('/') ? '' : '/'}docs';
+
+  /// Android APK download URL. Host the built APK at this path on your web server.
+  static String get downloadAndroidUrl => '$_webBaseUrl${_webBaseUrl.endsWith('/') ? '' : '/'}downloads/efmp-android.apk';
+
+  /// iOS app download URL (App Store or enterprise link).
+  static String get downloadIosUrl => '$_webBaseUrl${_webBaseUrl.endsWith('/') ? '' : '/'}downloads/efmp-ios';
 }

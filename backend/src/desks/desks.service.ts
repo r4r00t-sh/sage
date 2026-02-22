@@ -180,17 +180,31 @@ export class DesksService {
       );
     }
 
-    // Assign file
+    // Assign file; set desk of origin on first assignment
     return this.prisma.file.update({
       where: { id: fileId },
-      data: { deskId },
+      data: {
+        deskId,
+        ...(file.originDeskId == null && { originDeskId: deskId }),
+      },
     });
   }
 
   // Calculate and update desk capacity
+  // If desk has a division, use division capacity; otherwise use desk's own capacity
   async updateDeskCapacity(deskId: string) {
     const desk = await this.prisma.desk.findUnique({
       where: { id: deskId },
+      include: {
+        division: {
+          include: {
+            users: {
+              where: { isActive: true },
+              select: { maxFilesPerDay: true },
+            },
+          },
+        },
+      },
     });
 
     if (!desk) {
@@ -204,15 +218,26 @@ export class DesksService {
       },
     });
 
+    // Calculate capacity: if desk has division, use division capacity (sum of user capacities)
+    // Otherwise, use desk's own maxFilesPerDay
+    let calculatedCapacity = desk.maxFilesPerDay;
+    if (desk.divisionId && desk.division) {
+      // Division capacity = sum of all user capacities in that division
+      calculatedCapacity = desk.division.users.reduce(
+        (sum, user) => sum + (user.maxFilesPerDay || 10),
+        desk.maxFilesPerDay, // Fallback to desk capacity if no users
+      );
+    }
+
     const utilization =
-      desk.maxFilesPerDay > 0 ? (currentCount / desk.maxFilesPerDay) * 100 : 0;
+      calculatedCapacity > 0 ? (currentCount / calculatedCapacity) * 100 : 0;
 
     return this.prisma.desk.update({
       where: { id: deskId },
       data: {
         currentFileCount: currentCount,
         capacityUtilizationPercent: utilization,
-        optimumCapacity: desk.maxFilesPerDay,
+        optimumCapacity: calculatedCapacity,
       },
     });
   }

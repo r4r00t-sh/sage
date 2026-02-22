@@ -26,8 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ArrowLeft, Users, Send, Loader2 } from 'lucide-react';
-
-const WS_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_BASE_URL as WS_BASE } from '@/lib/api';
 
 type Message = {
   id: string;

@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole, FileStatus, FilePriority, FileAction, FilePriorityCategory } from '@prisma/client';
+import { PrismaClient, UserRole, FilePriorityCategory } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -8,297 +8,282 @@ const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
+// Santhigiri Ashram structure from EFILE_CLUSTER_TREE.md
+// Each entry: [departmentName, departmentCode, divisions[]]
+const SANTHIGIRI_STRUCTURE: { name: string; code: string; divisions: string[] }[] = [
+  { name: 'Agriculture Department', code: 'AGR', divisions: ['Animal Husbandry Division', 'Office Administration - Agriculture'] },
+  { name: 'Arts And Culture Department', code: 'ART', divisions: ['Office Administration - Arts and Culture', 'Santhigiri Grihasthashramasangham', 'Santhigiri Mathrumandalam', 'Santhigiri Santhimahima', 'Santhigiri Viswa Samskrithy Kalarangam', 'Santhigiri Viswasamskarika Navodhana Kendram'] },
+  { name: 'Communications Department', code: 'COM', divisions: ['Office Administration - Communications', 'Santhigiri NN Communications', 'Santhigiri Publications Division'] },
+  { name: 'Education Department', code: 'EDU', divisions: ['Office Administration - Education', 'Santhigiri Vidyabhavan Higher Secondary School', 'Santhigiri Vidyabhavan Senior Secondary School'] },
+  { name: 'Estate And Assets Management Department', code: 'EAM', divisions: ['Office Administration - Estate And Assets Management'] },
+  { name: 'Finance Department', code: 'FIN', divisions: ['Accounts', 'Audit', 'Budget Division', 'Office Administration - Finance', 'Payroll', 'Taxation', 'Treasury'] },
+  { name: 'General Administration Department', code: 'GAD', divisions: ['Office Administration'] },
+  { name: 'Human Resources Department', code: 'HR', divisions: ['Office Administration - Human Resources', 'Santhigiri Institute of Training And Development'] },
+  { name: 'Industries Department', code: 'IND', divisions: ['Office Administration - Industries', 'Santhigiri Bhagini Nikethan', 'Santhigiri Madhuram Bakery', 'Santhigiri Mudranalayam', 'Santhigiri Nirmalam Food Products, Chandiroor', 'Santhigiri Pappad, Pampady', 'Santhigiri Sneha Oil Mill, Chandiroor', 'Santhigiri Sukhamtharum Pudava, Healthcare Zone', 'Santhigiri Womens Handloom And Weaving Industry'] },
+  { name: 'Law Department', code: 'LAW', divisions: ['Office Administration - Law'] },
+  { name: 'Marketing Department', code: 'MKT', divisions: ['Office Administration - Marketing', 'Santhigiri E-commerce', 'Santhigiri Fuels', 'Santhigiri Healthcare Products - Marketing', 'Santhigiri Shopping Mall', 'Santhigiri Vegetable Stall And Food Services', 'Shops And Establishments'] },
+  { name: 'Materials Management Department', code: 'MMT', divisions: ['Office Administration - Materials Management', 'Purchase Division'] },
+  { name: 'Office Of The General Secretary', code: 'OGS', divisions: ['Administration - Office Of The General Secretary', 'Ashram Branches Coordination', 'Celebrations', 'Facility Management Division', 'Health & Family Welfare Division', 'Janmagriham ( Santhigiri Ashram, Chandiroor Branch )', 'Project Division', 'Public Relations Division', 'Santhigiri Ashram, Alappuzha Area Office', 'Santhigiri Ashram, Andarkottaram Branch', 'Santhigiri Ashram, Bengaluru Regional Office', 'Santhigiri Ashram, Chennai Regional Office', 'Santhigiri Ashram, Cherthala Area Office', 'Santhigiri Ashram, Cheyyur Branch', 'Santhigiri Ashram, ERNAKULAM Area Office', 'Santhigiri Ashram, Guwahati Regional Office', 'Santhigiri Ashram, Harippad Area Office', 'Santhigiri Ashram, Harippad Branch', 'Santhigiri Ashram, Kakkodi Branch', 'Santhigiri Ashram, Kannur Area Office', 'Santhigiri Ashram, Kanyakumari Branch', 'Santhigiri Ashram, Kollam Area Office ( City )', 'Santhigiri Ashram, Kottarakakra Area Office', 'Santhigiri Ashram, Kottayam Area Office', 'Santhigiri Ashram, Koyilandi Area Office', 'Santhigiri Ashram, Kumali Area Office', 'Santhigiri Ashram, Madurai Regional Office', 'Santhigiri Ashram, Malappuram Area Office', 'Santhigiri Ashram, New Delhi Zonal Office', 'Santhigiri Ashram, Olasseri Branch', 'Santhigiri Ashram, Palakkad Area Office', 'Santhigiri Ashram, Palarivattam Branch', 'Santhigiri Ashram, Pampady Branch', 'Santhigiri Ashram, Pathanamthitta Area Office', 'Santhigiri Ashram, Polayathode Branch', 'Santhigiri Ashram, Saket Branch', 'Santhigiri Ashram, Sarjapur Road Branch', 'Santhigiri Ashram, Sulthan Bathery Branch', 'Santhigiri Ashram, Thalassery Area Office', 'Santhigiri Ashram, Thambakachuvadu Branch', 'Santhigiri Ashram, Thangalur Branch', 'Santhigiri Ashram, Thiruvananthapuram Area Office (rural)', 'Santhigiri Ashram, Thookupalam Area Office', 'Santhigiri Ashram, Thrissur Area Office', 'Santhigiri Ashram, Vadakara Area Office', 'Santhigiri Ashram, Vaikom Area Office', 'Santhigiri Ashram, Vaikom Branch', 'Santhigiri Ashram, Valliyayi Branch', 'Santhigiri Ashram, Waynad Area Office', 'Santhigiri Athmavidyalayam', 'Santhigiri Information Technology', 'Santhigiri Inn', 'Strategic Management', 'Technical Advisory Cell', 'Vehicles And Transportation', 'Welfare Divison', 'Working Womens Hostel, Palarivattom'] },
+  { name: 'Office Of The President', code: 'OOP', divisions: ['Administration - Office Of The President'] },
+  { name: 'Operations Department', code: 'OPS', divisions: ['Civil Projects Monitoring Division', 'Community Kitchen', 'Computer Services', 'Electrical And Utilities', 'House Keeping And Sanitation', 'Maintenance Division', 'Office Administration - Operations', 'Project Execution'] },
+  { name: 'Planning And Development Department', code: 'PND', divisions: ['Planning Division'] },
+  { name: 'Quality Assurance Department', code: 'QAS', divisions: ['Office Administration - Quality Assurance'] },
+  { name: 'Safety Department', code: 'SAF', divisions: ['Office Administration - Safety'] },
+  { name: 'Santhigiri Healthcare And Research Organization', code: 'SHRO', divisions: ['Medical Education Division', 'Office - Santhigiri Medical Services Division', 'Office Administration - SHRO', 'S A S H C, Kunnumpuram Road', 'S A S H C, Pattom', 'S A S H C, Vivekanandapuram', 'S A S H, Ahmedabad', 'S A S H, Anna Nagar', 'S A S H, Bhiwadi, Rajasthan', 'S A S H, East Nadakkavu', 'S A S H, Ernakulam South', 'S A S H, H S R Layout, Bengaluru', 'S A S H, Kadapa', 'S A S H, Kakkanad', 'S A S H, Kottayam', 'S A S H, Kumali', 'S A S H, Madurai', 'S A S H, Panjagutta', 'S A S H, Puduchery', 'S A S H, Royapettah', 'S A S H, Saibaba Colony', 'S A S H, Uzhavoor', 'S A S H, Visakhapatnam', 'S A S V - 1', 'S A S V - O P Clinic, P M Taj Road', 'S A S V - O P Clinic, Pothencode', 'Santhigiri Allopathy Pharmacy', 'Santhigiri Angadi Stores, Pothencode', 'Santhigiri Ashram, Hyderabad Regional Office', 'Santhigiri Ashram, Thiruvananthapuram Area Office (city)', 'Santhigiri Ayurveda And Siddha Hospital, Guwahati', 'Santhigiri Ayurveda And Siddha Hospital, Polayathode', 'Santhigiri Ayurveda And Siddha Hospital, Saket', 'Santhigiri Ayurveda And Siddha Hospital, Tiruchirappally', 'Santhigiri Ayurveda And Siddha Hospital, Udayanagar', 'Santhigiri Ayurveda And Siddha Hospital, Vellayambalam', 'Santhigiri Ayurveda And Siddha Vaidyasala', 'Santhigiri Ayurveda Hospital And Research Institute', 'Santhigiri Ayurveda Medical College', 'Santhigiri Ayurveda Medical College Canteen, Olasseri', 'Santhigiri Ayurveda Medical College Hospital', 'Santhigiri Ayurveda Medical College Hospital O P Clinic, Puthuppally Theruvu', 'Santhigiri Ayurveda Medical College Students Store', 'Santhigiri Ayurveda Siddha Pharmacy', 'Santhigiri Dental Clinic', 'Santhigiri Healthcare Products Division', 'Santhigiri Herbal Soaps', 'Santhigiri Homeo Pharmacy', 'Santhigiri Institute Of Para-medical Sciences', 'Santhigiri Labs & Scans', 'Santhigiri Medical Services Division', 'Santhigiri Siddha Medical College', 'Santhigiri Siddha Medical College Hospital', 'Warehouse 2- Healthcare Zone'] },
+  { name: 'Santhigiri Research Foundation', code: 'SRF', divisions: ['Santhigiri Scientific and Industrial Research Institute', 'Santhigiri Social Research Institute'] },
+  { name: 'Security Department', code: 'SEC', divisions: ['Office Administration - Security'] },
+];
+
+function divisionCode(name: string, index: number): string {
+  const slug = name
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 12);
+  return (slug || `DIV${index}`).toUpperCase();
+}
+
 async function main() {
   console.log('🌱 Starting seed...');
 
+  // --- Cleanup: remove mock data and old structure ---
+  console.log('🧹 Cleaning up existing data...');
+  await prisma.fileRouting.deleteMany({});
+  await prisma.note.deleteMany({});
+  await prisma.attachment.deleteMany({});
+  await prisma.timeExtensionRequest.deleteMany({});
+  await prisma.opinionNote.deleteMany({});
+  await prisma.opinionRequest.deleteMany({});
+  await prisma.dispatchProof.deleteMany({});
+  await prisma.fileMovement.deleteMany({});
+  await prisma.redFlag.deleteMany({});
+  await prisma.fileBackFileLink.deleteMany({});
+  await prisma.coinTransaction.deleteMany({});
+  await prisma.workflowExecutionStep.deleteMany({});
+  await prisma.workflowExecution.deleteMany({});
+  await prisma.file.deleteMany({});
+  await prisma.backFileTag.deleteMany({});
+  await prisma.backFile.deleteMany({});
+  await prisma.notification.deleteMany({});
+  await prisma.auditLog.deleteMany({});
+  await prisma.pointsTransaction.deleteMany({});
+  await prisma.presence.deleteMany({});
+  await prisma.loginSession.deleteMany({});
+  await prisma.workingHours.deleteMany({});
+  await prisma.performanceBadge.deleteMany({});
+  await prisma.chatReadReceipt.deleteMany({});
+  await prisma.chatMessage.deleteMany({});
+  await prisma.chatConversationMember.deleteMany({});
+  await prisma.chatConversation.deleteMany({});
+  await prisma.workflowEdge.deleteMany({});
+  await prisma.workflowNode.deleteMany({});
+  await prisma.workflow.deleteMany({});
+  await prisma.desk.deleteMany({});
+  await prisma.division.deleteMany({});
+  await prisma.department.deleteMany({});
+  await prisma.userPoints.deleteMany({});
+  await prisma.user.deleteMany({});
+  await prisma.organisation.deleteMany({});
+
   // Create Organisation
-  const org = await prisma.organisation.upsert({
-    where: { id: 'org-gov-001' },
-    update: {},
-    create: {
-      id: 'org-gov-001',
-      name: 'Government of State',
+  const org = await prisma.organisation.create({
+    data: {
+      id: 'org-santhigiri-001',
+      name: 'Santhigiri Ashram',
     },
   });
-  console.log('✅ Organisation created:', org.name);
+  console.log('✅ Organisation:', org.name);
 
-  // Create Departments
-  const departments = await Promise.all([
-    prisma.department.upsert({
-      where: { code: 'FIN' },
-      update: {},
+  // Create Departments and Divisions
+  const departmentIds = new Map<string, string>();
+  const divisionIdsByDept = new Map<string, string[]>();
+
+  for (const dept of SANTHIGIRI_STRUCTURE) {
+    const created = await prisma.department.upsert({
+      where: { code: dept.code },
+      update: { name: dept.name, organisationId: org.id },
       create: {
-        name: 'Finance Department',
-        code: 'FIN',
+        name: dept.name,
+        code: dept.code,
         organisationId: org.id,
       },
-    }),
-    prisma.department.upsert({
-      where: { code: 'HR' },
-      update: {},
-      create: {
-        name: 'Human Resources',
-        code: 'HR',
-        organisationId: org.id,
-      },
-    }),
-    prisma.department.upsert({
-      where: { code: 'IT' },
-      update: {},
-      create: {
-        name: 'Information Technology',
-        code: 'IT',
-        organisationId: org.id,
-      },
-    }),
-    prisma.department.upsert({
-      where: { code: 'ADMIN' },
-      update: {},
-      create: {
-        name: 'Administration',
-        code: 'ADMIN',
-        organisationId: org.id,
-      },
-    }),
-  ]);
-  console.log('✅ Departments created:', departments.length);
+    });
+    departmentIds.set(dept.code, created.id);
+    const divIds: string[] = [];
 
-  // Create Divisions for Finance Department
-  const finDept = departments.find(d => d.code === 'FIN')!;
-  const divisions = await Promise.all([
-    prisma.division.upsert({
-      where: { id: 'fin-budget' },
-      update: {},
-      create: {
-        id: 'fin-budget',
-        name: 'Budget Section',
-        code: 'FIN-BUD',
-        departmentId: finDept.id,
-      },
-    }),
-    prisma.division.upsert({
-      where: { id: 'fin-accounts' },
-      update: {},
-      create: {
-        id: 'fin-accounts',
-        name: 'Accounts Section',
-        code: 'FIN-ACC',
-        departmentId: finDept.id,
-      },
-    }),
-    prisma.division.upsert({
-      where: { id: 'fin-audit' },
-      update: {},
-      create: {
-        id: 'fin-audit',
-        name: 'Audit Section',
-        code: 'FIN-AUD',
-        departmentId: finDept.id,
-      },
-    }),
-  ]);
-  console.log('✅ Divisions created:', divisions.length);
+    for (let i = 0; i < dept.divisions.length; i++) {
+      const divName = dept.divisions[i];
+      const code = divisionCode(divName, i);
+      const div = await prisma.division.create({
+        data: {
+          name: divName,
+          code: `${dept.code}-${code}`,
+          departmentId: created.id,
+        },
+      });
+      divIds.push(div.id);
+    }
+    divisionIdsByDept.set(dept.code, divIds);
+  }
+  console.log('✅ Departments created:', SANTHIGIRI_STRUCTURE.length);
+  const totalDivisions = [...divisionIdsByDept.values()].reduce((s, a) => s + a.length, 0);
+  console.log('✅ Divisions created:', totalDivisions);
 
-  // Create Divisions for IT Department
-  const itDept = departments.find(d => d.code === 'IT')!;
-  await Promise.all([
-    prisma.division.upsert({
-      where: { id: 'it-infra' },
-      update: {},
-      create: {
-        id: 'it-infra',
-        name: 'Infrastructure',
-        code: 'IT-INF',
-        departmentId: itDept.id,
-      },
-    }),
-    prisma.division.upsert({
-      where: { id: 'it-dev' },
-      update: {},
-      create: {
-        id: 'it-dev',
-        name: 'Development',
-        code: 'IT-DEV',
-        departmentId: itDept.id,
-      },
-    }),
-  ]);
-
-  // Create Users
   const passwordHash = await bcrypt.hash('password123', 10);
+  const finDeptId = departmentIds.get('FIN')!;
+  const finFirstDivisionId = divisionIdsByDept.get('FIN')![0];
 
   // Super Admin
-  const superAdmin = await prisma.user.upsert({
-    where: { username: 'admin' },
-    update: { roles: [UserRole.SUPER_ADMIN] },
-    create: {
+  const superAdmin = await prisma.user.create({
+    data: {
       username: 'admin',
       passwordHash: await bcrypt.hash('admin123', 10),
       name: 'Super Administrator',
-      email: 'admin@efiling.gov',
+      email: 'admin@santhigiri.org',
       roles: [UserRole.SUPER_ADMIN],
     },
   });
-  console.log('✅ Super Admin created:', superAdmin.username);
+  console.log('✅ Super Admin:', superAdmin.username);
 
-  // Department Admins
-  const deptAdmin = await prisma.user.upsert({
-    where: { username: 'finadmin' },
-    update: { roles: [UserRole.DEPT_ADMIN] },
-    create: {
-      username: 'finadmin',
+  // Finance Department users (for initial workflow use)
+  const finDeptAdmin = await prisma.user.create({
+    data: {
+      username: 'fin.admin',
       passwordHash,
-      name: 'Finance Admin',
-      email: 'finadmin@efiling.gov',
+      name: 'Finance Department Admin',
+      email: 'fin.admin@santhigiri.org',
       roles: [UserRole.DEPT_ADMIN],
-      departmentId: finDept.id,
+      departmentId: finDeptId,
     },
   });
 
-  // Section Officers
-  const sectionOfficers = await Promise.all([
-    prisma.user.upsert({
-      where: { username: 'john.budget' },
-      update: {},
-      create: {
-        username: 'john.budget',
-        passwordHash,
-        name: 'John Smith',
-        email: 'john@efiling.gov',
-        roles: [UserRole.SECTION_OFFICER],
-        departmentId: finDept.id,
-        divisionId: 'fin-budget',
-      },
-    }),
-    prisma.user.upsert({
-      where: { username: 'jane.accounts' },
-      update: {},
-      create: {
-        username: 'jane.accounts',
-        passwordHash,
-        name: 'Jane Doe',
-        email: 'jane@efiling.gov',
-        roles: [UserRole.SECTION_OFFICER],
-        departmentId: finDept.id,
-        divisionId: 'fin-accounts',
-      },
-    }),
-    prisma.user.upsert({
-      where: { username: 'mike.audit' },
-      update: {},
-      create: {
-        username: 'mike.audit',
-        passwordHash,
-        name: 'Mike Johnson',
-        email: 'mike@efiling.gov',
-        roles: [UserRole.SECTION_OFFICER],
-        departmentId: finDept.id,
-        divisionId: 'fin-audit',
-      },
-    }),
-  ]);
-  console.log('✅ Section Officers created:', sectionOfficers.length);
+  const sectionOfficer = await prisma.user.create({
+    data: {
+      username: 'fin.accounts',
+      passwordHash,
+      name: 'Accounts Section Officer',
+      email: 'fin.accounts@santhigiri.org',
+      roles: [UserRole.SECTION_OFFICER],
+      departmentId: finDeptId,
+      divisionId: finFirstDivisionId,
+    },
+  });
 
-  // Inward Desk
-  const inwardDesk = await prisma.user.upsert({
-    where: { username: 'inward.fin' },
-    update: {},
-    create: {
-      username: 'inward.fin',
+  const inwardDesk = await prisma.user.create({
+    data: {
+      username: 'fin.inward',
       passwordHash,
       name: 'Finance Inward Desk',
-      email: 'inward@efiling.gov',
+      email: 'fin.inward@santhigiri.org',
       roles: [UserRole.INWARD_DESK],
-      departmentId: finDept.id,
+      departmentId: finDeptId,
+      divisionId: finFirstDivisionId,
     },
   });
-  console.log('✅ Inward Desk created:', inwardDesk.username);
 
-  // Dispatcher
-  const dispatcher = await prisma.user.upsert({
-    where: { username: 'dispatch.fin' },
-    update: {},
-    create: {
-      username: 'dispatch.fin',
+  const dispatcher = await prisma.user.create({
+    data: {
+      username: 'fin.dispatch',
       passwordHash,
       name: 'Finance Dispatcher',
-      email: 'dispatch@efiling.gov',
+      email: 'fin.dispatch@santhigiri.org',
       roles: [UserRole.DISPATCHER],
-      departmentId: finDept.id,
+      departmentId: finDeptId,
+      divisionId: finFirstDivisionId,
     },
   });
-  console.log('✅ Dispatcher created:', dispatcher.username);
 
-  // Approval Authority
-  const approvalAuth = await prisma.user.upsert({
-    where: { username: 'approver.fin' },
-    update: {},
-    create: {
-      username: 'approver.fin',
+  const approvalAuth = await prisma.user.create({
+    data: {
+      username: 'fin.approver',
       passwordHash,
-      name: 'Finance Approver',
-      email: 'approver@efiling.gov',
+      name: 'Finance Approval Authority',
+      email: 'fin.approver@santhigiri.org',
       roles: [UserRole.APPROVAL_AUTHORITY],
-      departmentId: finDept.id,
+      departmentId: finDeptId,
+      divisionId: finFirstDivisionId,
     },
   });
-  console.log('✅ Approval Authority created:', approvalAuth.username);
 
-  // Chat Manager (can create groups and add members)
-  const chatManager = await prisma.user.upsert({
-    where: { username: 'chatmanager.fin' },
-    update: {},
-    create: {
-      username: 'chatmanager.fin',
-      passwordHash,
-      name: 'Finance Chat Manager',
-      email: 'chatmanager@efiling.gov',
-      roles: [UserRole.CHAT_MANAGER],
-      departmentId: finDept.id,
-    },
-  });
-  console.log('✅ Chat Manager created:', chatManager.username);
-
-  // Generic USER role (clerk)
-  const clerk = await prisma.user.upsert({
-    where: { username: 'clerk.fin' },
-    update: {},
-    create: {
-      username: 'clerk.fin',
+  const clerk = await prisma.user.create({
+    data: {
+      username: 'fin.clerk',
       passwordHash,
       name: 'Finance Clerk',
-      email: 'clerk@efiling.gov',
+      email: 'fin.clerk@santhigiri.org',
       roles: [UserRole.USER],
-      departmentId: finDept.id,
-      divisionId: 'fin-budget',
+      departmentId: finDeptId,
+      divisionId: finFirstDivisionId,
     },
   });
-  console.log('✅ Clerk (USER role) created:', clerk.username);
 
-  // Create UserPoints for all users
-  const allUsers = [superAdmin, deptAdmin, ...sectionOfficers, inwardDesk, dispatcher, approvalAuth, chatManager, clerk];
-  for (const user of allUsers) {
-    await prisma.userPoints.upsert({
-      where: { userId: user.id },
-      update: {},
-      create: {
+  const chatManager = await prisma.user.create({
+    data: {
+      username: 'fin.chat',
+      passwordHash,
+      name: 'Finance Chat Manager',
+      email: 'fin.chat@santhigiri.org',
+      roles: [UserRole.CHAT_MANAGER],
+      departmentId: finDeptId,
+      divisionId: finFirstDivisionId,
+    },
+  });
+
+  // finDeptAdmin also gets a division
+  await prisma.user.update({
+    where: { id: finDeptAdmin.id },
+    data: { divisionId: finFirstDivisionId },
+  });
+
+  // One Dept Admin per department (other than Finance); each in a department and division
+  const otherAdmins: Awaited<ReturnType<typeof prisma.user.create>>[] = [];
+  const otherDeptCodes = SANTHIGIRI_STRUCTURE.filter((d) => d.code !== 'FIN');
+  for (const { code, name } of otherDeptCodes) {
+    const deptId = departmentIds.get(code)!;
+    const firstDivId = divisionIdsByDept.get(code)?.[0];
+    const safeUsername = code.toLowerCase().replace(/[^a-z0-9]/g, '.');
+    const user = await prisma.user.create({
+      data: {
+        username: `${safeUsername}.admin`,
+        passwordHash,
+        name: `${name.replace(' Department', '')} Admin`,
+        email: `${safeUsername}.admin@santhigiri.org`,
+        roles: [UserRole.DEPT_ADMIN],
+        departmentId: deptId,
+        divisionId: firstDivId ?? undefined,
+      },
+    });
+    otherAdmins.push(user);
+  }
+
+  const allUsers = [
+    superAdmin,
+    finDeptAdmin,
+    sectionOfficer,
+    inwardDesk,
+    dispatcher,
+    approvalAuth,
+    clerk,
+    chatManager,
+  ];
+
+  for (const user of [...allUsers, ...otherAdmins]) {
+    await prisma.userPoints.create({
+      data: {
         userId: user.id,
         basePoints: 1000,
         currentPoints: 1000,
       },
     });
   }
-  console.log('✅ User points initialized');
+  console.log('✅ Users and UserPoints created');
 
-  // Create Default Workflow (active and published) - before files so it runs even if files fail
-  const defaultWorkflow = await prisma.workflow.upsert({
-    where: { code: 'DEFAULT' },
-    update: {},
-    create: {
+  // Default Workflow
+  const defaultWorkflow = await prisma.workflow.create({
+    data: {
       name: 'Default File Processing Workflow',
       code: 'DEFAULT',
       description: 'Standard workflow for file processing: Inward → Section Officer → Approval → Dispatch',
-      departmentId: null, // Global workflow
+      departmentId: null,
       fileType: null,
       priorityCategory: null,
       createdById: superAdmin.id,
@@ -309,9 +294,7 @@ async function main() {
       isPublished: true,
     },
   });
-  console.log('✅ Default workflow created:', defaultWorkflow.name);
 
-  // Create workflow nodes for default workflow
   const startNode = await prisma.workflowNode.create({
     data: {
       workflowId: defaultWorkflow.id,
@@ -323,7 +306,6 @@ async function main() {
       positionY: 100,
     },
   });
-
   const inwardNode = await prisma.workflowNode.create({
     data: {
       workflowId: defaultWorkflow.id,
@@ -333,14 +315,13 @@ async function main() {
       description: 'File received at inward desk',
       assigneeType: 'role',
       assigneeValue: 'INWARD_DESK',
-      timeLimit: 24 * 60 * 60, // 24 hours
+      timeLimit: 24 * 60 * 60,
       timeLimitType: 'business_days',
       availableActions: ['forward', 'return'],
       positionX: 100,
       positionY: 200,
     },
   });
-
   const sectionNode = await prisma.workflowNode.create({
     data: {
       workflowId: defaultWorkflow.id,
@@ -350,14 +331,13 @@ async function main() {
       description: 'Processing by section officer',
       assigneeType: 'role',
       assigneeValue: 'SECTION_OFFICER',
-      timeLimit: 3 * 24 * 60 * 60, // 3 days
+      timeLimit: 3 * 24 * 60 * 60,
       timeLimitType: 'business_days',
       availableActions: ['forward', 'return', 'request_opinion'],
       positionX: 100,
       positionY: 300,
     },
   });
-
   const approvalNode = await prisma.workflowNode.create({
     data: {
       workflowId: defaultWorkflow.id,
@@ -367,14 +347,13 @@ async function main() {
       description: 'Review and approval',
       assigneeType: 'role',
       assigneeValue: 'APPROVAL_AUTHORITY',
-      timeLimit: 2 * 24 * 60 * 60, // 2 days
+      timeLimit: 2 * 24 * 60 * 60,
       timeLimitType: 'business_days',
       availableActions: ['approve', 'reject', 'return'],
       positionX: 100,
       positionY: 400,
     },
   });
-
   const dispatchNode = await prisma.workflowNode.create({
     data: {
       workflowId: defaultWorkflow.id,
@@ -384,14 +363,13 @@ async function main() {
       description: 'File ready for dispatch',
       assigneeType: 'role',
       assigneeValue: 'DISPATCHER',
-      timeLimit: 24 * 60 * 60, // 24 hours
+      timeLimit: 24 * 60 * 60,
       timeLimitType: 'business_days',
       availableActions: ['dispatch'],
       positionX: 100,
       positionY: 500,
     },
   });
-
   const endNode = await prisma.workflowNode.create({
     data: {
       workflowId: defaultWorkflow.id,
@@ -404,214 +382,28 @@ async function main() {
     },
   });
 
-  // Create workflow edges (connections)
   await prisma.workflowEdge.createMany({
     data: [
-      {
-        workflowId: defaultWorkflow.id,
-        sourceNodeId: startNode.id,
-        targetNodeId: inwardNode.id,
-        label: 'Start',
-        priority: 1,
-      },
-      {
-        workflowId: defaultWorkflow.id,
-        sourceNodeId: inwardNode.id,
-        targetNodeId: sectionNode.id,
-        label: 'Forward',
-        priority: 1,
-      },
-      {
-        workflowId: defaultWorkflow.id,
-        sourceNodeId: sectionNode.id,
-        targetNodeId: approvalNode.id,
-        label: 'Forward',
-        priority: 1,
-      },
-      {
-        workflowId: defaultWorkflow.id,
-        sourceNodeId: approvalNode.id,
-        targetNodeId: dispatchNode.id,
-        label: 'Approved',
-        priority: 1,
-      },
-      {
-        workflowId: defaultWorkflow.id,
-        sourceNodeId: dispatchNode.id,
-        targetNodeId: endNode.id,
-        label: 'Dispatched',
-        priority: 1,
-      },
+      { workflowId: defaultWorkflow.id, sourceNodeId: startNode.id, targetNodeId: inwardNode.id, label: 'Start', priority: 1 },
+      { workflowId: defaultWorkflow.id, sourceNodeId: inwardNode.id, targetNodeId: sectionNode.id, label: 'Forward', priority: 1 },
+      { workflowId: defaultWorkflow.id, sourceNodeId: sectionNode.id, targetNodeId: approvalNode.id, label: 'Forward', priority: 1 },
+      { workflowId: defaultWorkflow.id, sourceNodeId: approvalNode.id, targetNodeId: dispatchNode.id, label: 'Approved', priority: 1 },
+      { workflowId: defaultWorkflow.id, sourceNodeId: dispatchNode.id, targetNodeId: endNode.id, label: 'Dispatched', priority: 1 },
     ],
   });
-  console.log('✅ Default workflow nodes and edges created');
-
-  // Helper function to calculate time allotment based on priority
-  const getTimeAllotment = (category: FilePriorityCategory) => {
-    const allotments: Record<FilePriorityCategory, number> = {
-      [FilePriorityCategory.ROUTINE]: 3 * 24 * 60 * 60, // 3 days in seconds
-      [FilePriorityCategory.URGENT]: 24 * 60 * 60,      // 24 hours
-      [FilePriorityCategory.IMMEDIATE]: 4 * 60 * 60,    // 4 hours
-      [FilePriorityCategory.PROJECT]: 7 * 24 * 60 * 60, // 7 days
-    };
-    return allotments[category];
-  };
-
-  // Create Sample Files with timing data
-  const now = new Date();
-  const files = await Promise.all([
-    prisma.file.create({
-      data: {
-        fileNumber: `FIN-BUD-${new Date().getFullYear()}-0001`,
-        subject: 'Budget Proposal for Q2 2026',
-        description: 'Annual budget proposal for review and approval',
-        status: FileStatus.PENDING,
-        priority: FilePriority.HIGH,
-        priorityCategory: FilePriorityCategory.URGENT,
-        departmentId: finDept.id,
-        createdById: inwardDesk.id,
-        assignedToId: sectionOfficers[0].id,
-        currentDivisionId: 'fin-budget',
-        dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
-        deskArrivalTime: new Date(Date.now() - 18 * 60 * 60 * 1000), // Arrived 18 hours ago
-        allottedTime: getTimeAllotment(FilePriorityCategory.URGENT),
-        timerPercentage: 25, // 25% time remaining
-      },
-    }),
-    prisma.file.create({
-      data: {
-        fileNumber: `FIN-ACC-${new Date().getFullYear()}-0002`,
-        subject: 'Travel Reimbursement Request - March 2026',
-        description: 'Staff travel expenses for approval',
-        status: FileStatus.IN_PROGRESS,
-        priority: FilePriority.NORMAL,
-        priorityCategory: FilePriorityCategory.ROUTINE,
-        departmentId: finDept.id,
-        createdById: inwardDesk.id,
-        assignedToId: sectionOfficers[1].id,
-        currentDivisionId: 'fin-accounts',
-        dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
-        deskArrivalTime: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), // Arrived 1 day ago
-        allottedTime: getTimeAllotment(FilePriorityCategory.ROUTINE),
-        timerPercentage: 66, // 66% time remaining
-      },
-    }),
-    prisma.file.create({
-      data: {
-        fileNumber: `FIN-AUD-${new Date().getFullYear()}-0003`,
-        subject: 'Court Order - Urgent Response Required',
-        description: 'Immediate response required for court proceedings',
-        status: FileStatus.PENDING,
-        priority: FilePriority.URGENT,
-        priorityCategory: FilePriorityCategory.IMMEDIATE,
-        departmentId: finDept.id,
-        createdById: deptAdmin.id,
-        assignedToId: sectionOfficers[2].id,
-        currentDivisionId: 'fin-audit',
-        isRedListed: true,
-        redListedAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // Red listed 2 hours ago
-        dueDate: new Date(Date.now() - 1 * 60 * 60 * 1000), // Overdue by 1 hour
-        deskArrivalTime: new Date(Date.now() - 5 * 60 * 60 * 1000), // Arrived 5 hours ago
-        allottedTime: getTimeAllotment(FilePriorityCategory.IMMEDIATE),
-        timerPercentage: 0, // Overdue
-      },
-    }),
-    prisma.file.create({
-      data: {
-        fileNumber: `FIN-GEN-${new Date().getFullYear()}-0004`,
-        subject: 'Vendor Payment Processing',
-        description: 'Monthly vendor payments for approval',
-        status: FileStatus.ON_HOLD,
-        priority: FilePriority.NORMAL,
-        priorityCategory: FilePriorityCategory.ROUTINE,
-        departmentId: finDept.id,
-        createdById: inwardDesk.id,
-        isOnHold: true,
-        holdReason: 'Awaiting vendor bank details confirmation',
-        dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
-        deskArrivalTime: now,
-        allottedTime: getTimeAllotment(FilePriorityCategory.ROUTINE),
-        timerPercentage: 100,
-      },
-    }),
-    prisma.file.create({
-      data: {
-        fileNumber: `FIN-BUD-${new Date().getFullYear()}-0005`,
-        subject: 'Annual Report FY 2025-26',
-        description: 'Long-term annual report compilation',
-        status: FileStatus.IN_PROGRESS,
-        priority: FilePriority.LOW,
-        priorityCategory: FilePriorityCategory.PROJECT,
-        departmentId: finDept.id,
-        createdById: inwardDesk.id,
-        assignedToId: sectionOfficers[0].id,
-        currentDivisionId: 'fin-budget',
-        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-        deskArrivalTime: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
-        allottedTime: getTimeAllotment(FilePriorityCategory.PROJECT),
-        timerPercentage: 71, // 71% remaining
-      },
-    }),
-  ]);
-  console.log('✅ Sample files created:', files.length);
-
-  // Create Routing History for files
-  await prisma.fileRouting.createMany({
-    data: [
-      {
-        fileId: files[0].id,
-        fromUserId: inwardDesk.id,
-        toUserId: sectionOfficers[0].id,
-        toDivisionId: 'fin-budget',
-        action: FileAction.FORWARDED,
-        actionString: 'forward',
-        remarks: 'Please review and process',
-      },
-      {
-        fileId: files[1].id,
-        fromUserId: inwardDesk.id,
-        toUserId: sectionOfficers[1].id,
-        toDivisionId: 'fin-accounts',
-        action: FileAction.FORWARDED,
-        actionString: 'forward',
-        remarks: 'For accounts verification',
-      },
-    ],
-  });
-  console.log('✅ Routing history created');
-
-  // Create Sample Notes
-  await prisma.note.createMany({
-    data: [
-      {
-        fileId: files[0].id,
-        userId: sectionOfficers[0].id,
-        content: 'Reviewed the budget proposal. Requesting additional details on IT expenditure.',
-      },
-      {
-        fileId: files[0].id,
-        userId: deptAdmin.id,
-        content: 'Please expedite this as it needs to go to the ministry by end of week.',
-      },
-      {
-        fileId: files[1].id,
-        userId: sectionOfficers[1].id,
-        content: 'All receipts verified. Ready for approval.',
-      },
-    ],
-  });
-  console.log('✅ Sample notes created');
+  console.log('✅ Default workflow created');
 
   console.log('🎉 Seed completed successfully!');
-  console.log('\n📋 Test Accounts (all use password123 except Super Admin):');
+  console.log('\n📋 Test Accounts (password123 except Super Admin):');
   console.log('  Super Admin:        admin / admin123');
-  console.log('  Dept Admin:         finadmin / password123');
-  console.log('  Chat Manager:       chatmanager.fin / password123');
-  console.log('  Approval Authority: approver.fin / password123');
-  console.log('  Section Officers:   john.budget, jane.accounts, mike.audit / password123');
-  console.log('  Inward Desk:        inward.fin / password123');
-  console.log('  Dispatcher:         dispatch.fin / password123');
-  console.log('  Clerk (USER):       clerk.fin / password123');
+  console.log('  Finance Dept Admin: fin.admin / password123');
+  console.log('  Section Officer:    fin.accounts / password123');
+  console.log('  Inward Desk:        fin.inward / password123');
+  console.log('  Dispatcher:         fin.dispatch / password123');
+  console.log('  Approval Authority: fin.approver / password123');
+  console.log('  Clerk:              fin.clerk / password123');
+  console.log('  Chat Manager:       fin.chat / password123');
+  console.log('  Other dept admins:  <code>.admin (e.g. agr.admin, hr.admin) / password123');
 }
 
 main()

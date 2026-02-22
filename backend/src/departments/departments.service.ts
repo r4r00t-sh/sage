@@ -1,11 +1,33 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
+
+const CACHE_TTL = 300; // 5 minutes
+const CACHE_KEY_DEPARTMENTS = 'departments:list';
+const CACHE_KEY_DIVISIONS = (deptId: string) => `departments:${deptId}:divisions`;
 
 @Injectable()
 export class DepartmentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private redis: RedisService,
+  ) {}
 
   async getAllDepartments() {
+    const cached = await this.redis.get(CACHE_KEY_DEPARTMENTS);
+    if (cached) {
+      try {
+        return JSON.parse(cached) as Awaited<ReturnType<typeof this.fetchAllDepartments>>;
+      } catch {
+        await this.redis.del(CACHE_KEY_DEPARTMENTS);
+      }
+    }
+    const data = await this.fetchAllDepartments();
+    await this.redis.set(CACHE_KEY_DEPARTMENTS, JSON.stringify(data), CACHE_TTL);
+    return data;
+  }
+
+  private async fetchAllDepartments() {
     return this.prisma.department.findMany({
       include: {
         organisation: { select: { id: true, name: true } },
@@ -44,26 +66,34 @@ export class DepartmentsService {
     code: string;
     organisationId: string;
   }) {
-    return this.prisma.department.create({
+    const dept = await this.prisma.department.create({
       data: {
         name: data.name,
         code: data.code,
         organisationId: data.organisationId,
       },
     });
+    await this.redis.del(CACHE_KEY_DEPARTMENTS);
+    return dept;
   }
 
   async updateDepartment(id: string, data: { name?: string; code?: string }) {
-    return this.prisma.department.update({
+    const dept = await this.prisma.department.update({
       where: { id },
       data,
     });
+    await this.redis.del(CACHE_KEY_DEPARTMENTS);
+    await this.redis.del(CACHE_KEY_DIVISIONS(id));
+    return dept;
   }
 
   async deleteDepartment(id: string) {
-    return this.prisma.department.delete({
+    const dept = await this.prisma.department.delete({
       where: { id },
     });
+    await this.redis.del(CACHE_KEY_DEPARTMENTS);
+    await this.redis.del(CACHE_KEY_DIVISIONS(id));
+    return dept;
   }
 
   async getInwardDeskDepartments(userId: string) {
@@ -85,6 +115,21 @@ export class DepartmentsService {
   }
 
   async getDivisions(departmentId: string) {
+    const key = CACHE_KEY_DIVISIONS(departmentId);
+    const cached = await this.redis.get(key);
+    if (cached) {
+      try {
+        return JSON.parse(cached) as Awaited<ReturnType<typeof this.fetchDivisions>>;
+      } catch {
+        await this.redis.del(key);
+      }
+    }
+    const data = await this.fetchDivisions(departmentId);
+    await this.redis.set(key, JSON.stringify(data), CACHE_TTL);
+    return data;
+  }
+
+  private async fetchDivisions(departmentId: string) {
     return this.prisma.division.findMany({
       where: { departmentId },
       include: {
@@ -95,16 +140,17 @@ export class DepartmentsService {
   }
 
   async createDivision(departmentId: string, name: string) {
-    // Generate code from name
     const code = name.toUpperCase().replace(/\s+/g, '-').substring(0, 10);
-
-    return this.prisma.division.create({
+    const division = await this.prisma.division.create({
       data: {
         name,
         code,
         departmentId,
       },
     });
+    await this.redis.del(CACHE_KEY_DEPARTMENTS);
+    await this.redis.del(CACHE_KEY_DIVISIONS(departmentId));
+    return division;
   }
 
   async getDivisionUsers(divisionId: string) {

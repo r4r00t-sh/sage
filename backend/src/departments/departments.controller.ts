@@ -8,6 +8,7 @@ import {
   Param,
   UseGuards,
   Request,
+  Header,
 } from '@nestjs/common';
 import { DepartmentsService } from './departments.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -18,6 +19,7 @@ export class DepartmentsController {
   constructor(private departmentsService: DepartmentsService) {}
 
   @Get()
+  @Header('Cache-Control', 'no-store')
   async getAllDepartments() {
     return this.departmentsService.getAllDepartments();
   }
@@ -53,6 +55,7 @@ export class DepartmentsController {
   }
 
   @Get(':id/divisions')
+  @Header('Cache-Control', 'no-store')
   async getDivisions(@Param('id') departmentId: string) {
     return this.departmentsService.getDivisions(departmentId);
   }

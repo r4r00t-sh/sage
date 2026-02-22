@@ -1,35 +1,54 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { useAuthStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { LogIn, Lock, User, FileText, Shield, Zap, ArrowRight } from 'lucide-react';
+import { LogIn, Lock, User, ChevronDown } from 'lucide-react';
+
+const testAccounts = [
+  { role: 'Super Admin', username: 'admin', password: 'admin123', name: 'Super Administrator' },
+  { role: 'Dept Admin', username: 'fin.admin', password: 'password123', name: 'Finance Department Admin' },
+  { role: 'Section Officer', username: 'fin.accoun0.section', password: 'password123', name: 'Accounts - Section Officer' },
+  { role: 'Approval Auth', username: 'fin.accoun0.approver', password: 'password123', name: 'Accounts - Approval Authority' },
+  { role: 'Dispatcher', username: 'fin.accoun0.dispatch', password: 'password123', name: 'Accounts - Dispatcher' },
+  { role: 'Inward Desk', username: 'fin.accoun0.inward', password: 'password123', name: 'Accounts - Inward Desk' },
+  { role: 'Dept Admin', username: 'agr.admin', password: 'password123', name: 'Agriculture Department Admin' },
+  { role: 'Section Officer', username: 'agr.animal0.section', password: 'password123', name: 'Animal Husbandry - Section Officer' },
+  { role: 'Dept Admin', username: 'ops.admin', password: 'password123', name: 'Operations Department Admin' },
+  { role: 'Section Officer', username: 'shro.medica0.section', password: 'password123', name: 'Medical Education - Section Officer' },
+];
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showTestAccounts, setShowTestAccounts] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { setAuth } = useAuthStore();
+
+  const rawRedirect = searchParams.get('redirect') || '/dashboard';
+  const redirectTo =
+    rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
+      ? rawRedirect
+      : '/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     try {
       const response = await api.post('/auth/login', { username, password });
       setAuth(response.data.user, response.data.access_token);
       toast.success('Welcome back!', {
         description: `Logged in as ${response.data.user.name}`,
       });
-      router.push('/dashboard');
+      router.push(redirectTo);
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } } };
       toast.error('Login failed', {
@@ -40,119 +59,60 @@ export default function LoginPage() {
     }
   };
 
-  const features = [
-    { 
-      icon: FileText, 
-      title: 'Digital File Management',
-      description: 'Organize and track all your files digitally'
-    },
-    { 
-      icon: Shield, 
-      title: 'Secure & Compliant',
-      description: 'Enterprise-grade security for your data'
-    },
-    { 
-      icon: Zap, 
-      title: 'Real-time Tracking',
-      description: 'Track file status and location instantly'
-    },
-  ];
-
-  const testAccounts = [
-    { role: 'Super Admin', username: 'admin', password: 'admin123', name: 'Super Administrator', dept: 'All Departments', color: 'bg-red-500' },
-    { role: 'Dept Admin', username: 'finadmin', password: 'password123', name: 'Finance Admin', dept: 'Finance Department', color: 'bg-purple-500' },
-    { role: 'Approval Auth', username: 'approver.fin', password: 'password123', name: 'Finance Approver', dept: 'Finance Department', color: 'bg-amber-500' },
-    { role: 'Section Officer', username: 'john.budget', password: 'password123', name: 'John Smith', dept: 'Finance > Budget Section', color: 'bg-blue-500' },
-    { role: 'Section Officer', username: 'jane.accounts', password: 'password123', name: 'Jane Doe', dept: 'Finance > Accounts Section', color: 'bg-blue-500' },
-    { role: 'Section Officer', username: 'mike.audit', password: 'password123', name: 'Mike Johnson', dept: 'Finance > Audit Section', color: 'bg-blue-500' },
-    { role: 'Inward Desk', username: 'inward.fin', password: 'password123', name: 'Finance Inward Desk', dept: 'Finance Department', color: 'bg-green-500' },
-    { role: 'Dispatcher', username: 'dispatch.fin', password: 'password123', name: 'Finance Dispatcher', dept: 'Finance Department', color: 'bg-cyan-500' },
-  ];
+  const fillTestAccount = (account: (typeof testAccounts)[0]) => {
+    setUsername(account.username);
+    setPassword(account.password);
+    toast.info(`Filled: ${account.name}`);
+  };
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left Panel - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 bg-gradient-to-br from-primary via-primary/95 to-primary/90 p-12 xl:p-16 flex-col justify-between text-primary-foreground relative overflow-hidden">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-0 w-96 h-96 bg-white rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
-          <div className="absolute bottom-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
-        </div>
-
-        <div className="relative">
-          <div className="flex items-center gap-4">
-            <div className="h-16 w-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center overflow-hidden">
-              <img
-                src="/logo.png"
-                alt="EFMP"
-                className="h-14 w-14 object-contain"
-              />
-            </div>
-            <div>
-              <h1 className="text-3xl font-extrabold tracking-tight">EFMP</h1>
-            </div>
+    <div className="min-h-screen flex flex-col lg:flex-row text-zinc-100">
+      {/* Header - spans full width, transparent over columns */}
+      <header className="flex items-center justify-between px-6 py-5 lg:px-10 lg:py-6 border-b border-zinc-800/50 lg:border-b-0 lg:absolute lg:top-0 lg:left-0 lg:right-0 z-10 lg:bg-transparent bg-zinc-950">
+        <Link href="/" className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-lg bg-zinc-800 flex items-center justify-center overflow-hidden">
+            <img src="/logo.png" alt="EFMP" className="h-8 w-8 object-contain" />
           </div>
-        </div>
-        
-        <div className="relative space-y-8">
-          <h2 className="text-4xl xl:text-5xl font-bold leading-tight">
-            Streamline Your<br />Document Workflow
-          </h2>
-          <p className="text-xl opacity-90 max-w-lg">
-            Manage, track, and process files efficiently with our enterprise-grade e-filing solution designed for government organizations.
-          </p>
-          
-          <div className="space-y-4 pt-4">
-            {features.map((feature, i) => (
-              <div key={i} className="flex items-start gap-4 bg-white/10 backdrop-blur rounded-xl p-4">
-                <div className="h-12 w-12 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
-                  <feature.icon className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-lg">{feature.title}</h3>
-                  <p className="text-sm opacity-80">{feature.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+          <span className="text-lg font-semibold text-zinc-100">EFMP</span>
+        </Link>
+        <Link
+          href="/"
+          className="text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
+        >
+          Back to home
+        </Link>
+      </header>
 
-        <p className="text-sm opacity-60 relative">
-          © 2026 EFMP. All rights reserved.
-        </p>
+      {/* Left column - lighter shade + testimonial */}
+      <div className="hidden lg:flex lg:w-1/2 flex-col justify-end p-12 xl:p-16 lg:min-h-screen bg-zinc-900 lg:border-r border-zinc-800/80">
+        <div className="max-w-md">
+          <blockquote className="text-zinc-400 italic text-lg leading-relaxed">
+            &ldquo;This platform has saved us countless hours and helped us deliver
+            file tracking and approvals faster than ever before.&rdquo;
+          </blockquote>
+          <p className="mt-4 text-sm text-zinc-500">— Santhigiri Ashram</p>
+        </div>
       </div>
 
-      {/* Right Panel - Login Form */}
-      <div className="flex-1 flex items-center justify-center p-8 lg:p-12 bg-background">
-        <div className="w-full max-w-md">
-          {/* Mobile Logo */}
-          <div className="lg:hidden flex items-center justify-center gap-3 mb-12">
-            <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center overflow-hidden">
-              <img
-                src="/logo.png"
-                alt="EFMP"
-                className="h-14 w-14 object-contain"
-              />
-            </div>
-            <div>
-              <h1 className="text-3xl font-extrabold tracking-tight">EFMP</h1>
-            </div>
-          </div>
-
+      {/* Right column - darker shade + form */}
+      <div className="flex-1 flex items-center justify-center p-8 lg:p-12 bg-zinc-950">
+        <div className="w-full max-w-[400px]">
           <div className="mb-10">
-            <h2 className="text-3xl font-bold tracking-tight">Welcome back</h2>
-            <p className="text-muted-foreground mt-2 text-lg">
-              Enter your credentials to access your account
+            <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">
+              Sign in to your account
+            </h1>
+            <p className="mt-2 text-sm text-zinc-400">
+              Enter your credentials to access the e-filing platform
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username" className="text-base font-medium">
+              <Label htmlFor="username" className="text-sm font-medium text-zinc-300">
                 Username
               </Label>
               <div className="relative">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                 <Input
                   id="username"
                   type="text"
@@ -161,18 +121,18 @@ export default function LoginPage() {
                   required
                   autoComplete="username"
                   placeholder="Enter your username"
-                  className="pl-12 h-14 text-base"
+                  className="pl-10 h-12 bg-zinc-900/80 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-zinc-500 focus-visible:border-zinc-600"
                   disabled={loading}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-base font-medium">
+              <Label htmlFor="password" className="text-sm font-medium text-zinc-300">
                 Password
               </Label>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                 <Input
                   id="password"
                   type="password"
@@ -181,73 +141,80 @@ export default function LoginPage() {
                   required
                   autoComplete="current-password"
                   placeholder="Enter your password"
-                  className="pl-12 h-14 text-base"
+                  className="pl-10 h-12 bg-zinc-900/80 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-zinc-500 focus-visible:border-zinc-600"
                   disabled={loading}
                 />
               </div>
             </div>
 
-            <Button 
-              type="submit" 
-              className="w-full h-14 text-base font-semibold" 
+            <Button
+              type="submit"
+              className="w-full h-12 bg-white text-zinc-900 hover:bg-zinc-200 font-medium"
               disabled={loading}
             >
               {loading ? (
-                <>
-                  <div className="mr-2 h-5 w-5 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                <span className="flex items-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-900 border-t-transparent" />
                   Signing in...
-                </>
+                </span>
               ) : (
-                <>
-                  Sign In
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </>
+                <span className="flex items-center gap-2">
+                  <LogIn className="h-4 w-4" />
+                  Sign in
+                </span>
               )}
             </Button>
           </form>
 
-          <Separator className="my-8" />
+          <div className="relative my-8">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-zinc-800" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-zinc-950 px-3 text-zinc-500">Or continue with</span>
+            </div>
+          </div>
 
-          {/* Test Accounts */}
-          <Card className="border-dashed">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Shield className="h-4 w-4 text-muted-foreground" />
-                Test Accounts
-              </CardTitle>
-              <CardDescription>Click any account below to auto-fill login credentials</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 max-h-[360px] overflow-y-auto pr-2 scrollbar-thin">
-              {testAccounts.map((account, i) => (
-                <div 
-                  key={i}
-                  className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 hover:border-primary/50 cursor-pointer transition-all duration-200 group hover:shadow-sm"
-                  onClick={() => {
-                    setUsername(account.username);
-                    setPassword(account.password);
-                    toast.info(`Selected: ${account.name}`, { description: 'Credentials filled. Click Sign In to continue.' });
-                  }}
-                >
-                  <div className={`h-10 w-10 rounded-full ${account.color} flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}>
-                    {account.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium text-sm truncate">{account.name}</p>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted font-medium text-muted-foreground">
-                        {account.role}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">{account.dept}</p>
-                    <p className="text-xs font-mono text-primary mt-1">
-                      {account.username} / {account.password}
-                    </p>
-                  </div>
-                  <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+          {/* Test accounts */}
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setShowTestAccounts(!showTestAccounts)}
+              className="w-full h-12 flex items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900/60 text-zinc-300 hover:bg-zinc-800/80 hover:border-zinc-600 hover:text-zinc-100 transition-colors text-sm font-medium"
+            >
+              Use a test account
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${showTestAccounts ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {showTestAccounts && (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-1.5 max-h-64 overflow-y-auto">
+                {testAccounts.map((account, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => fillTestAccount(account)}
+                    className="w-full text-left px-3 py-2 rounded-md text-sm text-zinc-300 hover:bg-zinc-800/80 hover:text-zinc-100 transition-colors flex items-center justify-between gap-2"
+                  >
+                    <span className="truncate">{account.name}</span>
+                    <span className="text-xs text-zinc-500 shrink-0">{account.role}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <p className="mt-10 text-xs text-zinc-500 leading-relaxed">
+            By signing in, you agree to our{' '}
+            <Link href="#" className="underline underline-offset-2 hover:text-zinc-400">
+              Terms of Service
+            </Link>{' '}
+            and{' '}
+            <Link href="#" className="underline underline-offset-2 hover:text-zinc-400">
+              Privacy Policy
+            </Link>
+            .
+          </p>
         </div>
       </div>
     </div>

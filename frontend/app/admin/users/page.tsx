@@ -88,6 +88,9 @@ interface User {
   username: string;
   name: string;
   email?: string;
+  designation?: string;
+  staffId?: string;
+  phone?: string;
   roles: string[];
   role?: string; // legacy
   isActive: boolean;
@@ -131,6 +134,9 @@ export default function UsersPage() {
     password: '',
     name: '',
     email: '',
+    designation: '',
+    staffId: '',
+    phone: '',
     roles: ['SECTION_OFFICER'] as string[],
     departmentId: '',
     divisionId: '',
@@ -179,7 +185,13 @@ export default function UsersPage() {
 
     setFormLoading(true);
     try {
-      await api.post('/users', { ...formData, roles: formData.roles.length ? formData.roles : ['USER'] });
+      await api.post('/users', {
+        ...formData,
+        roles: formData.roles.length ? formData.roles : ['USER'],
+        designation: formData.designation || undefined,
+        staffId: formData.staffId || undefined,
+        phone: formData.phone || undefined,
+      });
       toast.success('User created successfully');
       setIsCreateOpen(false);
       resetForm();
@@ -200,6 +212,9 @@ export default function UsersPage() {
       await api.put(`/users/${selectedUser.id}`, {
         name: formData.name,
         email: formData.email,
+        designation: formData.designation || undefined,
+        staffId: formData.staffId || undefined,
+        phone: formData.phone || undefined,
         roles: formData.roles,
         departmentId: formData.departmentId || null,
         divisionId: formData.divisionId || null,
@@ -325,6 +340,9 @@ export default function UsersPage() {
       password: '',
       name: user.name,
       email: user.email || '',
+      designation: user.designation || '',
+      staffId: user.staffId || '',
+      phone: user.phone || '',
       roles: user.roles?.length ? [...user.roles] : ['USER'],
       departmentId: user.department?.id || '',
       divisionId: user.division?.id || '',
@@ -338,6 +356,9 @@ export default function UsersPage() {
       password: '',
       name: '',
       email: '',
+      designation: '',
+      staffId: '',
+      phone: '',
       roles: ['SECTION_OFFICER'],
       departmentId: '',
       divisionId: '',
@@ -678,6 +699,32 @@ export default function UsersPage() {
                 placeholder="Enter email"
               />
             </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Designation</Label>
+                <Input
+                  value={formData.designation}
+                  onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                  placeholder="Designation"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Staff ID</Label>
+                <Input
+                  value={formData.staffId}
+                  onChange={(e) => setFormData({ ...formData, staffId: e.target.value })}
+                  placeholder="Staff ID"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Phone</Label>
+                <Input
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="Phone"
+                />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label>Roles *</Label>
               <div className="rounded-md border p-3 space-y-2 max-h-48 overflow-y-auto">
@@ -777,6 +824,29 @@ export default function UsersPage() {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               />
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Designation</Label>
+                <Input
+                  value={formData.designation}
+                  onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Staff ID</Label>
+                <Input
+                  value={formData.staffId}
+                  onChange={(e) => setFormData({ ...formData, staffId: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Phone</Label>
+                <Input
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Roles</Label>

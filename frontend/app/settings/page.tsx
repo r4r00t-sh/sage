@@ -28,7 +28,10 @@ import {
   MapPin,
   Camera,
   Upload,
+  Languages,
 } from 'lucide-react';
+import { useLocaleStore } from '@/lib/store';
+import { getTranslation } from '@/lib/i18n';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAvatarUrl } from '@/lib/avatar';
 
@@ -36,6 +39,8 @@ export default function SettingsPage() {
   const router = useRouter();
   const { user, setAuth } = useAuthStore();
   const { theme, setTheme } = useTheme();
+  const { locale, setLocale } = useLocaleStore();
+  const t = (key: string) => getTranslation(locale, key);
   const [loading, setLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [avatarLoading, setAvatarLoading] = useState(false);
@@ -166,7 +171,7 @@ export default function SettingsPage() {
       <div className="mb-12">
         <Button variant="ghost" className="mb-8 -ml-2 h-11 px-4" onClick={() => router.back()}>
           <ArrowLeft className="mr-2 h-5 w-5" />
-          Back
+          {t('back')}
         </Button>
         
         <div className="flex items-center gap-6">
@@ -174,9 +179,9 @@ export default function SettingsPage() {
             <Settings className="h-10 w-10 text-primary" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+            <h1 className="text-3xl font-bold tracking-tight">{t('settings')}</h1>
             <p className="text-muted-foreground text-lg mt-2">
-              Manage your account settings and preferences
+              {t('manageAccountPreferences')}
             </p>
           </div>
         </div>
@@ -193,7 +198,7 @@ export default function SettingsPage() {
               <CardHeader className="pb-6">
                 <CardTitle className="text-xl flex items-center gap-3">
                   <User className="h-6 w-6" />
-                  Profile Information
+                  {t('profileInformation')}
                 </CardTitle>
                 <CardDescription className="text-base">
                   Update your personal information and details
@@ -294,7 +299,7 @@ export default function SettingsPage() {
               <CardHeader className="pb-6">
                 <CardTitle className="text-xl flex items-center gap-3">
                   <Lock className="h-6 w-6" />
-                  Change Password
+                  {t('changePassword')}
                 </CardTitle>
                 <CardDescription className="text-base">
                   Update your account password to keep it secure
@@ -361,12 +366,59 @@ export default function SettingsPage() {
             </Card>
           </div>
 
+          {/* Language */}
+          <Card className="overflow-hidden">
+            <CardHeader className="pb-6">
+              <CardTitle className="text-xl flex items-center gap-3">
+                <Languages className="h-6 w-6" />
+                {t('language')}
+              </CardTitle>
+              <CardDescription className="text-base">
+                {t('languageDescription')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div
+                    className={`flex flex-row items-center gap-5 p-6 rounded-xl border-2 cursor-pointer transition-all ${
+                      locale === 'en' ? 'border-primary bg-primary/5' : 'border-transparent hover:border-muted-foreground/20'
+                    }`}
+                    onClick={() => setLocale('en')}
+                  >
+                    <div className="h-14 w-14 shrink-0 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                      <span className="text-lg font-bold text-blue-600 dark:text-blue-400">En</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-base block">{t('english')}</span>
+                      <span className="text-sm text-muted-foreground">Default</span>
+                    </div>
+                  </div>
+                  <div
+                    className={`flex flex-row items-center gap-5 p-6 rounded-xl border-2 cursor-pointer transition-all ${
+                      locale === 'ml' ? 'border-primary bg-primary/5' : 'border-transparent hover:border-muted-foreground/20'
+                    }`}
+                    onClick={() => setLocale('ml')}
+                  >
+                    <div className="h-14 w-14 shrink-0 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                      <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400" style={locale === 'ml' ? { fontFamily: 'Manjari, sans-serif' } : undefined}>മ</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-base block" style={locale === 'ml' ? { fontFamily: 'Manjari, sans-serif' } : undefined}>{t('malayalam')}</span>
+                      <span className="text-sm text-muted-foreground">Manjari font</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Appearance - full width, more spacious */}
           <Card className="overflow-hidden">
             <CardHeader className="pb-6">
               <CardTitle className="text-xl flex items-center gap-3">
                 <Palette className="h-6 w-6" />
-                Appearance
+                {t('appearance')}
               </CardTitle>
               <CardDescription className="text-base">
                 Customize how the application looks on your device
@@ -374,7 +426,7 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="pt-0">
               <div className="space-y-6">
-                <Label className="text-base font-medium">Color Theme</Label>
+                <Label className="text-base font-medium">{t('colorTheme')}</Label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                   <div
                     className={`flex flex-row items-center gap-5 p-6 rounded-xl border-2 cursor-pointer transition-all ${
@@ -386,7 +438,7 @@ export default function SettingsPage() {
                       <Sun className="h-7 w-7 text-amber-600" />
                     </div>
                     <div>
-                      <span className="font-semibold text-base block">Light</span>
+                      <span className="font-semibold text-base block">{t('light')}</span>
                       <span className="text-sm text-muted-foreground">Bright, clean interface</span>
                     </div>
                   </div>
@@ -400,7 +452,7 @@ export default function SettingsPage() {
                       <Moon className="h-7 w-7 text-slate-200" />
                     </div>
                     <div>
-                      <span className="font-semibold text-base block">Dark</span>
+                      <span className="font-semibold text-base block">{t('dark')}</span>
                       <span className="text-sm text-muted-foreground">Easy on the eyes</span>
                     </div>
                   </div>
@@ -414,7 +466,7 @@ export default function SettingsPage() {
                       <Monitor className="h-7 w-7 text-slate-600" />
                     </div>
                     <div>
-                      <span className="font-semibold text-base block">System</span>
+                      <span className="font-semibold text-base block">{t('system')}</span>
                       <span className="text-sm text-muted-foreground">Match your device</span>
                     </div>
                   </div>
@@ -429,7 +481,7 @@ export default function SettingsPage() {
           {/* Account Info */}
           <Card className="overflow-hidden">
             <CardHeader className="pb-4">
-              <CardTitle className="text-lg">Account Details</CardTitle>
+              <CardTitle className="text-lg">{t('accountDetails')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center gap-5">
@@ -450,7 +502,7 @@ export default function SettingsPage() {
                     <Shield className="h-6 w-6 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-muted-foreground mb-1">Role</p>
+                    <p className="text-sm text-muted-foreground mb-1">{t('role')}</p>
                     <Badge variant={getRoleBadgeVariant(getRoles(user)[0] || '')} className="text-sm">
                       {getRoles(user).map((r) => r.replace('_', ' ')).join(', ')}
                     </Badge>
@@ -463,7 +515,7 @@ export default function SettingsPage() {
                       <Building2 className="h-6 w-6 text-amber-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-muted-foreground mb-1">Department</p>
+                      <p className="text-sm text-muted-foreground mb-1">{t('department')}</p>
                       <p className="font-medium">Finance</p>
                     </div>
                   </div>
@@ -475,7 +527,7 @@ export default function SettingsPage() {
                       <MapPin className="h-6 w-6 text-blue-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-muted-foreground mb-1">Division</p>
+                      <p className="text-sm text-muted-foreground mb-1">{t('division')}</p>
                       <p className="font-medium">Budget Section</p>
                     </div>
                   </div>
@@ -487,12 +539,12 @@ export default function SettingsPage() {
           {/* Help Card */}
           <Card className="bg-muted/50 overflow-hidden">
             <CardContent className="p-8">
-              <h3 className="font-semibold text-lg mb-3">Need Help?</h3>
+              <h3 className="font-semibold text-lg mb-3">{t('needHelp')}</h3>
               <p className="text-muted-foreground mb-6 leading-relaxed">
                 If you&apos;re having trouble with your account or have questions, contact your system administrator.
               </p>
               <Button variant="outline" size="lg" className="w-full h-12">
-                Contact Support
+                {t('contactSupport')}
               </Button>
             </CardContent>
           </Card>

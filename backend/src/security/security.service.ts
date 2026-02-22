@@ -34,8 +34,10 @@ export class SecurityService {
   }
 
   getCorsConfig() {
+    const defaultOrigins =
+      'http://localhost:3000,https://efmp.santhigiri.cloud,http://efmp.santhigiri.cloud';
     const allowedOrigins = this.configService
-      .get<string>('ALLOWED_ORIGINS', 'http://localhost:3000')
+      .get<string>('ALLOWED_ORIGINS', defaultOrigins)
       .split(',')
       .map((origin) => origin.trim());
 

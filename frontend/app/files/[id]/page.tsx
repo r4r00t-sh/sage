@@ -8,6 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
@@ -43,9 +50,7 @@ import {
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
-
-// API base URL for building full attachment URLs
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_BASE_URL } from '@/lib/api';
 
 // Helper to resolve attachment URLs
 function resolveAttachmentUrl(url: string): string {
@@ -68,6 +73,19 @@ interface Attachment {
   size: number;
   url: string;
   createdAt: string;
+  uploadedBy?: {
+    id: string;
+    name: string;
+    roles: string[];
+    department: {
+      id: string;
+      name: string;
+    } | null;
+    division: {
+      id: string;
+      name: string;
+    } | null;
+  } | null;
 }
 
 interface FileNote {
@@ -114,6 +132,13 @@ interface FileDetails {
   assignedTo?: { id: string; name: string; email?: string };
   department: { id: string; name: string; code: string };
   currentDivision?: { id: string; name: string };
+  originDesk?: {
+    id: string;
+    name: string;
+    code: string;
+    department?: { name: string; code: string };
+    division?: { name: string };
+  } | null;
   notes: FileNote[];
   routingHistory: RoutingEntry[];
   attachments?: Attachment[];
@@ -155,6 +180,8 @@ function AttachmentsSection({
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   // Build display items - use attachments if available, fallback to legacy
   const displayItems = attachments.length > 0 
@@ -163,7 +190,22 @@ function AttachmentsSection({
       ? [{ id: 'legacy', filename: 'Document', mimeType: 'application/pdf', size: 0, url: legacyFileUrl, createdAt: '' }]
       : [];
 
+  // Group attachments by department
+  const groupedAttachments = displayItems.reduce((acc, attachment) => {
+    const deptName = attachment.uploadedBy?.department?.name || 'Unknown Department';
+    if (!acc[deptName]) {
+      acc[deptName] = [];
+    }
+    acc[deptName].push(attachment);
+    return acc;
+  }, {} as Record<string, Attachment[]>);
+
   const activeItem = displayItems[activeIndex];
+
+  const handleAttachmentClick = (attachment: Attachment) => {
+    setSelectedAttachment(attachment);
+    setShowDetailModal(true);
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -314,47 +356,177 @@ function AttachmentsSection({
           )}
         </div>
 
-        {/* File List */}
-        <div className="grid gap-2">
-          {displayItems.map((item, index) => {
-            const Icon = getFileIcon(item.mimeType);
-            return (
-              <div
-                key={item.id}
-                className={cn(
-                  "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
-                  index === activeIndex
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:bg-muted/50"
-                )}
-                onClick={() => setActiveIndex(index)}
-              >
-                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <Icon className="h-5 w-5 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">{item.filename}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {item.size > 0 ? formatFileSize(item.size) : 'Document'}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-                    <a href={resolveAttachmentUrl(item.url)} target="_blank" rel="noopener noreferrer">
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-                    <a href={resolveAttachmentUrl(item.url)} download={item.filename}>
-                      <Download className="h-4 w-4" />
-                    </a>
-                  </Button>
-                </div>
+        {/* File List - Grouped by Department */}
+        <div className="space-y-4">
+          {Object.entries(groupedAttachments).map(([deptName, deptAttachments]) => (
+            <div key={deptName} className="space-y-2">
+              <div className="flex items-center gap-2 px-2">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <h4 className="font-semibold text-sm text-foreground">{deptName}</h4>
+                <Badge variant="secondary" className="ml-auto text-xs">
+                  {deptAttachments.length} file{deptAttachments.length !== 1 ? 's' : ''}
+                </Badge>
               </div>
-            );
-          })}
+              <div className="grid gap-2">
+                {deptAttachments.map((item, index) => {
+                  const Icon = getFileIcon(item.mimeType);
+                  const globalIndex = displayItems.findIndex(a => a.id === item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      className={cn(
+                        "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors group",
+                        globalIndex === activeIndex
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted/50"
+                      )}
+                      onClick={() => setActiveIndex(globalIndex)}
+                    >
+                      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <Icon className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{item.filename}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>{item.size > 0 ? formatFileSize(item.size) : 'Document'}</span>
+                          {item.uploadedBy && (
+                            <>
+                              <span>•</span>
+                              <span className="truncate">{item.uploadedBy.name}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAttachmentClick(item);
+                          }}
+                          title="View details"
+                        >
+                          <User className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                          <a href={resolveAttachmentUrl(item.url)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                          <a href={resolveAttachmentUrl(item.url)} download={item.filename} onClick={(e) => e.stopPropagation()}>
+                            <Download className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       </CardContent>
+
+      {/* Attachment Detail Modal */}
+      <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Paperclip className="h-5 w-5" />
+              Attachment Details
+            </DialogTitle>
+            <DialogDescription>
+              Information about the uploaded attachment
+            </DialogDescription>
+          </DialogHeader>
+          {selectedAttachment && (
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-semibold text-sm mb-1">File Information</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Filename:</span>
+                    <span className="font-medium">{selectedAttachment.filename}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Size:</span>
+                    <span>{selectedAttachment.size > 0 ? formatFileSize(selectedAttachment.size) : 'Unknown'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Type:</span>
+                    <span>{selectedAttachment.mimeType}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Uploaded:</span>
+                    <span>{selectedAttachment.createdAt ? format(new Date(selectedAttachment.createdAt), 'PPp') : 'Unknown'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {selectedAttachment.uploadedBy ? (
+                <>
+                  <Separator />
+                  <div>
+                    <h4 className="font-semibold text-sm mb-1">Uploader Information</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Name:</span>
+                        <span className="font-medium">{selectedAttachment.uploadedBy.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Designation:</span>
+                        <div className="flex gap-1">
+                          {selectedAttachment.uploadedBy.roles.map((role) => (
+                            <Badge key={role} variant="outline" className="text-xs">
+                              {role.replace('_', ' ')}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                      {selectedAttachment.uploadedBy.department && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Department:</span>
+                          <span className="font-medium">{selectedAttachment.uploadedBy.department.name}</span>
+                        </div>
+                      )}
+                      {selectedAttachment.uploadedBy.division && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Division:</span>
+                          <span className="font-medium">{selectedAttachment.uploadedBy.division.name}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  Uploader information not available
+                </div>
+              )}
+
+              <Separator />
+
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" asChild>
+                  <a href={resolveAttachmentUrl(selectedAttachment.url)} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Open
+                  </a>
+                </Button>
+                <Button asChild>
+                  <a href={resolveAttachmentUrl(selectedAttachment.url)} download={selectedAttachment.filename}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download
+                  </a>
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
@@ -436,6 +608,19 @@ function FileDetailContent() {
   const isCreator = file.createdBy?.id === user?.id;
   const isUnassigned = !file.assignedTo;
   const isSuperAdmin = hasRole(user, 'SUPER_ADMIN');
+  const isDeptAdmin = hasRole(user, 'DEPT_ADMIN');
+  
+  // Role-based permission checks
+  const isInwardDesk = hasRole(user, 'INWARD_DESK') && !isDeptAdmin && !isSuperAdmin;
+  const isDispatcher = hasRole(user, 'DISPATCHER') && !isDeptAdmin && !isSuperAdmin;
+  const isSectionOfficer = hasRole(user, 'SECTION_OFFICER') && !isDeptAdmin && !isSuperAdmin;
+  const isApprovalAuthority = hasRole(user, 'APPROVAL_AUTHORITY') && !isDeptAdmin && !isSuperAdmin;
+  
+  // Permission: Can add notes (INWARD_DESK and DISPATCHER cannot)
+  const canAddNotes = !isInwardDesk && !isDispatcher && (isAssignee || (isCreator && isUnassigned) || isSuperAdmin || isDeptAdmin);
+  
+  // Permission: Can add attachments (INWARD_DESK cannot add to incoming files)
+  const canAddAttachments = !isInwardDesk && (isAssignee || (isCreator && isUnassigned) || isSuperAdmin || isDeptAdmin);
   
   // User can edit if:
   // 1. They are the current assignee (file is with them), OR
@@ -593,13 +778,22 @@ function FileDetailContent() {
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="space-y-1">
-              <h4 className="text-sm font-medium text-muted-foreground">Department</h4>
+              <h4 className="text-sm font-medium text-muted-foreground">Host Department</h4>
               <div className="flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-muted-foreground" />
                 <span className="font-medium">{file.department.name}</span>
               </div>
               <p className="text-xs text-muted-foreground">{file.department.code}</p>
             </div>
+            {file.originDesk && (
+              <div className="space-y-1">
+                <h4 className="text-sm font-medium text-muted-foreground">Desk of Origin</h4>
+                <p className="text-sm font-medium">
+                  {[file.originDesk.department?.name, file.originDesk.division?.name, file.originDesk.name].filter(Boolean).join(' / ')}
+                </p>
+                <p className="text-xs text-muted-foreground">{file.originDesk.code}</p>
+              </div>
+            )}
             <div className="space-y-1">
               <h4 className="text-sm font-medium text-muted-foreground">Current Location</h4>
               <div className="flex items-center gap-2">
@@ -679,7 +873,7 @@ function FileDetailContent() {
                     fileId={file.id}
                     notes={file.notes}
                     onNoteAdded={fetchFile}
-                    canEdit={canEdit}
+                    canEdit={canAddNotes}
                   />
                 </TabsContent>
                 <TabsContent value="history" className="mt-0 h-full">
@@ -698,7 +892,7 @@ function FileDetailContent() {
             legacyS3Key={file.s3Key}
             fileId={file.id}
             onUpdate={fetchFile}
-            canEdit={canEdit}
+            canEdit={canAddAttachments}
           />
         </div>
       </div>

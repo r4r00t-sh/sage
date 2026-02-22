@@ -40,7 +40,11 @@ import {
   Activity,
   PieChart,
   Calendar,
+  Gauge,
+  GitBranch,
 } from 'lucide-react';
+import { ActivityHeatmap } from '@/components/activity-heatmap';
+import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -112,6 +116,7 @@ interface BottleneckData {
 
 export default function AnalyticsDashboardPage() {
   const { user } = useAuthStore();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [dateRange, setDateRange] = useState('30d');
@@ -121,10 +126,36 @@ export default function AnalyticsDashboardPage() {
   const [departmentAnalytics, setDepartmentAnalytics] = useState<DepartmentAnalytics[]>([]);
   const [bottleneckData, setBottleneckData] = useState<BottleneckData | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [activityScope, setActivityScope] = useState<'user' | 'department'>('user');
+  const [activityYear, setActivityYear] = useState(new Date().getFullYear());
+  const [activityData, setActivityData] = useState<{
+    contributions: Record<string, number>;
+    totalContributions: number;
+    year: number;
+  } | null>(null);
+  const [activityLoading, setActivityLoading] = useState(false);
 
   useEffect(() => {
     fetchAnalytics();
   }, [dateRange]);
+
+  const fetchActivityHeatmap = async () => {
+    setActivityLoading(true);
+    try {
+      const res = await api.get('/analytics/activity-heatmap', {
+        params: { scope: activityScope, year: activityYear },
+      });
+      setActivityData(res.data);
+    } catch {
+      setActivityData({ contributions: {}, totalContributions: 0, year: activityYear });
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchActivityHeatmap();
+  }, [activityScope, activityYear]);
 
   const fetchAnalytics = async () => {
     setLoading(true);
@@ -222,6 +253,14 @@ export default function AnalyticsDashboardPage() {
             </SelectContent>
           </Select>
           
+          <Button 
+            variant="outline" 
+            onClick={() => router.push('/admin/analytics/desk-performance')}
+          >
+            <Gauge className="mr-2 h-4 w-4" />
+            Desk Performance
+          </Button>
+          
           <Button variant="outline" onClick={fetchAnalytics}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
@@ -317,10 +356,14 @@ export default function AnalyticsDashboardPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 lg:w-[600px]">
+        <TabsList className="grid w-full grid-cols-5 lg:w-[700px]">
           <TabsTrigger value="overview" className="gap-2">
             <PieChart className="h-4 w-4" />
             Overview
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="gap-2">
+            <GitBranch className="h-4 w-4" />
+            Activity
           </TabsTrigger>
           <TabsTrigger value="users" className="gap-2">
             <Users className="h-4 w-4" />
@@ -335,6 +378,70 @@ export default function AnalyticsDashboardPage() {
             Bottlenecks
           </TabsTrigger>
         </TabsList>
+
+        {/* Activity Tab - GitHub-style contribution heatmap */}
+        <TabsContent value="activity" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <GitBranch className="h-5 w-5" />
+                File activity
+              </CardTitle>
+              <CardDescription>
+                Contributions from file actions (create, forward, approve, etc.). View by user or department.
+              </CardDescription>
+              <div className="flex flex-wrap items-center gap-4 pt-2">
+                <Select
+                  value={activityScope}
+                  onValueChange={(v) => setActivityScope(v as 'user' | 'department')}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">My activity</SelectItem>
+                    <SelectItem value="department">My department</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={String(activityYear)}
+                  onValueChange={(v) => setActivityYear(parseInt(v, 10))}
+                >
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2].map(
+                      (y) => (
+                        <SelectItem key={y} value={String(y)}>
+                          {y}
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="sm" onClick={fetchActivityHeatmap}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {(activityData || activityLoading) && (
+                <ActivityHeatmap
+                  contributions={activityData?.contributions ?? {}}
+                  totalContributions={activityData?.totalContributions ?? 0}
+                  year={activityData?.year ?? activityYear}
+                  scopeLabel={activityScope === 'user' ? 'My activity' : 'Department'}
+                  loading={activityLoading}
+                />
+              )}
+              {!activityData && !activityLoading && (
+                <p className="text-muted-foreground py-8 text-center">No activity data.</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">

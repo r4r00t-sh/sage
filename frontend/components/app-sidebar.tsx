@@ -62,6 +62,7 @@ import {
   Shield,
   FileSearch,
   Activity,
+  BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -83,6 +84,13 @@ const navigation = {
         },
       ],
     },
+    {
+      title: 'Other',
+      items: [
+        { name: 'Documentation', href: '/docs', icon: BookOpen },
+        { name: 'Settings', href: '/settings', icon: Settings },
+      ],
+    },
   ],
   SECTION_OFFICER: [
     {
@@ -99,6 +107,13 @@ const navigation = {
           ],
         },
         { name: 'Opinion Inbox', href: '/opinions/inbox', icon: MessageSquare },
+      ],
+    },
+    {
+      title: 'Other',
+      items: [
+        { name: 'Documentation', href: '/docs', icon: BookOpen },
+        { name: 'Settings', href: '/settings', icon: Settings },
       ],
     },
   ],
@@ -119,6 +134,13 @@ const navigation = {
         { name: 'Opinion Inbox', href: '/opinions/inbox', icon: MessageSquare },
       ],
     },
+    {
+      title: 'Other',
+      items: [
+        { name: 'Documentation', href: '/docs', icon: BookOpen },
+        { name: 'Settings', href: '/settings', icon: Settings },
+      ],
+    },
   ],
   DISPATCHER: [
     {
@@ -136,12 +158,20 @@ const navigation = {
         { name: 'Track File', href: '/files/track', icon: MapPin },
       ],
     },
+    {
+      title: 'Other',
+      items: [
+        { name: 'Documentation', href: '/docs', icon: BookOpen },
+        { name: 'Settings', href: '/settings', icon: Settings },
+      ],
+    },
   ],
   USER: [
     {
       title: 'Platform',
       items: [
         { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        { name: 'Desk Profile', href: '/desk-profile', icon: Activity },
         {
           name: 'Files',
           icon: FolderOpen,
@@ -173,6 +203,13 @@ const navigation = {
       ],
     },
     {
+      title: 'Other',
+      items: [
+        { name: 'Documentation', href: '/docs', icon: BookOpen },
+        { name: 'Settings', href: '/settings', icon: Settings },
+      ],
+    },
+    {
       title: 'Chat Admin',
       items: [
         { name: 'Manage Groups', href: '/chat', icon: Users },
@@ -194,28 +231,37 @@ const navigation = {
           ],
         },
         { name: 'Opinion Inbox', href: '/opinions/inbox', icon: MessageSquare },
-        { name: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
-      ],
-    },
-    {
-      title: 'Admin',
-      items: [
         {
-          name: 'Desk Management',
-          icon: Monitor,
+          name: 'Analytics',
+          icon: BarChart3,
           children: [
-            { name: 'Active Desk', href: '/admin/desk', icon: Monitor },
-            { name: 'Desk Capacity', href: '/admin/desks', icon: Building2 },
+            { name: 'Overview', href: '/admin/analytics', icon: BarChart3 },
+            { name: 'Desk Performance', href: '/admin/analytics/desk-performance', icon: Activity },
           ],
         },
-        { name: 'Workflows', href: '/admin/workflows', icon: GitBranch },
-        { name: 'Users', href: '/admin/users', icon: Users },
-        { name: 'Documents', href: '/admin/documents', icon: FileStack },
       ],
     },
+      {
+        title: 'Admin',
+        items: [
+          {
+            name: 'Desk Management',
+            icon: Monitor,
+            children: [
+              { name: 'Active Desk', href: '/admin/desk', icon: Monitor },
+              { name: 'Desk Capacity', href: '/admin/desks', icon: Building2 },
+              { name: 'Capacity Management', href: '/admin/capacity', icon: Settings },
+            ],
+          },
+          { name: 'Workflows', href: '/admin/workflows', icon: GitBranch },
+          { name: 'Users', href: '/admin/users', icon: Users },
+          { name: 'Documents', href: '/admin/documents', icon: FileStack },
+        ],
+      },
     {
       title: 'Other',
       items: [
+        { name: 'Documentation', href: '/docs', icon: BookOpen },
         { name: 'Settings', href: '/settings', icon: Settings },
       ],
     },
@@ -235,7 +281,14 @@ const navigation = {
           ],
         },
         { name: 'Opinion Inbox', href: '/opinions/inbox', icon: MessageSquare },
-        { name: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
+        {
+          name: 'Analytics',
+          icon: BarChart3,
+          children: [
+            { name: 'Overview', href: '/admin/analytics', icon: BarChart3 },
+            { name: 'Desk Performance', href: '/admin/analytics/desk-performance', icon: Activity },
+          ],
+        },
       ],
     },
     {
@@ -258,6 +311,7 @@ const navigation = {
     {
       title: 'Other',
       items: [
+        { name: 'Documentation', href: '/docs', icon: BookOpen },
         { name: 'Settings', href: '/settings', icon: Settings },
       ],
     },
@@ -402,7 +456,10 @@ export function AppSidebar() {
                           isActive && "bg-primary/10 text-primary font-medium"
                         )}
                       >
-                        <a href={item.href}>
+                        <a
+                          href={item.href}
+                          {...(item.href === '/docs' ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                        >
                           <Icon className="h-4 w-4" />
                           <span>{item.name}</span>
                         </a>

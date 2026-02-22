@@ -71,12 +71,21 @@
     color: hsl(var(--foreground));
     font-family: var(--font-sans) !important;
   }
+  /* Malayalam: use Manjari for better readability (set via data-locale="ml") */
+  html[data-locale="ml"] body {
+    font-family: 'Manjari', system-ui, sans-serif !important;
+  }
 }
 
 @layer utilities {
   /* Funnel Display - body class so font applies app-wide (inherits to children) */
   .font-funnel {
     font-family: 'Funnel Display', system-ui, -apple-system, sans-serif !important;
+  }
+
+  /* Manjari for Malayalam (also applied via html[data-locale="ml"] in base) */
+  .font-manjari {
+    font-family: 'Manjari', system-ui, sans-serif !important;
   }
 
   /* Collapsible animation */

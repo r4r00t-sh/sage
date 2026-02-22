@@ -49,6 +49,8 @@ import {
   Filter,
   ArrowUpDown,
   Download,
+  ListOrdered,
+  LogIn,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store';
@@ -72,6 +74,15 @@ interface InboxFile {
   [key: string]: unknown;
 }
 
+interface QueueEntry {
+  id: string;
+  fileId: string;
+  sortOrder: number;
+  createdAt: string;
+  file: { id: string; fileNumber: string; subject: string; status: string; priority?: string; createdAt: string };
+  fromUser?: { id: string; name: string } | null;
+}
+
 function InboxContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -84,9 +95,13 @@ function InboxContent() {
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [queueEntries, setQueueEntries] = useState<QueueEntry[]>([]);
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [claimingId, setClaimingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchFiles();
+    fetchQueue();
   }, []);
 
   useEffect(() => {
@@ -107,6 +122,34 @@ function InboxContent() {
       toast.error('Failed to load files');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchQueue = async () => {
+    setQueueLoading(true);
+    try {
+      const response = await api.get('/files/queue');
+      const data = response.data?.data ?? response.data;
+      setQueueEntries(Array.isArray(data) ? data : []);
+    } catch {
+      setQueueEntries([]);
+    } finally {
+      setQueueLoading(false);
+    }
+  };
+
+  const handleClaimFromQueue = async (fileId: string) => {
+    setClaimingId(fileId);
+    try {
+      await api.post(`/files/queue/${fileId}/claim`);
+      toast.success('File moved to your inbox');
+      await fetchQueue();
+      await fetchFiles();
+      router.push(`/files/${fileId}`);
+    } catch (error: unknown) {
+      toast.error(error && typeof (error as any)?.response?.data === 'object' ? (error as any).response?.data?.message : 'Failed to claim file');
+    } finally {
+      setClaimingId(null);
     }
   };
 
@@ -222,7 +265,7 @@ function InboxContent() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" size="lg" onClick={fetchFiles}>
+          <Button variant="outline" size="lg" onClick={() => { fetchFiles(); fetchQueue(); }}>
             <RefreshCw className="mr-2 h-5 w-5" />
             Refresh
           </Button>
@@ -234,6 +277,79 @@ function InboxContent() {
           )}
         </div>
       </div>
+
+      {/* Forward Queue */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <ListOrdered className="h-5 w-5" />
+                Forward queue
+              </CardTitle>
+              <CardDescription>
+                Files sent to you while your desk was at capacity. Claim any file to move it into your inbox.
+              </CardDescription>
+            </div>
+            {queueEntries.length > 0 && (
+              <Badge variant="secondary" className="text-sm">
+                {queueEntries.length} waiting
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {queueLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Skeleton className="h-24 w-full max-w-md" />
+            </div>
+          ) : queueEntries.length === 0 ? (
+            <p className="text-muted-foreground text-sm py-4">No files in your queue.</p>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="w-[140px]">File number</TableHead>
+                    <TableHead>Subject</TableHead>
+                    <TableHead className="w-[140px]">From</TableHead>
+                    <TableHead className="w-[120px]">Queued</TableHead>
+                    <TableHead className="w-[100px] text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {queueEntries.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="font-mono text-sm">{entry.file?.fileNumber ?? '-'}</TableCell>
+                      <TableCell className="max-w-[300px] truncate">{entry.file?.subject ?? '-'}</TableCell>
+                      <TableCell className="text-muted-foreground">{entry.fromUser?.name ?? '-'}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {entry.createdAt ? formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true }) : '-'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          onClick={() => handleClaimFromQueue(entry.fileId)}
+                          disabled={claimingId === entry.fileId}
+                        >
+                          {claimingId === entry.fileId ? (
+                            'Claiming…'
+                          ) : (
+                            <>
+                              <LogIn className="mr-1.5 h-4 w-4" />
+                              Claim
+                            </>
+                          )}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Quick Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

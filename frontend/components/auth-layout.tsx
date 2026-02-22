@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store';
 import { AppSidebar } from '@/components/app-sidebar';
 import { Navbar } from '@/components/navbar';
@@ -16,10 +16,11 @@ import { CommandPalette } from '@/components/command-palette';
 import { KeyboardShortcuts } from '@/components/keyboard-shortcuts';
 import { BreadcrumbNav } from '@/components/breadcrumb-nav';
 
-const publicRoutes = ['/login'];
+const publicRoutes = ['/login', '/docs'];
 
 export function AuthLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { user } = useAuthStore();
   const [chatOpen, setChatOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -30,6 +31,15 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
     const id = requestAnimationFrame(() => setMounted(true));
     return () => cancelAnimationFrame(id);
   }, []);
+
+  // Redirect unauthenticated users to login when they try to access protected routes
+  useEffect(() => {
+    if (!mounted) return;
+    if (!isAuthenticated && !isPublicRoute) {
+      const loginUrl = `/login?redirect=${encodeURIComponent(pathname || '/dashboard')}`;
+      router.replace(loginUrl);
+    }
+  }, [mounted, isAuthenticated, isPublicRoute, pathname, router]);
 
   // Floating chat FAB + sidebar: render in portal so they're always on top and visible
   const chatWidget =
@@ -68,6 +78,17 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
         {chatWidget}
         <CommandPalette />
         <KeyboardShortcuts />
+      </ThemeProvider>
+    );
+  }
+
+  // Not authenticated on a protected route: show nothing while redirecting to login
+  if (!isAuthenticated && !isPublicRoute) {
+    return (
+      <ThemeProvider defaultTheme="system" storageKey="efiling-theme">
+        <div className="flex min-h-screen items-center justify-center bg-muted/30">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </div>
       </ThemeProvider>
     );
   }

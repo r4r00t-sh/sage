@@ -1,13 +1,15 @@
 import axios from 'axios';
 
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Add auth token to requests
+// Add auth token to requests; for FormData let browser set Content-Type (with boundary)
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('token');
@@ -15,8 +17,27 @@ api.interceptors.request.use((config) => {
       config.headers.Authorization = `Bearer ${token}`;
     }
   }
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
   return config;
 });
+
+// On 401, clear token and redirect to login (e.g. expired or invalid token)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (typeof window !== 'undefined' && error.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      const path = window.location.pathname || '';
+      if (!path.startsWith('/login')) {
+        window.location.href = `/login?redirect=${encodeURIComponent(path)}`;
+      }
+    }
+    return Promise.reject(error);
+  },
+);
 
 export default api;
 

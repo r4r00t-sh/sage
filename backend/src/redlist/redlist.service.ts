@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GamificationService } from '../gamification/gamification.service';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
+import { FileRedListService, RedListReason } from './file-redlist.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class RedListService {
     private prisma: PrismaService,
     private gamification: GamificationService,
     private rabbitmq: RabbitMQService,
+    private fileRedListService: FileRedListService,
   ) {}
 
   @Cron(CronExpression.EVERY_HOUR)
@@ -17,6 +19,37 @@ export class RedListService {
     console.log('Running red list check...');
     const now = new Date();
 
+    // Get all pending/in-progress files
+    const pendingFiles = await this.prisma.file.findMany({
+      where: {
+        isRedListed: false,
+        isOnHold: false,
+        status: {
+          in: ['PENDING', 'IN_PROGRESS'],
+        },
+      },
+      select: { id: true },
+    });
+
+    console.log(`Checking ${pendingFiles.length} files for auto-red-list triggers`);
+
+    // Check each file for auto-red-list triggers
+    for (const file of pendingFiles) {
+      const check = await this.fileRedListService.checkAutoRedListTrigger(file.id);
+      if (check.shouldRedList) {
+        await this.fileRedListService.redListFile(
+          file.id,
+          RedListReason.TIME_BREACH,
+          'System',
+        );
+        console.log(`Auto-red-listed file ${file.id}: ${check.reason}`);
+      }
+    }
+
+    // Check and update escalation levels
+    await this.fileRedListService.checkAndUpdateEscalations();
+
+    // Legacy check for overdue files (timeRemaining, dueDate, deskDueDate)
     const overdueFiles = await this.prisma.file.findMany({
       where: {
         OR: [
@@ -36,18 +69,15 @@ export class RedListService {
       },
     });
 
-    console.log(`Found ${overdueFiles.length} files to red list`);
+    console.log(`Found ${overdueFiles.length} legacy overdue files to red list`);
 
-    // Mark files as red-listed and notify
+    // Mark legacy overdue files as red-listed
     for (const file of overdueFiles) {
-      await this.prisma.file.update({
-        where: { id: file.id },
-        data: {
-          isRedListed: true,
-          redListedAt: now,
-          timerPercentage: 0,
-        },
-      });
+      await this.fileRedListService.redListFile(
+        file.id,
+        RedListReason.TIME_BREACH,
+        'System',
+      );
 
       // Deduct points if file is assigned
       if (file.assignedToId) {

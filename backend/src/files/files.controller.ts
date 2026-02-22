@@ -16,6 +16,9 @@ import { FilesService } from './files.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FileUploadGuard } from '../security/file-upload.guard';
 
+// 50MB per file for uploads (docker-compose has no nginx, so backend must allow large bodies)
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
 @Controller('files')
 @UseGuards(JwtAuthGuard)
 export class FilesController {
@@ -23,7 +26,9 @@ export class FilesController {
 
   @Post()
   @UseGuards(FileUploadGuard)
-  @UseInterceptors(FilesInterceptor('files', 10)) // Allow up to 10 files
+  @UseInterceptors(
+    FilesInterceptor('files', 10, { limits: { fileSize: MAX_FILE_SIZE } }),
+  )
   async createFile(
     @Request() req,
     @Body()
@@ -50,6 +55,24 @@ export class FilesController {
         size: file.size,
       })),
     });
+  }
+
+  @Get('recent')
+  async getRecentFiles(@Request() req) {
+    return this.filesService.getRecentFiles(req.user.id, 10);
+  }
+
+  @Get('queue')
+  async getQueue(@Request() req) {
+    return this.filesService.getQueueForUser(req.user.id);
+  }
+
+  @Post('queue/:fileId/claim')
+  async claimFromQueue(
+    @Param('fileId') fileId: string,
+    @Request() req,
+  ) {
+    return this.filesService.claimFromQueue(fileId, req.user.id);
   }
 
   @Get()
@@ -81,7 +104,9 @@ export class FilesController {
   // Attachment endpoints
   @Post(':id/attachments')
   @UseGuards(FileUploadGuard)
-  @UseInterceptors(FilesInterceptor('files', 10))
+  @UseInterceptors(
+    FilesInterceptor('files', 10, { limits: { fileSize: MAX_FILE_SIZE } }),
+  )
   async addAttachments(
     @Param('id') id: string,
     @Request() req,
@@ -120,13 +145,27 @@ export class FilesController {
   async forwardFile(
     @Param('id') id: string,
     @Request() req,
-    @Body() body: { toDivisionId: string; toUserId: string; remarks?: string },
+    @Body() body: { toDivisionId?: string; toDepartmentId?: string; toUserId?: string | null; remarks?: string },
   ) {
     return this.filesService.forwardFile(
       id,
       req.user.id,
       body.toDivisionId,
-      body.toUserId,
+      body.toDepartmentId,
+      body.toUserId || null,
+      body.remarks,
+    );
+  }
+
+  @Post(':id/approve-and-forward')
+  async approveAndForward(
+    @Param('id') id: string,
+    @Request() req,
+    @Body() body: { remarks?: string },
+  ) {
+    return this.filesService.approveAndForward(
+      id,
+      req.user.id,
       body.remarks,
     );
   }

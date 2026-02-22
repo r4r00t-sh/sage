@@ -307,6 +307,65 @@ export class AnalyticsService {
     );
   }
 
+  /**
+   * Activity heatmap (GitHub-style): contributions per day from file-related actions (AuditLog).
+   * scope: 'user' = current user's file actions; 'department' = all file actions in that department.
+   */
+  async getActivityHeatmap(params: {
+    scope: 'user' | 'department';
+    userId?: string;
+    departmentId?: string;
+    year?: number;
+  }) {
+    const year = params.year ?? new Date().getFullYear();
+    const start = new Date(year, 0, 1);
+    const end = new Date(year, 11, 31, 23, 59, 59);
+
+    if (params.scope === 'user' && params.userId) {
+      const rows = await this.prisma.$queryRaw<{ date: Date; count: bigint }[]>`
+        SELECT DATE("createdAt") as date, COUNT(*)::int as count
+        FROM "AuditLog"
+        WHERE "entityType" = 'File' AND "fileId" IS NOT NULL AND "userId" = ${params.userId}
+          AND "createdAt" >= ${start} AND "createdAt" <= ${end}
+        GROUP BY DATE("createdAt")
+        ORDER BY date
+      `;
+      const contributions: Record<string, number> = {};
+      let total = 0;
+      for (const r of rows) {
+        const key = r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10);
+        const c = Number(r.count);
+        contributions[key] = c;
+        total += c;
+      }
+      return { contributions, totalContributions: total, year };
+    }
+
+    if (params.scope === 'department' && params.departmentId) {
+      const rows = await this.prisma.$queryRaw<{ date: Date; count: bigint }[]>`
+        SELECT DATE(a."createdAt") as date, COUNT(*)::int as count
+        FROM "AuditLog" a
+        INNER JOIN "File" f ON f.id = a."fileId"
+        WHERE a."entityType" = 'File' AND a."fileId" IS NOT NULL
+          AND f."departmentId" = ${params.departmentId}
+          AND a."createdAt" >= ${start} AND a."createdAt" <= ${end}
+        GROUP BY DATE(a."createdAt")
+        ORDER BY date
+      `;
+      const contributions: Record<string, number> = {};
+      let total = 0;
+      for (const r of rows) {
+        const key = r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10);
+        const c = Number(r.count);
+        contributions[key] = c;
+        total += c;
+      }
+      return { contributions, totalContributions: total, year };
+    }
+
+    return { contributions: {}, totalContributions: 0, year };
+  }
+
   // Get file processing time breakdown
   async getProcessingTimeAnalytics(departmentId?: string) {
     const where: any = {

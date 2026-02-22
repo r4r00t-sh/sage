@@ -109,7 +109,7 @@ export class OpinionsService {
     return opinionRequest;
   }
 
-  // Get files pending opinion (for opinion desk)
+  // Get files pending opinion (for opinion desk) - RECEIVED opinions
   async getPendingOpinions(userId: string, departmentId?: string) {
     const where: any = {
       status: 'pending',
@@ -149,6 +149,112 @@ export class OpinionsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  // Get sent opinions (opinions requested by current user/department) - SENT opinions
+  async getSentOpinions(userId: string, departmentId?: string) {
+    const where: any = {};
+
+    if (departmentId) {
+      where.requestedFromDepartmentId = departmentId;
+    } else {
+      // Get user's department
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { departmentId: true },
+      });
+      if (user?.departmentId) {
+        where.requestedFromDepartmentId = user.departmentId;
+      }
+    }
+
+    return this.prisma.opinionRequest.findMany({
+      where,
+      include: {
+        file: {
+          select: {
+            id: true,
+            fileNumber: true,
+            subject: true,
+            description: true,
+            priority: true,
+            priorityCategory: true,
+            createdAt: true,
+            department: { select: { name: true, code: true } },
+            createdBy: { select: { name: true } },
+          },
+        },
+        requestedBy: { select: { name: true } },
+        requestedToDepartment: { select: { name: true, code: true } },
+        requestedToDivision: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // Forward opinion to another department/division
+  async forwardOpinion(
+    opinionRequestId: string,
+    fromUserId: string,
+    data: {
+      requestedToDepartmentId: string;
+      requestedToDivisionId?: string;
+      requestReason?: string;
+    },
+  ) {
+    const opinionRequest = await this.prisma.opinionRequest.findUnique({
+      where: { id: opinionRequestId },
+      include: { file: true },
+    });
+
+    if (!opinionRequest) {
+      throw new NotFoundException('Opinion request not found');
+    }
+
+    // Check if user is authorized to forward this opinion
+    const fromUser = await this.prisma.user.findUnique({
+      where: { id: fromUserId },
+      select: { departmentId: true, roles: true },
+    });
+
+    if (
+      opinionRequest.requestedFromDepartmentId !== fromUser?.departmentId &&
+      !fromUser?.roles?.includes('SUPER_ADMIN')
+    ) {
+      throw new ForbiddenException(
+        'You are not authorized to forward this opinion request',
+      );
+    }
+
+    // Create new opinion request to the forwarded department
+    const newOpinionRequest = await this.prisma.opinionRequest.create({
+      data: {
+        fileId: opinionRequest.fileId,
+        requestedById: fromUserId,
+        requestedFromDepartmentId: opinionRequest.requestedFromDepartmentId,
+        requestedToDepartmentId: data.requestedToDepartmentId,
+        requestedToDivisionId: data.requestedToDivisionId,
+        requestReason: data.requestReason || opinionRequest.requestReason,
+        specialPermissionGranted: opinionRequest.specialPermissionGranted,
+        status: 'pending',
+      },
+      include: {
+        requestedToDepartment: { select: { name: true, code: true } },
+        requestedToDivision: { select: { name: true } },
+      },
+    });
+
+    // Create routing history
+    await this.prisma.fileRouting.create({
+      data: {
+        fileId: opinionRequest.fileId,
+        fromUserId: fromUserId,
+        action: FileAction.OPINION_REQUESTED,
+        remarks: `Opinion forwarded to ${newOpinionRequest.requestedToDepartment.name}`,
+      },
+    });
+
+    return newOpinionRequest;
   }
 
   // Get file for opinion (view-only mode)

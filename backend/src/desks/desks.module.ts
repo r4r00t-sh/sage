@@ -1,12 +1,15 @@
 import { Module } from '@nestjs/common';
 import { DesksService } from './desks.service';
 import { DesksController } from './desks.controller';
+import { DeskPerformanceService } from './desk-performance.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { RedListModule } from '../redlist/redlist.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, NotificationsModule, RedListModule],
   controllers: [DesksController],
-  providers: [DesksService],
-  exports: [DesksService],
+  providers: [DesksService, DeskPerformanceService],
+  exports: [DesksService, DeskPerformanceService],
 })
 export class DesksModule {}

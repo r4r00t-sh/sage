@@ -183,7 +183,7 @@ export function QuickActions({
             disabled={loading !== null}
             className="gap-2 bg-green-600 hover:bg-green-700"
           >
-            {loading === 'approve' ? (
+            {loading === 'approve' || loading === 'approve-and-forward' ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <CheckCircle className="h-4 w-4" />
@@ -361,7 +361,20 @@ export function QuickActions({
               Approve & Forward
             </DialogTitle>
             <DialogDescription>
-              Approve file {fileNumber} and forward to the next stage
+              {['SECTION_OFFICER', 'APPROVAL_AUTHORITY'].includes(userRole) ? (
+                <>
+                  Approve file {fileNumber} and automatically forward to the next stage:
+                  <br />
+                  {userRole === 'SECTION_OFFICER' && (
+                    <span className="font-medium">→ Approval Authority in your division</span>
+                  )}
+                  {userRole === 'APPROVAL_AUTHORITY' && (
+                    <span className="font-medium">→ Dispatch Officer in your division</span>
+                  )}
+                </>
+              ) : (
+                `Approve file ${fileNumber} and forward to the next stage`
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -382,10 +395,37 @@ export function QuickActions({
             </Button>
             <Button
               className="bg-green-600 hover:bg-green-700"
-              onClick={() => performAction('approve')}
+              onClick={async () => {
+                // For SECTION_OFFICER and APPROVAL_AUTHORITY, use the one-click approve-and-forward
+                if (['SECTION_OFFICER', 'APPROVAL_AUTHORITY'].includes(userRole)) {
+                  setLoading('approve-and-forward');
+                  try {
+                    const response = await api.post(`/files/${fileId}/approve-and-forward`, {
+                      remarks: remarks || undefined,
+                    });
+                    toast.success('File approved and forwarded successfully', {
+                      description: `Forwarded to ${response.data.forwardedTo} (${response.data.forwardedToRole})`,
+                    });
+                    onActionComplete();
+                    resetDialogs();
+                  } catch (error: unknown) {
+                    const err = error as { response?: { data?: { message?: string } } };
+                    toast.error('Failed to approve and forward file', {
+                      description: err.response?.data?.message,
+                    });
+                  } finally {
+                    setLoading(null);
+                  }
+                } else {
+                  // For other roles, just approve
+                  performAction('approve');
+                }
+              }}
               disabled={loading !== null}
             >
-              {loading === 'approve' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {loading === 'approve' || loading === 'approve-and-forward' ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
               Approve & Forward
             </Button>
           </DialogFooter>

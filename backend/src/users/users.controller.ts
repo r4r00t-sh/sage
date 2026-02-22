@@ -163,6 +163,9 @@ export class UsersController {
       password: string;
       name: string;
       email?: string;
+      designation?: string;
+      staffId?: string;
+      phone?: string;
       roles: string[];
       departmentId?: string;
       divisionId?: string;
@@ -182,7 +185,12 @@ export class UsersController {
     }
 
     const roles = body.roles?.length ? body.roles : ['USER'];
-    return this.usersService.createUser({ ...body, roles });
+    const createdBySuperAdmin = hasRole(req.user, 'SUPER_ADMIN');
+    return this.usersService.createUser({
+      ...body,
+      roles,
+      createdBySuperAdmin,
+    });
   }
 
   @Put(':id')
@@ -193,6 +201,9 @@ export class UsersController {
     body: {
       name?: string;
       email?: string;
+      designation?: string;
+      staffId?: string;
+      phone?: string;
       roles?: string[];
       departmentId?: string;
       divisionId?: string;
@@ -243,6 +254,14 @@ export class UsersController {
 
     // Admin reset (no current password needed)
     return this.usersService.resetPassword(id, body.newPassword);
+  }
+
+  @Put(':id/approve-profile')
+  async approveProfile(@Param('id') id: string, @Request() req) {
+    if (!hasRole(req.user, 'SUPER_ADMIN')) {
+      throw new ForbiddenException('Only Super Admin can approve profiles');
+    }
+    return this.usersService.approveProfile(id, req.user.id);
   }
 
   @Delete(':id')
