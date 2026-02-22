@@ -79,6 +79,17 @@ class ApiConfig {
     return '$base$p';
   }
 
+  static int _defaultPortForScheme(String scheme) {
+    switch (scheme.toLowerCase()) {
+      case 'https':
+        return 443;
+      case 'http':
+        return 80;
+      default:
+        return 80;
+    }
+  }
+
   /// Web app base URL (same host as API; port 3000 for web frontend if API is 3001).
   static String get _webBaseUrl {
     final uri = Uri.tryParse(baseUrl);
@@ -87,7 +98,8 @@ class ApiConfig {
     final path = (uri.path.isEmpty || uri.path == '/' || uri.path.endsWith('/api'))
         ? ''
         : uri.path.replaceFirst(RegExp(r'/api/?$'), '');
-    return '${uri.scheme}://${uri.host}${port != uri.defaultPort ? ':$port' : ''}$path';
+    final defaultPort = _defaultPortForScheme(uri.scheme);
+    return '${uri.scheme}://${uri.host}${port != defaultPort ? ':$port' : ''}$path';
   }
 
   /// Docs page URL (opens in browser).
