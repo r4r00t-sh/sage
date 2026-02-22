@@ -2,6 +2,11 @@ import axios from 'axios';
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+/** Direct download for latest Android APK (fixed name; workflow must attach efmp-android.apk). */
+export const ANDROID_APK_DOWNLOAD_URL =
+  process.env.NEXT_PUBLIC_ANDROID_APK_URL ||
+  'https://github.com/r4r00t-sh/eFMP/releases/latest/download/efmp-android.apk';
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {

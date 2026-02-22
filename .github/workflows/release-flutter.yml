@@ -150,6 +150,7 @@ jobs:
       - name: Rename APK for release
         run: |
           mv app-release.apk "efiling_app-${{ steps.tag.outputs.tag }}.apk" 2>/dev/null || true
+          cp "efiling_app-${{ steps.tag.outputs.tag }}.apk" efmp-android.apk
           ls -la
 
       - name: Create GitHub Release
@@ -165,7 +166,9 @@ jobs:
             **Workflow:** ${{ github.workflow }}
             
             Download the APK below to install on your Android device.
+            
+            **One-click (latest):** [efmp-android.apk](https://github.com/${{ github.repository }}/releases/latest/download/efmp-android.apk)
           generate_release_notes: true
-          files: efiling_app-*.apk
+          files: efiling_app-*.apk efmp-android.apk
           draft: false
           prerelease: ${{ github.ref != 'refs/heads/master' && !startsWith(github.ref, 'refs/tags/') }}

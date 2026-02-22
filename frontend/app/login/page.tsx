@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { LogIn, Lock, User, ChevronDown } from 'lucide-react';
+import { LogIn, Lock, User, ChevronDown, Smartphone } from 'lucide-react';
+import { ANDROID_APK_DOWNLOAD_URL } from '@/lib/api';
 
 const testAccounts = [
   { role: 'Super Admin', username: 'admin', password: 'admin123', name: 'Super Administrator' },
@@ -75,12 +76,23 @@ export default function LoginPage() {
           </div>
           <span className="text-lg font-semibold text-zinc-100">EFMP</span>
         </Link>
-        <Link
-          href="/"
-          className="text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
-        >
-          Back to home
-        </Link>
+        <div className="flex items-center gap-4">
+          <a
+            href={ANDROID_APK_DOWNLOAD_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
+          >
+            <Smartphone className="h-4 w-4" />
+            Download Android app
+          </a>
+          <Link
+            href="/"
+            className="text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
+          >
+            Back to home
+          </Link>
+        </div>
       </header>
 
       {/* Left column - lighter shade + testimonial */}
