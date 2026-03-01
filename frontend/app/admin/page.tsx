@@ -12,7 +12,7 @@ export default function AdminPage() {
   useEffect(() => {
     // Redirect to appropriate admin page based on user role
     if (user) {
-      if (hasAnyRole(user, ['SUPER_ADMIN', 'DEPT_ADMIN'])) {
+      if (hasAnyRole(user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
         // Default to analytics for admins
         router.replace('/admin/analytics');
       } else {

@@ -44,19 +44,22 @@ import {
   RefreshCw,
   Edit,
   Trash2,
+  User,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
+import { DepartmentProfileLink } from '@/components/profile-links';
 
 interface Desk {
   id: string;
   name: string;
   code: string;
   description?: string;
-  department: { name: string; code: string };
-  division?: { name: string };
+  type?: 'department' | 'division' | 'user' | 'desk';
+  department: { id?: string; name: string; code: string } | null;
+  division?: { id?: string; name: string } | null;
   maxFilesPerDay: number;
   currentFileCount: number;
   capacityUtilizationPercent: number;
@@ -64,6 +67,7 @@ interface Desk {
   isActive: boolean;
   isAutoCreated: boolean;
   iconType: string;
+  slaNorm?: number | null; // SLA norm in hours
   files?: Array<{
     id: string;
     fileNumber: string;
@@ -104,6 +108,7 @@ export default function DesksPage() {
     divisionId: '',
     maxFilesPerDay: 10,
     iconType: 'desk',
+    slaNorm: '' as string | number, // SLA norm in hours
   });
 
   useEffect(() => {
@@ -143,7 +148,11 @@ export default function DesksPage() {
 
   const handleCreateDesk = async () => {
     try {
-      await api.post('/desks', formData);
+      const payload = {
+        ...formData,
+        slaNorm: formData.slaNorm ? parseFloat(formData.slaNorm.toString()) : undefined,
+      };
+      await api.post('/desks', payload);
       toast.success('Desk created successfully');
       setShowCreateDialog(false);
       resetForm();
@@ -158,12 +167,14 @@ export default function DesksPage() {
   const handleUpdateDesk = async () => {
     if (!selectedDesk) return;
     try {
-      await api.patch(`/desks/${selectedDesk.id}`, {
+      const payload = {
         name: formData.name,
         description: formData.description,
         maxFilesPerDay: formData.maxFilesPerDay,
         iconType: formData.iconType,
-      });
+        slaNorm: formData.slaNorm ? parseFloat(formData.slaNorm.toString()) : undefined,
+      };
+      await api.patch(`/desks/${selectedDesk.id}`, payload);
       toast.success('Desk updated successfully');
       setShowEditDialog(false);
       resetForm();
@@ -196,6 +207,7 @@ export default function DesksPage() {
       divisionId: '',
       maxFilesPerDay: 10,
       iconType: 'desk',
+      slaNorm: '',
     });
     setSelectedDesk(null);
   };
@@ -206,10 +218,11 @@ export default function DesksPage() {
       name: desk.name,
       code: desk.code,
       description: desk.description || '',
-      departmentId: desk.department.code,
+      departmentId: desk.department?.code || '',
       divisionId: desk.division?.name || '',
       maxFilesPerDay: desk.maxFilesPerDay,
       iconType: desk.iconType || 'desk',
+      slaNorm: desk.slaNorm || '',
     });
     setShowEditDialog(true);
   };
@@ -327,6 +340,21 @@ export default function DesksPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <Label htmlFor="sla-norm-create">SLA Norm (Hours)</Label>
+                  <Input
+                    id="sla-norm-create"
+                    type="number"
+                    min="1"
+                    step="0.5"
+                    value={formData.slaNorm}
+                    onChange={(e) => setFormData({ ...formData, slaNorm: e.target.value || '' })}
+                    placeholder="e.g., 24, 48, 72"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Standard time (in hours) for files at this desk. Files will be redlisted if not processed within this time.
+                  </p>
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
@@ -412,6 +440,7 @@ export default function DesksPage() {
                 <TableHead>Department</TableHead>
                 <TableHead>Current Files</TableHead>
                 <TableHead>Capacity</TableHead>
+                <TableHead>SLA Norm</TableHead>
                 <TableHead>Utilization</TableHead>
                 <TableHead>Active Docks</TableHead>
                 <TableHead>Status</TableHead>
@@ -432,28 +461,56 @@ export default function DesksPage() {
                       <div className="flex items-center gap-3">
                         <div className={cn(
                           "h-10 w-10 rounded-lg flex items-center justify-center",
+                          desk.type === 'department' ? 'bg-blue-500/10' :
+                          desk.type === 'division' ? 'bg-purple-500/10' :
+                          desk.type === 'user' ? 'bg-green-500/10' :
                           desk.iconType === 'cabinet' ? 'bg-blue-500/10' :
                           desk.iconType === 'folder' ? 'bg-purple-500/10' :
                           'bg-primary/10'
                         )}>
-                          <Box className={cn(
-                            "h-5 w-5",
-                            desk.iconType === 'cabinet' ? 'text-blue-600' :
-                            desk.iconType === 'folder' ? 'text-purple-600' :
-                            'text-primary'
-                          )} />
+                          {desk.type === 'department' ? (
+                            <Building2 className="h-5 w-5 text-blue-600" />
+                          ) : desk.type === 'division' ? (
+                            <Box className="h-5 w-5 text-purple-600" />
+                          ) : desk.type === 'user' ? (
+                            <User className="h-5 w-5 text-green-600" />
+                          ) : (
+                            <Box className={cn(
+                              "h-5 w-5",
+                              desk.iconType === 'cabinet' ? 'text-blue-600' :
+                              desk.iconType === 'folder' ? 'text-purple-600' :
+                              'text-primary'
+                            )} />
+                          )}
                         </div>
                         <div>
-                          <p className="font-medium">{desk.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{desk.name}</p>
+                            {desk.type && (
+                              <Badge variant="outline" className="text-xs">
+                                {desk.type}
+                              </Badge>
+                            )}
+                          </div>
                           <code className="text-xs text-muted-foreground">{desk.code}</code>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div>
-                        <p className="text-sm font-medium">{desk.department.code}</p>
-                        <p className="text-xs text-muted-foreground">{desk.department.name}</p>
-                      </div>
+                      {desk.department ? (
+                        <div>
+                          <p className="text-sm font-medium">{desk.department.code}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {desk.department.id ? (
+                              <DepartmentProfileLink departmentId={desk.department.id} name={desk.department.name} />
+                            ) : (
+                              desk.department.name
+                            )}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -470,6 +527,16 @@ export default function DesksPage() {
                           Optimum: {desk.optimumCapacity || desk.maxFilesPerDay}
                         </p>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {desk.type === 'desk' && desk.slaNorm ? (
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">{desk.slaNorm}h</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -593,6 +660,21 @@ export default function DesksPage() {
                   <SelectItem value="folder">Folder</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label htmlFor="sla-norm-edit">SLA Norm (Hours)</Label>
+              <Input
+                id="sla-norm-edit"
+                type="number"
+                min="1"
+                step="0.5"
+                value={formData.slaNorm}
+                onChange={(e) => setFormData({ ...formData, slaNorm: e.target.value || '' })}
+                placeholder="e.g., 24, 48, 72"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Standard time (in hours) for files at this desk. Files will be redlisted if not processed within this time.
+              </p>
             </div>
           </div>
           <DialogFooter>

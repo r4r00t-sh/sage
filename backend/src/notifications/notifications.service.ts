@@ -196,7 +196,7 @@ export class NotificationsService {
     // Get dept admin and super admin
     const admins = await this.prisma.user.findMany({
       where: {
-        OR: [{ roles: { has: 'SUPER_ADMIN' } }, { roles: { has: 'DEPT_ADMIN' }, departmentId }],
+        OR: [{ roles: { has: 'DEVELOPER' } }, { roles: { has: 'SUPER_ADMIN' } }, { roles: { has: 'DEPT_ADMIN' }, departmentId }],
         isActive: true,
       },
       select: { id: true },
@@ -235,7 +235,7 @@ export class NotificationsService {
 
     const admins = await this.prisma.user.findMany({
       where: {
-        OR: [{ roles: { has: 'SUPER_ADMIN' } }, { roles: { has: 'DEPT_ADMIN' }, departmentId }],
+        OR: [{ roles: { has: 'DEVELOPER' } }, { roles: { has: 'SUPER_ADMIN' } }, { roles: { has: 'DEPT_ADMIN' }, departmentId }],
         isActive: true,
       },
       select: { id: true },

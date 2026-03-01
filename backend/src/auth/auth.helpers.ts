@@ -16,3 +16,8 @@ export function hasAnyRole(user: UserWithRoles | null | undefined, roles: string
   if (!user?.roles?.length || !roles?.length) return false;
   return roles.some((r) => user.roles!.includes(r));
 }
+
+/** God-level: developer or super admin (full app access, no dept restriction). */
+export function hasGodRole(user: UserWithRoles | null | undefined): boolean {
+  return hasAnyRole(user, ['DEVELOPER', 'SUPER_ADMIN']);
+}

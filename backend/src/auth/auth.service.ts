@@ -19,15 +19,35 @@ export class AuthService {
     if (!username || typeof username !== 'string' || !password || typeof password !== 'string') {
       throw new BadRequestException('username and password are required');
     }
+    
+    // Trim username to handle whitespace issues
+    const trimmedUsername = username.trim();
+    
     const user = await this.prisma.user.findUnique({
-      where: { username },
+      where: { username: trimmedUsername },
       include: {
         department: true,
         division: true,
       },
     });
 
-    if (!user || !user.isActive) {
+    if (!user) {
+      console.warn(`Login attempt failed: User not found - ${trimmedUsername}`);
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (!user.isActive) {
+      console.warn(`Login attempt failed: Inactive account - ${trimmedUsername}`);
+      throw new UnauthorizedException('Account is inactive. Please contact administrator.');
+    }
+
+    if (user.profileApprovalStatus === 'PENDING_APPROVAL') {
+      console.warn(`Login attempt failed: Profile pending approval - ${trimmedUsername}`);
+      throw new UnauthorizedException('Profile pending Super Admin approval. Please contact administrator.');
+    }
+
+    if (!user.passwordHash) {
+      console.warn(`Login attempt failed: No password hash - ${trimmedUsername}`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -85,10 +105,15 @@ export class AuthService {
       console.warn('Presence upsert failed:', (e as Error)?.message);
     }
 
-    const userWithAvatar = await this.prisma.user.findUnique({
+    const userWithAvatarAndProfile = await this.prisma.user.findUnique({
       where: { id: user.id },
-      select: { avatarKey: true },
+      select: { avatarKey: true, profileCompletedAt: true },
     });
+
+    const profileCompletedAt =
+      userWithAvatarAndProfile?.profileCompletedAt instanceof Date
+        ? userWithAvatarAndProfile.profileCompletedAt.toISOString()
+        : (user.profileCompletedAt?.toISOString?.() ?? null);
 
     return {
       access_token: this.jwtService.sign(payload),
@@ -100,7 +125,9 @@ export class AuthService {
         roles,
         departmentId: user.departmentId,
         divisionId: user.divisionId,
-        avatarKey: userWithAvatar?.avatarKey ?? null,
+        avatarKey: userWithAvatarAndProfile?.avatarKey ?? null,
+        mustChangePassword: user.mustChangePassword ?? false,
+        profileCompletedAt,
       },
     };
   }

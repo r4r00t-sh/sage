@@ -145,14 +145,19 @@ export class FilesController {
   async forwardFile(
     @Param('id') id: string,
     @Request() req,
-    @Body() body: { toDivisionId?: string; toDepartmentId?: string; toUserId?: string | null; remarks?: string },
+    @Body() body: {
+      toDivisionId?: string;
+      toDepartmentId?: string;
+      toUserId?: string | null;
+      remarks?: string;
+    },
   ) {
     return this.filesService.forwardFile(
       id,
       req.user.id,
       body.toDivisionId,
       body.toDepartmentId,
-      body.toUserId || null,
+      body.toUserId ?? null,
       body.remarks,
     );
   }
@@ -246,7 +251,22 @@ export class FilesController {
       id,
       req.user.id,
       req.user.roles ?? [],
+      req.user.departmentId ?? null,
       body.remarks,
+    );
+  }
+
+  @Post(':id/set-due-time')
+  async setFileDueTime(
+    @Param('id') id: string,
+    @Request() req,
+    @Body() body: { allottedTimeInHours: number },
+  ) {
+    return this.filesService.setFileDueTime(
+      id,
+      req.user.id,
+      req.user.roles ?? [],
+      body.allottedTimeInHours,
     );
   }
 }

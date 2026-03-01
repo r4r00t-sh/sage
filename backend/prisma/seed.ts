@@ -113,13 +113,36 @@ async function main() {
     for (let i = 0; i < dept.divisions.length; i++) {
       const divName = dept.divisions[i];
       const code = divisionCode(divName, i);
-      const div = await prisma.division.create({
-        data: {
+      const divCode = `${dept.code}-${code}`;
+      // Check if division already exists by name and department
+      const existing = await prisma.division.findFirst({
+        where: {
           name: divName,
-          code: `${dept.code}-${code}`,
           departmentId: created.id,
         },
       });
+      
+      let div;
+      if (existing) {
+        // Update existing division
+        div = await prisma.division.update({
+          where: { id: existing.id },
+          data: {
+            name: divName,
+            code: divCode,
+            departmentId: created.id,
+          },
+        });
+      } else {
+        // Create new division
+        div = await prisma.division.create({
+          data: {
+            name: divName,
+            code: divCode,
+            departmentId: created.id,
+          },
+        });
+      }
       divIds.push(div.id);
     }
     divisionIdsByDept.set(dept.code, divIds);
@@ -140,9 +163,67 @@ async function main() {
       name: 'Super Administrator',
       email: 'admin@santhigiri.org',
       roles: [UserRole.SUPER_ADMIN],
+      isActive: true,
+      profileApprovalStatus: 'APPROVED',
+      designation: 'Super Administrator',
+      staffId: 'STAFF-001',
+      phone: '+91 9876543001',
+      firstName: 'Super',
+      lastName: 'Administrator',
+      profileCompletedAt: new Date(),
+      employmentType: 'Permanent',
+      dateOfJoining: new Date('2022-01-01'),
+      workLocation: 'Head Office',
+      accountStatus: 'Active',
+      bio: 'System super administrator for testing.',
     },
   });
   console.log('✅ Super Admin:', superAdmin.username);
+
+  // Developer (god-level, no department)
+  const developer = await prisma.user.upsert({
+    where: { username: 'keerthanan' },
+    update: {
+      name: 'keerthanan',
+      email: 'keerthananps88@gmail.com',
+      passwordHash: await bcrypt.hash('K33rth4n4n@588$', 10),
+      roles: [UserRole.DEVELOPER],
+      departmentId: null,
+      divisionId: null,
+      isActive: true,
+      profileApprovalStatus: 'APPROVED',
+      designation: 'Software Developer',
+      staffId: 'STAFF-DEV',
+      phone: '+91 9876543000',
+      firstName: 'Keerthanan',
+      lastName: 'P S',
+      profileCompletedAt: new Date(),
+      employmentType: 'Permanent',
+      workLocation: 'Head Office',
+      accountStatus: 'Active',
+      bio: 'Developer account for testing.',
+    },
+    create: {
+      username: 'keerthanan',
+      name: 'keerthanan',
+      email: 'keerthananps88@gmail.com',
+      passwordHash: await bcrypt.hash('K33rth4n4n@588$', 10),
+      roles: [UserRole.DEVELOPER],
+      isActive: true,
+      profileApprovalStatus: 'APPROVED',
+      designation: 'Software Developer',
+      staffId: 'STAFF-DEV',
+      phone: '+91 9876543000',
+      firstName: 'Keerthanan',
+      lastName: 'P S',
+      profileCompletedAt: new Date(),
+      employmentType: 'Permanent',
+      workLocation: 'Head Office',
+      accountStatus: 'Active',
+      bio: 'Developer account for testing.',
+    },
+  });
+  console.log('✅ Developer:', developer.username);
 
   // Finance Department users (for initial workflow use)
   const finDeptAdmin = await prisma.user.create({
@@ -153,6 +234,19 @@ async function main() {
       email: 'fin.admin@santhigiri.org',
       roles: [UserRole.DEPT_ADMIN],
       departmentId: finDeptId,
+      isActive: true,
+      profileApprovalStatus: 'APPROVED',
+      designation: 'Department Admin',
+      staffId: 'STAFF-002',
+      phone: '+91 9876543002',
+      firstName: 'Finance',
+      lastName: 'Admin',
+      profileCompletedAt: new Date(),
+      employmentType: 'Permanent',
+      dateOfJoining: new Date('2023-06-01'),
+      workLocation: 'Finance Block',
+      accountStatus: 'Active',
+      bio: 'Finance department administrator for testing.',
     },
   });
 
@@ -165,6 +259,19 @@ async function main() {
       roles: [UserRole.SECTION_OFFICER],
       departmentId: finDeptId,
       divisionId: finFirstDivisionId,
+      isActive: true,
+      profileApprovalStatus: 'APPROVED',
+      designation: 'Section Officer',
+      staffId: 'STAFF-003',
+      phone: '+91 9876543003',
+      firstName: 'Accounts',
+      lastName: 'Section Officer',
+      profileCompletedAt: new Date(),
+      employmentType: 'Permanent',
+      dateOfJoining: new Date('2023-07-01'),
+      workLocation: 'Finance - Accounts Division',
+      accountStatus: 'Active',
+      bio: 'Accounts section officer for testing.',
     },
   });
 
@@ -177,6 +284,19 @@ async function main() {
       roles: [UserRole.INWARD_DESK],
       departmentId: finDeptId,
       divisionId: finFirstDivisionId,
+      isActive: true,
+      profileApprovalStatus: 'APPROVED',
+      designation: 'Inward Desk',
+      staffId: 'STAFF-004',
+      phone: '+91 9876543004',
+      firstName: 'Finance',
+      lastName: 'Inward Desk',
+      profileCompletedAt: new Date(),
+      employmentType: 'Permanent',
+      dateOfJoining: new Date('2023-08-01'),
+      workLocation: 'Finance - Inward',
+      accountStatus: 'Active',
+      bio: 'Finance inward desk for testing.',
     },
   });
 
@@ -189,6 +309,19 @@ async function main() {
       roles: [UserRole.DISPATCHER],
       departmentId: finDeptId,
       divisionId: finFirstDivisionId,
+      isActive: true,
+      profileApprovalStatus: 'APPROVED',
+      designation: 'Dispatcher',
+      staffId: 'STAFF-005',
+      phone: '+91 9876543005',
+      firstName: 'Finance',
+      lastName: 'Dispatcher',
+      profileCompletedAt: new Date(),
+      employmentType: 'Permanent',
+      dateOfJoining: new Date('2023-08-15'),
+      workLocation: 'Finance - Dispatch',
+      accountStatus: 'Active',
+      bio: 'Finance dispatcher for testing.',
     },
   });
 
@@ -201,6 +334,19 @@ async function main() {
       roles: [UserRole.APPROVAL_AUTHORITY],
       departmentId: finDeptId,
       divisionId: finFirstDivisionId,
+      isActive: true,
+      profileApprovalStatus: 'APPROVED',
+      designation: 'Approval Authority',
+      staffId: 'STAFF-006',
+      phone: '+91 9876543006',
+      firstName: 'Finance',
+      lastName: 'Approval Authority',
+      profileCompletedAt: new Date(),
+      employmentType: 'Permanent',
+      dateOfJoining: new Date('2023-05-01'),
+      workLocation: 'Finance Block',
+      accountStatus: 'Active',
+      bio: 'Finance approval authority for testing.',
     },
   });
 
@@ -213,6 +359,19 @@ async function main() {
       roles: [UserRole.USER],
       departmentId: finDeptId,
       divisionId: finFirstDivisionId,
+      isActive: true,
+      profileApprovalStatus: 'APPROVED',
+      designation: 'Clerk',
+      staffId: 'STAFF-007',
+      phone: '+91 9876543007',
+      firstName: 'Finance',
+      lastName: 'Clerk',
+      profileCompletedAt: new Date(),
+      employmentType: 'Permanent',
+      dateOfJoining: new Date('2024-01-01'),
+      workLocation: 'Finance - Accounts Division',
+      accountStatus: 'Active',
+      bio: 'Finance clerk for testing.',
     },
   });
 
@@ -225,6 +384,167 @@ async function main() {
       roles: [UserRole.CHAT_MANAGER],
       departmentId: finDeptId,
       divisionId: finFirstDivisionId,
+      isActive: true,
+      profileApprovalStatus: 'APPROVED',
+      designation: 'Chat Manager',
+      staffId: 'STAFF-008',
+      phone: '+91 9876543008',
+      firstName: 'Finance',
+      lastName: 'Chat Manager',
+      profileCompletedAt: new Date(),
+      employmentType: 'Permanent',
+      dateOfJoining: new Date('2023-09-01'),
+      workLocation: 'Finance Block',
+      accountStatus: 'Active',
+      bio: 'Finance chat manager for testing.',
+    },
+  });
+
+  // Operations Department users (ops.admin is created in the per-department loop below)
+  const opsDeptId = departmentIds.get('OPS')!;
+  const opsFirstDivisionId = divisionIdsByDept.get('OPS')![0];
+  const opsSectionOfficer = await prisma.user.create({
+    data: {
+      username: 'ops.office',
+      passwordHash,
+      name: 'Operations Section Officer',
+      email: 'ops.office@santhigiri.org',
+      roles: [UserRole.SECTION_OFFICER],
+      departmentId: opsDeptId,
+      divisionId: opsFirstDivisionId,
+      isActive: true,
+      profileApprovalStatus: 'APPROVED',
+      designation: 'Section Officer',
+      staffId: 'STAFF-009',
+      phone: '+91 9876543009',
+      firstName: 'Operations',
+      lastName: 'Section Officer',
+      profileCompletedAt: new Date(),
+      employmentType: 'Permanent',
+      dateOfJoining: new Date('2023-07-15'),
+      workLocation: 'Operations Block',
+      accountStatus: 'Active',
+      bio: 'Operations section officer for testing.',
+    },
+  });
+  const opsInward = await prisma.user.create({
+    data: {
+      username: 'ops.inward',
+      passwordHash,
+      name: 'Operations Inward Desk',
+      email: 'ops.inward@santhigiri.org',
+      roles: [UserRole.INWARD_DESK],
+      departmentId: opsDeptId,
+      divisionId: opsFirstDivisionId,
+      isActive: true,
+      profileApprovalStatus: 'APPROVED',
+      designation: 'Inward Desk',
+      staffId: 'STAFF-010',
+      phone: '+91 9876543010',
+      firstName: 'Operations',
+      lastName: 'Inward Desk',
+      profileCompletedAt: new Date(),
+      employmentType: 'Permanent',
+      dateOfJoining: new Date('2023-09-01'),
+      workLocation: 'Operations - Inward',
+      accountStatus: 'Active',
+      bio: 'Operations inward desk for testing.',
+    },
+  });
+  const opsDispatcher = await prisma.user.create({
+    data: {
+      username: 'ops.dispatch',
+      passwordHash,
+      name: 'Operations Dispatcher',
+      email: 'ops.dispatch@santhigiri.org',
+      roles: [UserRole.DISPATCHER],
+      departmentId: opsDeptId,
+      divisionId: opsFirstDivisionId,
+      isActive: true,
+      profileApprovalStatus: 'APPROVED',
+      designation: 'Dispatcher',
+      staffId: 'STAFF-011',
+      phone: '+91 9876543011',
+      firstName: 'Operations',
+      lastName: 'Dispatcher',
+      profileCompletedAt: new Date(),
+      employmentType: 'Permanent',
+      dateOfJoining: new Date('2023-10-01'),
+      workLocation: 'Operations - Dispatch',
+      accountStatus: 'Active',
+      bio: 'Operations dispatcher for testing.',
+    },
+  });
+  const opsApprover = await prisma.user.create({
+    data: {
+      username: 'ops.approver',
+      passwordHash,
+      name: 'Operations Approval Authority',
+      email: 'ops.approver@santhigiri.org',
+      roles: [UserRole.APPROVAL_AUTHORITY],
+      departmentId: opsDeptId,
+      divisionId: opsFirstDivisionId,
+      isActive: true,
+      profileApprovalStatus: 'APPROVED',
+      designation: 'Approval Authority',
+      staffId: 'STAFF-012',
+      phone: '+91 9876543012',
+      firstName: 'Operations',
+      lastName: 'Approval Authority',
+      profileCompletedAt: new Date(),
+      employmentType: 'Permanent',
+      dateOfJoining: new Date('2023-05-15'),
+      workLocation: 'Operations Block',
+      accountStatus: 'Active',
+      bio: 'Operations approval authority for testing.',
+    },
+  });
+  const opsClerk = await prisma.user.create({
+    data: {
+      username: 'ops.clerk',
+      passwordHash,
+      name: 'Operations Clerk',
+      email: 'ops.clerk@santhigiri.org',
+      roles: [UserRole.USER],
+      departmentId: opsDeptId,
+      divisionId: opsFirstDivisionId,
+      isActive: true,
+      profileApprovalStatus: 'APPROVED',
+      designation: 'Clerk',
+      staffId: 'STAFF-013',
+      phone: '+91 9876543013',
+      firstName: 'Operations',
+      lastName: 'Clerk',
+      profileCompletedAt: new Date(),
+      employmentType: 'Permanent',
+      dateOfJoining: new Date('2024-02-01'),
+      workLocation: 'Operations Block',
+      accountStatus: 'Active',
+      bio: 'Operations clerk for testing.',
+    },
+  });
+  const opsChatManager = await prisma.user.create({
+    data: {
+      username: 'ops.chat',
+      passwordHash,
+      name: 'Operations Chat Manager',
+      email: 'ops.chat@santhigiri.org',
+      roles: [UserRole.CHAT_MANAGER],
+      departmentId: opsDeptId,
+      divisionId: opsFirstDivisionId,
+      isActive: true,
+      profileApprovalStatus: 'APPROVED',
+      designation: 'Chat Manager',
+      staffId: 'STAFF-014',
+      phone: '+91 9876543014',
+      firstName: 'Operations',
+      lastName: 'Chat Manager',
+      profileCompletedAt: new Date(),
+      employmentType: 'Permanent',
+      dateOfJoining: new Date('2023-11-01'),
+      workLocation: 'Operations Block',
+      accountStatus: 'Active',
+      bio: 'Operations chat manager for testing.',
     },
   });
 
@@ -237,19 +557,34 @@ async function main() {
   // One Dept Admin per department (other than Finance); each in a department and division
   const otherAdmins: Awaited<ReturnType<typeof prisma.user.create>>[] = [];
   const otherDeptCodes = SANTHIGIRI_STRUCTURE.filter((d) => d.code !== 'FIN');
-  for (const { code, name } of otherDeptCodes) {
+  for (let idx = 0; idx < otherDeptCodes.length; idx++) {
+    const { code, name } = otherDeptCodes[idx];
     const deptId = departmentIds.get(code)!;
     const firstDivId = divisionIdsByDept.get(code)?.[0];
     const safeUsername = code.toLowerCase().replace(/[^a-z0-9]/g, '.');
+    const shortName = name.replace(' Department', '').trim();
     const user = await prisma.user.create({
       data: {
         username: `${safeUsername}.admin`,
         passwordHash,
-        name: `${name.replace(' Department', '')} Admin`,
+        name: `${shortName} Admin`,
         email: `${safeUsername}.admin@santhigiri.org`,
         roles: [UserRole.DEPT_ADMIN],
         departmentId: deptId,
         divisionId: firstDivId ?? undefined,
+        isActive: true,
+        profileApprovalStatus: 'APPROVED',
+        designation: 'Department Admin',
+        staffId: `STAFF-${code}-001`,
+        phone: `+91 9876543${String(idx + 15).padStart(3, '0')}`,
+        firstName: shortName,
+        lastName: 'Admin',
+        profileCompletedAt: new Date(),
+        employmentType: 'Permanent',
+        dateOfJoining: new Date('2023-06-01'),
+        workLocation: `${shortName} Block`,
+        accountStatus: 'Active',
+        bio: `${shortName} department administrator for testing.`,
       },
     });
     otherAdmins.push(user);
@@ -264,6 +599,12 @@ async function main() {
     approvalAuth,
     clerk,
     chatManager,
+    opsSectionOfficer,
+    opsInward,
+    opsDispatcher,
+    opsApprover,
+    opsClerk,
+    opsChatManager,
   ];
 
   for (const user of [...allUsers, ...otherAdmins]) {
@@ -393,6 +734,35 @@ async function main() {
   });
   console.log('✅ Default workflow created');
 
+  // Default SLA norm: 48 hours (used when a desk has no slaNorm set)
+  await prisma.systemSettings.upsert({
+    where: { key: 'defaultSlaNormHours' },
+    create: {
+      key: 'defaultSlaNormHours',
+      value: '48',
+      description: 'Default SLA norm in hours for file due time when desk has no slaNorm (e.g. 48 = 48 hours)',
+    },
+    update: { value: '48' },
+  });
+  console.log('✅ Default SLA norm: 48 hours');
+
+  // SAGE Req 1: Global config (Super Admin) – business hours & status thresholds
+  const sageKeys = [
+    { key: 'BUSINESS_START_TIME', value: '09:30', description: 'Business day start (HH:mm). Timer resumes at this time.' },
+    { key: 'BUSINESS_END_TIME', value: '17:30', description: 'Business day end (HH:mm). Timer pauses at this time.' },
+    { key: 'BUSINESS_HOURS_PER_DAY', value: '8', description: 'Working hours per day (number).' },
+    { key: 'OPTIMUM_TIME', value: '10', description: 'Optimum processing time in working hours. File red-listed when elapsed >= this.' },
+    { key: 'IN_PROGRESS_PERCENTAGE', value: '25', description: 'Percentage of OPTIMUM_TIME. File is In Progress while elapsed <= (OPTIMUM_TIME * this / 100).' },
+  ];
+  for (const { key, value, description } of sageKeys) {
+    await prisma.systemSettings.upsert({
+      where: { key },
+      create: { key, value, description },
+      update: { value, description },
+    });
+  }
+  console.log('✅ SAGE global config (business hours, OPTIMUM_TIME, IN_PROGRESS_PERCENTAGE)');
+
   console.log('🎉 Seed completed successfully!');
   console.log('\n📋 Test Accounts (password123 except Super Admin):');
   console.log('  Super Admin:        admin / admin123');
@@ -403,6 +773,9 @@ async function main() {
   console.log('  Approval Authority: fin.approver / password123');
   console.log('  Clerk:              fin.clerk / password123');
   console.log('  Chat Manager:       fin.chat / password123');
+  console.log('  Operations Dept Admin: ops.admin / password123');
+  console.log('  Operations Section Officer: ops.office / password123');
+  console.log('  Operations Inward:  ops.inward / password123');
   console.log('  Other dept admins:  <code>.admin (e.g. agr.admin, hr.admin) / password123');
 }
 

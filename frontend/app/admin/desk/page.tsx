@@ -32,23 +32,26 @@ import api from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store';
-import { hasRole, getRoles } from '@/lib/auth-utils';
+import { hasRole, hasGodRole, getRoles } from '@/lib/auth-utils';
 import { formatDistanceToNow } from 'date-fns';
+import { UserProfileLink, DepartmentProfileLink, DivisionProfileLink } from '@/components/profile-links';
 
 interface UserPresence {
   id: string;
   name: string;
   username: string;
   role: string;
-  department?: { name: string; code: string };
-  division?: { name: string; code: string };
+  department?: { id?: string; name: string; code: string };
+  division?: { id?: string; name: string; code: string };
   presenceStatus?: 'ACTIVE' | 'ABSENT' | 'SESSION_TIMEOUT' | null;
   lastPing?: string;
 }
 
 const roleLabels: Record<string, string> = {
+  DEVELOPER: 'Developer',
   SUPER_ADMIN: 'Super Admin',
   DEPT_ADMIN: 'Dept Admin',
+  SUPPORT: 'Support',
   APPROVAL_AUTHORITY: 'Approval Authority',
   SECTION_OFFICER: 'Section Officer',
   INWARD_DESK: 'Inward Desk',
@@ -170,7 +173,7 @@ export default function DeskPage() {
     timedOut: users.filter(u => u.presenceStatus === 'SESSION_TIMEOUT').length,
   };
 
-  const isSuperAdmin = hasRole(user, 'SUPER_ADMIN');
+  const isSuperAdmin = hasGodRole(user);
 
   if (loading) {
     return (
@@ -408,7 +411,9 @@ export default function DeskPage() {
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-lg truncate">{u.name}</h3>
+                      <h3 className="font-semibold text-lg truncate">
+                        <UserProfileLink userId={u.id} name={u.name} />
+                      </h3>
                       <p className="text-sm text-muted-foreground truncate">@{u.username}</p>
                     </div>
                   </div>
@@ -440,7 +445,12 @@ export default function DeskPage() {
                         <Building2 className="h-4 w-4 flex-shrink-0" />
                         <span className="truncate">
                           <span className="font-medium text-foreground">{u.department.code}</span>
-                          {' - '}{u.department.name}
+                          {' - '}
+                          {u.department.id ? (
+                            <DepartmentProfileLink departmentId={u.department.id} name={u.department.name} />
+                          ) : (
+                            u.department.name
+                          )}
                         </span>
                       </div>
                     )}
@@ -449,7 +459,13 @@ export default function DeskPage() {
                     {u.division && (
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <MapPin className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">{u.division.name}</span>
+                        <span className="truncate">
+                          {u.department?.id && u.division.id ? (
+                            <DivisionProfileLink departmentId={u.department.id} divisionId={u.division.id} name={u.division.name} />
+                          ) : (
+                            u.division.name
+                          )}
+                        </span>
                       </div>
                     )}
 

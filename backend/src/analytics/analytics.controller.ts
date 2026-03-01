@@ -23,6 +23,45 @@ export class AnalyticsController {
     private visualizationService: AnalyticsVisualizationService,
   ) {}
 
+  /** Own performance metrics – any authenticated user */
+  @Get('my-performance')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.DEPT_ADMIN,
+    UserRole.CHAT_MANAGER,
+    UserRole.APPROVAL_AUTHORITY,
+    UserRole.SECTION_OFFICER,
+    UserRole.INWARD_DESK,
+    UserRole.DISPATCHER,
+    UserRole.USER,
+  )
+  async getMyPerformance(@Request() req) {
+    return this.analyticsService.getMyPerformance(req.user.id);
+  }
+
+  /** Own activity heatmap – any authenticated user */
+  @Get('my-activity-heatmap')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.DEPT_ADMIN,
+    UserRole.CHAT_MANAGER,
+    UserRole.APPROVAL_AUTHORITY,
+    UserRole.SECTION_OFFICER,
+    UserRole.INWARD_DESK,
+    UserRole.DISPATCHER,
+    UserRole.USER,
+  )
+  async getMyActivityHeatmap(
+    @Request() req,
+    @Query('year') year?: string,
+  ) {
+    return this.analyticsService.getActivityHeatmap({
+      scope: 'user',
+      userId: req.user.id,
+      year: year ? parseInt(year, 10) : undefined,
+    });
+  }
+
   @Get('dashboard')
   @Roles(UserRole.SUPER_ADMIN, UserRole.DEPT_ADMIN)
   async getDashboardAnalytics(

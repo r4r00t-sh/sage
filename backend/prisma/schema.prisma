@@ -10,8 +10,10 @@ datasource db {
 }
 
 enum UserRole {
+  DEVELOPER       // God-level: software developer, no dept, full access everywhere
   SUPER_ADMIN
   DEPT_ADMIN
+  SUPPORT         // Support centre: view/respond tickets, elevated file access
   CHAT_MANAGER       // Can create groups and add members (delegated from admin)
   APPROVAL_AUTHORITY
   SECTION_OFFICER
@@ -94,6 +96,7 @@ model Division {
   updatedAt    DateTime   @updatedAt
   users        User[]
   files        File[]
+  filesIntended File[] @relation("FileIntendedDivision")
   desks        Desk[]
   opinionRequestsTo OpinionRequest[] @relation("OpinionRequestedTo")
 }
@@ -112,6 +115,41 @@ model User {
   designation  String?     // Desk Profile: designation
   staffId      String?     // Desk Profile: staff ID
   phone        String?     // Desk Profile: phone number
+  phoneAlternate String?  // Alternate phone
+  bio          String?     @db.Text // Optional bio
+  // Extended staff profile (from onboarding + profile edit)
+  firstName    String?
+  middleName   String?
+  lastName     String?
+  dateOfBirth  DateTime?
+  gender       String?
+  nationality  String?
+  maritalStatus String?
+  bloodGroup   String?
+  personalEmail String?
+  address      String?    @db.Text // Residential address
+  city         String?
+  postalCode   String?
+  employmentType String?
+  dateOfJoining DateTime?
+  contractEndDate DateTime?
+  reportingOfficial String?
+  workLocation String?
+  officeExtension String?
+  accountStatus String?   // Active, On Leave, Suspended, Terminated, Retired
+  highestQualification String?
+  fieldOfStudy String?
+  institution  String?
+  yearOfGraduation Int?
+  skills       String?    @db.Text // JSON array of skill strings
+  emergencyContactName String?
+  emergencyContactRelationship String?
+  emergencyContactPhone String?
+  emergencyContactPhoneAlt String?
+  emergencyContactEmail String?
+  adminNotes   String?    @db.Text // Remarks / admin notes
+  mustChangePassword Boolean @default(false) // Force password change on first login
+  profileCompletedAt DateTime? // Set after user completes full staff profile form
   maxFilesPerDay Int?       @default(10) // User-level file capacity (set by admin)
   isActive     Boolean     @default(true)
   avatarKey    String?     // MinIO object key for profile avatar
@@ -122,6 +160,7 @@ model User {
   updatedAt    DateTime    @updatedAt
   filesCreated File[]      @relation("FileCreator")
   filesAssigned File[]     @relation("FileAssignee")
+  filesIntendedAsUser File[] @relation("FileIntendedUser")
   notes        Note[]
   points       UserPoints?
   auditLogs    AuditLog[]
@@ -147,6 +186,9 @@ model User {
   chatReadReceipts ChatReadReceipt[]
   forwardQueueToMe ForwardQueue[]
   forwardQueueFromMe ForwardQueue[] @relation("ForwardQueueFrom")
+  ticketsCreated   Ticket[] @relation("TicketCreatedBy")
+  ticketsAssigned  Ticket[] @relation("TicketAssignedTo")
+  ticketReplies    TicketReply[]
 }
 
 model File {
@@ -204,7 +246,13 @@ model File {
   desk            Desk?       @relation(fields: [deskId], references: [id], onDelete: SetNull)
   originDeskId    String?     // Desk of origin (first desk where file was received) for display
   originDesk      Desk?       @relation("FileOriginDesk", fields: [originDeskId], references: [id], onDelete: SetNull)
-  
+
+  // Intended recipient when file is at inward desk (so inward can one-click forward)
+  intendedDivisionId String?
+  intendedDivision   Division? @relation("FileIntendedDivision", fields: [intendedDivisionId], references: [id], onDelete: SetNull)
+  intendedUserId     String?
+  intendedUser       User?     @relation("FileIntendedUser", fields: [intendedUserId], references: [id], onDelete: SetNull)
+
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   notes           Note[]
@@ -1254,4 +1302,59 @@ model ChatReadReceipt {
   @@unique([messageId, userId])
   @@index([messageId])
   @@index([userId])
+}
+
+// ============================================
+// SUPPORT TICKETING SYSTEM
+// ============================================
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_USER
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model Ticket {
+  id              String   @id @default(uuid())
+  ticketNumber    String   @unique
+  subject         String
+  description     String   @db.Text
+  status          TicketStatus @default(OPEN)
+  priority        TicketPriority @default(NORMAL)
+  category        String?
+  fileId          String?
+  createdById     String
+  createdBy       User     @relation("TicketCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  assignedToId    String?
+  assignedTo      User?    @relation("TicketAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  replies         TicketReply[]
+  @@index([createdById])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model TicketReply {
+  id              String   @id @default(uuid())
+  ticketId        String
+  ticket          Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  content         String   @db.Text
+  isSupportReply  Boolean  @default(false)
+  repliedById     String
+  repliedBy       User     @relation(fields: [repliedById], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@index([ticketId])
+  @@index([repliedById])
 }

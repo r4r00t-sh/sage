@@ -219,7 +219,7 @@ export class OpinionsService {
 
     if (
       opinionRequest.requestedFromDepartmentId !== fromUser?.departmentId &&
-      !fromUser?.roles?.includes('SUPER_ADMIN')
+      !fromUser?.roles?.includes('DEVELOPER') && !fromUser?.roles?.includes('SUPER_ADMIN')
     ) {
       throw new ForbiddenException(
         'You are not authorized to forward this opinion request',

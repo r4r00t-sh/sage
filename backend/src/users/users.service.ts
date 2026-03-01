@@ -73,6 +73,40 @@ export class UsersService {
         designation: true,
         staffId: true,
         phone: true,
+        phoneAlternate: true,
+        bio: true,
+        firstName: true,
+        middleName: true,
+        lastName: true,
+        dateOfBirth: true,
+        gender: true,
+        nationality: true,
+        maritalStatus: true,
+        bloodGroup: true,
+        personalEmail: true,
+        address: true,
+        city: true,
+        postalCode: true,
+        employmentType: true,
+        dateOfJoining: true,
+        contractEndDate: true,
+        reportingOfficial: true,
+        workLocation: true,
+        officeExtension: true,
+        accountStatus: true,
+        highestQualification: true,
+        fieldOfStudy: true,
+        institution: true,
+        yearOfGraduation: true,
+        skills: true,
+        emergencyContactName: true,
+        emergencyContactRelationship: true,
+        emergencyContactPhone: true,
+        emergencyContactPhoneAlt: true,
+        emergencyContactEmail: true,
+        adminNotes: true,
+        mustChangePassword: true,
+        profileCompletedAt: true,
         roles: true,
         isActive: true,
         avatarKey: true,
@@ -203,6 +237,7 @@ export class UsersService {
         departmentId: data.departmentId,
         divisionId: data.divisionId,
         profileApprovalStatus: profileApprovalStatus as any,
+        mustChangePassword: true,
       },
       select: {
         id: true,
@@ -240,26 +275,107 @@ export class UsersService {
       designation?: string;
       staffId?: string;
       phone?: string;
+      phoneAlternate?: string;
+      bio?: string;
+      profileCompletedAt?: boolean;
       roles?: string[];
       departmentId?: string;
       divisionId?: string;
       isActive?: boolean;
+      firstName?: string;
+      middleName?: string;
+      lastName?: string;
+      dateOfBirth?: string;
+      gender?: string;
+      nationality?: string;
+      maritalStatus?: string;
+      bloodGroup?: string;
+      personalEmail?: string;
+      address?: string;
+      city?: string;
+      postalCode?: string;
+      employmentType?: string;
+      dateOfJoining?: string;
+      contractEndDate?: string;
+      reportingOfficial?: string;
+      workLocation?: string;
+      officeExtension?: string;
+      accountStatus?: string;
+      highestQualification?: string;
+      fieldOfStudy?: string;
+      institution?: string;
+      yearOfGraduation?: number;
+      skills?: string | string[];
+      emergencyContactName?: string;
+      emergencyContactRelationship?: string;
+      emergencyContactPhone?: string;
+      emergencyContactPhoneAlt?: string;
+      emergencyContactEmail?: string;
+      adminNotes?: string;
     },
   ) {
+    const parts = [data.firstName, data.middleName, data.lastName].filter(Boolean) as string[];
+    const derivedName = parts.length > 0 ? parts.join(' ') : undefined;
+    const skillsStr =
+      data.skills !== undefined
+        ? Array.isArray(data.skills)
+          ? JSON.stringify(data.skills)
+          : data.skills
+        : undefined;
     return this.prisma.user.update({
       where: { id },
       data: {
-        ...(data.name && { name: data.name }),
+        ...(data.name !== undefined && { name: data.name }),
+        ...(derivedName && { name: derivedName }),
         ...(data.email !== undefined && { email: data.email }),
         ...(data.designation !== undefined && { designation: data.designation }),
         ...(data.staffId !== undefined && { staffId: data.staffId }),
         ...(data.phone !== undefined && { phone: data.phone }),
-        ...(data.roles && data.roles.length > 0 && { roles: data.roles as any }),
-        ...(data.departmentId !== undefined && {
-          departmentId: data.departmentId,
+        ...(data.phoneAlternate !== undefined && { phoneAlternate: data.phoneAlternate }),
+        ...(data.bio !== undefined && { bio: data.bio }),
+        ...(data.profileCompletedAt !== undefined && {
+          profileCompletedAt: data.profileCompletedAt ? new Date() : null,
         }),
+        ...(data.roles && data.roles.length > 0 && { roles: data.roles as any }),
+        ...(data.departmentId !== undefined && { departmentId: data.departmentId }),
         ...(data.divisionId !== undefined && { divisionId: data.divisionId }),
         ...(data.isActive !== undefined && { isActive: data.isActive }),
+        ...(data.firstName !== undefined && { firstName: data.firstName }),
+        ...(data.middleName !== undefined && { middleName: data.middleName }),
+        ...(data.lastName !== undefined && { lastName: data.lastName }),
+        ...(data.dateOfBirth !== undefined && {
+          dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
+        }),
+        ...(data.gender !== undefined && { gender: data.gender }),
+        ...(data.nationality !== undefined && { nationality: data.nationality }),
+        ...(data.maritalStatus !== undefined && { maritalStatus: data.maritalStatus }),
+        ...(data.bloodGroup !== undefined && { bloodGroup: data.bloodGroup }),
+        ...(data.personalEmail !== undefined && { personalEmail: data.personalEmail }),
+        ...(data.address !== undefined && { address: data.address }),
+        ...(data.city !== undefined && { city: data.city }),
+        ...(data.postalCode !== undefined && { postalCode: data.postalCode }),
+        ...(data.employmentType !== undefined && { employmentType: data.employmentType }),
+        ...(data.dateOfJoining !== undefined && {
+          dateOfJoining: data.dateOfJoining ? new Date(data.dateOfJoining) : null,
+        }),
+        ...(data.contractEndDate !== undefined && {
+          contractEndDate: data.contractEndDate ? new Date(data.contractEndDate) : null,
+        }),
+        ...(data.reportingOfficial !== undefined && { reportingOfficial: data.reportingOfficial }),
+        ...(data.workLocation !== undefined && { workLocation: data.workLocation }),
+        ...(data.officeExtension !== undefined && { officeExtension: data.officeExtension }),
+        ...(data.accountStatus !== undefined && { accountStatus: data.accountStatus }),
+        ...(data.highestQualification !== undefined && { highestQualification: data.highestQualification }),
+        ...(data.fieldOfStudy !== undefined && { fieldOfStudy: data.fieldOfStudy }),
+        ...(data.institution !== undefined && { institution: data.institution }),
+        ...(data.yearOfGraduation !== undefined && { yearOfGraduation: data.yearOfGraduation }),
+        ...(skillsStr !== undefined && { skills: skillsStr }),
+        ...(data.emergencyContactName !== undefined && { emergencyContactName: data.emergencyContactName }),
+        ...(data.emergencyContactRelationship !== undefined && { emergencyContactRelationship: data.emergencyContactRelationship }),
+        ...(data.emergencyContactPhone !== undefined && { emergencyContactPhone: data.emergencyContactPhone }),
+        ...(data.emergencyContactPhoneAlt !== undefined && { emergencyContactPhoneAlt: data.emergencyContactPhoneAlt }),
+        ...(data.emergencyContactEmail !== undefined && { emergencyContactEmail: data.emergencyContactEmail }),
+        ...(data.adminNotes !== undefined && { adminNotes: data.adminNotes }),
       },
       select: {
         id: true,
@@ -269,6 +385,40 @@ export class UsersService {
         designation: true,
         staffId: true,
         phone: true,
+        phoneAlternate: true,
+        bio: true,
+        firstName: true,
+        middleName: true,
+        lastName: true,
+        dateOfBirth: true,
+        gender: true,
+        nationality: true,
+        maritalStatus: true,
+        bloodGroup: true,
+        personalEmail: true,
+        address: true,
+        city: true,
+        postalCode: true,
+        employmentType: true,
+        dateOfJoining: true,
+        contractEndDate: true,
+        reportingOfficial: true,
+        workLocation: true,
+        officeExtension: true,
+        accountStatus: true,
+        highestQualification: true,
+        fieldOfStudy: true,
+        institution: true,
+        yearOfGraduation: true,
+        skills: true,
+        emergencyContactName: true,
+        emergencyContactRelationship: true,
+        emergencyContactPhone: true,
+        emergencyContactPhoneAlt: true,
+        emergencyContactEmail: true,
+        adminNotes: true,
+        mustChangePassword: true,
+        profileCompletedAt: true,
         roles: true,
         isActive: true,
         profileApprovalStatus: true,
@@ -318,7 +468,10 @@ export class UsersService {
 
     await this.prisma.user.update({
       where: { id },
-      data: { passwordHash },
+      data: {
+        passwordHash,
+        mustChangePassword: false,
+      },
     });
 
     return { message: 'Password changed successfully' };
@@ -340,6 +493,64 @@ export class UsersService {
       where: { id },
       data: { isActive: false },
     });
+  }
+
+  async getStats(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        points: true,
+        _count: { select: { filesCreated: true } },
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const [filesProcessed, achievements, recentLogs] = await Promise.all([
+      this.prisma.file.count({
+        where: { assignedToId: userId, status: 'APPROVED' },
+      }),
+      this.prisma.performanceBadge.findMany({
+        where: { userId },
+        orderBy: { awardedAt: 'desc' },
+        take: 20,
+      }),
+      this.prisma.auditLog.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        include: {
+          file: { select: { fileNumber: true, subject: true } },
+        },
+      }),
+    ]);
+
+    const achievementsFormatted = achievements.map((a) => ({
+      id: a.id,
+      name: a.badgeName,
+      description: a.description || a.badgeType,
+      icon: a.badgeType,
+      earnedAt: a.awardedAt.toISOString(),
+    }));
+
+    const recentActivity = recentLogs.map((log) => ({
+      id: log.id,
+      type: log.entityType,
+      description:
+        log.entityType === 'File' && log.file
+          ? `${log.action}: ${log.file.fileNumber} - ${log.file.subject}`
+          : `${log.action} (${log.entityType})`,
+      timestamp: log.createdAt.toISOString(),
+    }));
+
+    return {
+      filesCreated: user._count.filesCreated,
+      filesProcessed,
+      filesApproved: filesProcessed,
+      totalPoints: user.points?.currentPoints ?? 1000,
+      currentStreak: user.points?.streakMonths ?? 0,
+      achievements: achievementsFormatted,
+      recentActivity,
+    };
   }
 
   async getAuditLogs(userId: string, limit = 50) {

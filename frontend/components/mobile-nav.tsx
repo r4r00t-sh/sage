@@ -28,6 +28,11 @@ const navigation = {
     { name: 'Department', href: '/admin/department', icon: FileText },
     { name: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
   ],
+  DEVELOPER: [
+    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Global Analytics', href: '/admin/global', icon: BarChart3 },
+    { name: 'Recall Protocol', href: '/admin/recall', icon: FileText },
+  ],
   SUPER_ADMIN: [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Global Analytics', href: '/admin/global', icon: BarChart3 },

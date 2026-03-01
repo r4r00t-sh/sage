@@ -1,5 +1,31 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+
+/** Safe storage for persist: no-ops on server (SSR) and never throws. */
+const safeStorage = {
+  getItem: (name: string): string | null => {
+    try {
+      return typeof window === 'undefined' ? null : localStorage.getItem(name);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (name: string, value: string): void => {
+    try {
+      if (typeof window !== 'undefined') localStorage.setItem(name, value);
+    } catch {
+      // ignore
+    }
+  },
+  removeItem: (name: string): void => {
+    try {
+      if (typeof window !== 'undefined') localStorage.removeItem(name);
+    } catch {
+      // ignore
+    }
+  },
+};
+
 
 interface User {
   id: string;
@@ -12,12 +38,17 @@ interface User {
   departmentId?: string;
   divisionId?: string;
   avatarKey?: string | null;
+  mustChangePassword?: boolean;
+  profileCompletedAt?: string | null;
 }
 
 interface AuthState {
   user: User | null;
   token: string | null;
+  lastVisitedPath: string | null;
   setAuth: (user: User, token: string) => void;
+  setLastVisitedPath: (path: string) => void;
+  clearLastVisitedPath: () => void;
   logout: () => void;
 }
 
@@ -26,21 +57,34 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       token: null,
+      lastVisitedPath: null,
       setAuth: (user, token) => {
         if (typeof window !== 'undefined') {
           localStorage.setItem('token', token);
         }
         set({ user, token });
       },
+      setLastVisitedPath: (path: string) => {
+        // Don't store login/logout pages or public routes
+        const publicRoutes = ['/login', '/logout', '/docs'];
+        if (!publicRoutes.some(route => path.startsWith(route))) {
+          set({ lastVisitedPath: path });
+        }
+      },
+      clearLastVisitedPath: () => {
+        set({ lastVisitedPath: null });
+      },
       logout: () => {
         if (typeof window !== 'undefined') {
           localStorage.removeItem('token');
         }
+        // Keep lastVisitedPath for next login
         set({ user: null, token: null });
       },
     }),
     {
       name: 'auth-storage',
+      storage: createJSONStorage(() => safeStorage),
     }
   )
 );
@@ -141,6 +185,7 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: 'user-preferences',
+      storage: createJSONStorage(() => safeStorage),
     }
   )
 );
@@ -172,6 +217,7 @@ export const useRecentFilesStore = create<RecentFilesState>()(
     }),
     {
       name: 'recent-files',
+      storage: createJSONStorage(() => safeStorage),
     }
   )
 );
@@ -196,7 +242,27 @@ export const useLocaleStore = create<LocaleState>()(
         }
       },
     }),
-    { name: 'locale-storage' }
+    {
+      name: 'locale-storage',
+      storage: createJSONStorage(() => safeStorage),
+    }
   )
 );
+
+// SAGE Req 4: Open chat sidebar with a user (for clickable usernames → DM)
+interface ChatState {
+  isChatOpen: boolean;
+  openChatWithUserId: string | null;
+  openChatWith: (userId: string) => void;
+  setChatOpen: (open: boolean) => void;
+  clearOpenChatWithUserId: () => void;
+}
+
+export const useChatStore = create<ChatState>((set) => ({
+  isChatOpen: false,
+  openChatWithUserId: null,
+  openChatWith: (userId) => set({ isChatOpen: true, openChatWithUserId: userId }),
+  setChatOpen: (open) => set({ isChatOpen: open, ...(open ? {} : { openChatWithUserId: null }) }),
+  clearOpenChatWithUserId: () => set({ openChatWithUserId: null }),
+}));
 

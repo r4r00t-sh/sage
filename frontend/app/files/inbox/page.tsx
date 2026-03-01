@@ -31,6 +31,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import api from '@/lib/api';
 import { toast } from 'sonner';
+import { DepartmentProfileLink, DivisionProfileLink } from '@/components/profile-links';
 import {
   FileText,
   Clock,
@@ -68,8 +69,8 @@ interface InboxFile {
   fileNumber?: string;
   subject?: string;
   isRedListed?: boolean;
-  department?: { name: string };
-  currentDivision?: { name: string };
+  department?: { id?: string; name: string };
+  currentDivision?: { id?: string; name: string };
   createdAt?: string;
   [key: string]: unknown;
 }
@@ -319,7 +320,7 @@ function InboxContent() {
                 </TableHeader>
                 <TableBody>
                   {queueEntries.map((entry) => (
-                    <TableRow key={entry.id}>
+                    <TableRow key={entry.id} data-sage-row className="transition-all duration-200">
                       <TableCell className="font-mono text-sm">{entry.file?.fileNumber ?? '-'}</TableCell>
                       <TableCell className="max-w-[300px] truncate">{entry.file?.subject ?? '-'}</TableCell>
                       <TableCell className="text-muted-foreground">{entry.fromUser?.name ?? '-'}</TableCell>
@@ -534,8 +535,9 @@ function InboxContent() {
                   return (
                     <TableRow 
                       key={file.id} 
+                      data-sage-row
                       className={cn(
-                        "cursor-pointer group h-20",
+                        "cursor-pointer group h-20 transition-all duration-200",
                         isSelected && "bg-primary/5"
                       )}
                     >
@@ -558,8 +560,22 @@ function InboxContent() {
                           <p className="font-medium truncate group-hover:text-primary transition-colors">
                             {file.subject}
                           </p>
-                          <p className="text-sm text-muted-foreground truncate mt-1">
-                            {file.department?.name} {file.currentDivision?.name && `• ${file.currentDivision.name}`}
+                          <p className="text-sm text-muted-foreground truncate mt-1 flex items-center gap-1 flex-wrap">
+                            {file.department && (
+                              file.department.id ? (
+                                <DepartmentProfileLink departmentId={file.department.id} name={file.department.name} />
+                              ) : (
+                                <span>{file.department.name}</span>
+                              )
+                            )}
+                            {file.department?.name && file.currentDivision?.name && ' • '}
+                            {file.currentDivision && (
+                              file.department?.id && file.currentDivision.id ? (
+                                <DivisionProfileLink departmentId={file.department.id} divisionId={file.currentDivision.id} name={file.currentDivision.name} />
+                              ) : (
+                                <span>{file.currentDivision.name}</span>
+                              )
+                            )}
                           </p>
                         </div>
                       </TableCell>

@@ -168,6 +168,49 @@
     animation: fade-in 0.2s ease-out;
   }
 
+  /* Page transition animations */
+  .page-transition-wrapper {
+    width: 100%;
+    min-height: 100%;
+    transition: opacity 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .page-transition-visible {
+    opacity: 1;
+  }
+
+  .page-transition-hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Smooth scroll behavior */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Prevent layout shift during transitions */
+  [data-page-transition] {
+    will-change: opacity, transform;
+  }
+
+  /* Ensure smooth transitions for page content */
+  [data-page-transition] > * {
+    transition: opacity 0.2s ease-in-out;
+  }
+
+  /* Smooth transitions for navigation links */
+  a[href] {
+    transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+                background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Smooth transitions for buttons */
+  button:not([disabled]) {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
   /* Custom scrollbar */
   .custom-scrollbar::-webkit-scrollbar,
   .scrollbar-thin::-webkit-scrollbar {
@@ -211,6 +254,18 @@
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 3;
+  }
+
+  /* Audiowide – SAGE only */
+  .audiowide-regular {
+    font-family: "Audiowide", sans-serif;
+    font-weight: 400;
+    font-style: normal;
+  }
+  .gugi-regular {
+    font-family: "Gugi", sans-serif;
+    font-weight: 400;
+    font-style: normal;
   }
 
   /* Glass morphism effect */
@@ -333,4 +388,19 @@
 html,
 body {
   font-family: "Funnel Display", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+}
+
+/* SAGE Req 5: Minimalist hover - rows = border; buttons/cards = shadow (0.2s) */
+[data-sage-row]:hover {
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  border-color: hsl(var(--primary) / 0.4);
+  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.15);
+}
+[data-sage-hover]:hover {
+  transition: box-shadow 0.2s ease, filter 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  filter: brightness(0.98);
+}
+.dark [data-sage-hover]:hover {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
 }

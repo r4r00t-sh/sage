@@ -307,6 +307,66 @@ export class AnalyticsService {
     );
   }
 
+  /** Single-user performance for profile (any authenticated user can view own). */
+  async getMyPerformance(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        points: true,
+        department: { select: { name: true, code: true } },
+        division: { select: { name: true } },
+        _count: {
+          select: { filesAssigned: true, filesCreated: true },
+        },
+      },
+    });
+    if (!user) return null;
+
+    const [
+      completedFiles,
+      redListedFiles,
+      avgProcessingTime,
+      extensionRequests,
+    ] = await Promise.all([
+      this.prisma.file.count({
+        where: { assignedToId: user.id, status: 'APPROVED' },
+      }),
+      this.prisma.file.count({
+        where: { assignedToId: user.id, isRedListed: true },
+      }),
+      this.prisma.fileRouting.aggregate({
+        where: { fromUserId: user.id, timeSpentAtDesk: { not: null } },
+        _avg: { timeSpentAtDesk: true },
+      }),
+      this.prisma.timeExtensionRequest.count({
+        where: { requestedById: user.id },
+      }),
+    ]);
+
+    return {
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      currentPoints: user.points?.currentPoints || 0,
+      basePoints: user.points?.basePoints || 1000,
+      streakMonths: user.points?.streakMonths || 0,
+      totalFilesAssigned: user._count.filesAssigned,
+      totalFilesCreated: user._count.filesCreated,
+      completedFiles,
+      redListedFiles,
+      extensionRequests,
+      avgProcessingTimeHours: avgProcessingTime._avg.timeSpentAtDesk
+        ? Math.round((avgProcessingTime._avg.timeSpentAtDesk / 3600) * 10) / 10
+        : null,
+      performanceScore: this.calculatePerformanceScore(
+        completedFiles,
+        redListedFiles,
+        user.points?.currentPoints || 1000,
+        extensionRequests,
+      ),
+    };
+  }
+
   /**
    * Activity heatmap (GitHub-style): contributions per day from file-related actions (AuditLog).
    * scope: 'user' = current user's file actions; 'department' = all file actions in that department.

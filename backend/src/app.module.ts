@@ -31,6 +31,7 @@ import { WorkflowModule } from './workflow/workflow.module';
 import { ChatModule } from './chat/chat.module';
 import { DeskProfileModule } from './desk-profile/desk-profile.module';
 import { CapacityModule } from './capacity/capacity.module';
+import { TicketsModule } from './tickets/tickets.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { CapacityModule } from './capacity/capacity.module';
     ChatModule,
     DeskProfileModule,
     CapacityModule,
+    TicketsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

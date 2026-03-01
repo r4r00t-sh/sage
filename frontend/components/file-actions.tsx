@@ -25,7 +25,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
-import { hasRole } from '@/lib/auth-utils';
+import { hasRole, hasGodRole } from '@/lib/auth-utils';
 
 interface FileActionsProps {
   fileId: string;
@@ -165,7 +165,7 @@ export function FileActions({
     const Icon = config.icon;
 
     // Hide recall for non-super admins
-    if (type === 'recall' && !hasRole(user, 'SUPER_ADMIN')) return null;
+    if (type === 'recall' && !hasGodRole(user)) return null;
 
     return (
       <Button

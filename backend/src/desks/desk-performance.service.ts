@@ -528,6 +528,104 @@ export class DeskPerformanceService {
   }
 
   /**
+   * Rating Analytics (0–10 scale)
+   * Variables: V = volume on desk, T = allotted time/file (h), O = optimum volume, P = processed/day, R = received/day, H = working hours.
+   * Speed = min(10, (P*T/H)*10), Efficiency = min(10, (P/R)*10), Workload = min(10, (V/O)*10),
+   * Overload = V>O ? min(10, ((V-O)/O)*10) : 0, Underload = V<O ? min(10, ((O-V)/O)*10) : 0.
+   */
+  async getDeskRatingAnalytics(
+    deskId: string,
+    dateFrom?: Date,
+    dateTo?: Date,
+  ): Promise<{
+    deskId: string;
+    deskName: string;
+    period: { from: Date; to: Date };
+    variables: { V: number; T: number; O: number; P: number; R: number; H: number };
+    ratings: {
+      speed: number;
+      efficiency: number;
+      workload: number;
+      overload: number;
+      underload: number;
+    };
+    insights: string[];
+  }> {
+    const now = dateTo || new Date();
+    const start = dateFrom || new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const daysInPeriod = Math.max(1, (now.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+
+    const desk = await this.prisma.desk.findUnique({
+      where: { id: deskId },
+      select: {
+        id: true,
+        name: true,
+        maxFilesPerDay: true,
+        slaNorm: true,
+      },
+    });
+    if (!desk) {
+      throw new Error('Desk not found');
+    }
+
+    const [V, receivedTotal, processedTotal] = await Promise.all([
+      this.prisma.file.count({
+        where: {
+          deskId,
+          status: { in: ['PENDING', 'IN_PROGRESS'] },
+        },
+      }),
+      this.prisma.fileMovement.count({
+        where: { deskId, arrivalTS: { gte: start, lte: now } },
+      }),
+      this.prisma.fileMovement.count({
+        where: {
+          deskId,
+          endTS: { gte: start, lte: now },
+          status: 'COMPLETED',
+        },
+      }),
+    ]);
+
+    const defaultSla = await this.prisma.systemSettings.findUnique({
+      where: { key: 'defaultSlaNormHours' },
+      select: { value: true },
+    }).catch(() => null);
+    const defaultT = defaultSla ? parseInt(defaultSla.value, 10) : 2;
+    const T = desk.slaNorm ?? (Number.isNaN(defaultT) ? 2 : defaultT);
+    const O = Math.max(1, desk.maxFilesPerDay);
+    const P = receivedTotal > 0 || processedTotal > 0 ? processedTotal / daysInPeriod : 0;
+    const R = receivedTotal > 0 || processedTotal > 0 ? receivedTotal / daysInPeriod : 0;
+    const H = 8;
+
+    const cap = (x: number) => Math.min(10, Math.max(0, Math.round(x * 100) / 100));
+
+    const speed = H > 0 && T > 0 ? cap((P * T) / H * 10) : 0;
+    const efficiency = R > 0 ? cap((P / R) * 10) : (P > 0 ? 10 : 0);
+    const workload = cap((V / O) * 10);
+    const overload = V <= O ? 0 : cap(((V - O) / O) * 10);
+    const underload = V >= O ? 0 : cap(((O - V) / O) * 10);
+
+    const insights: string[] = [];
+    if (speed < 6) insights.push('Processing slower than target rate.');
+    else if (speed >= 9) insights.push('Processing at or above target rate.');
+    if (efficiency < 6) insights.push('Clearing less than 60% of daily inflow; backlog may grow.');
+    else if (efficiency >= 9) insights.push('Clearing most or all of daily incoming work.');
+    if (workload >= 10) insights.push('Operating at or above intended capacity.');
+    if (overload > 5) insights.push('Desk is overloaded; consider redistribution or capacity.');
+    if (underload > 5) insights.push('Desk is underloaded; capacity may be underutilized.');
+
+    return {
+      deskId,
+      deskName: desk.name,
+      period: { from: start, to: now },
+      variables: { V, T: Math.round(T * 100) / 100, O, P: Math.round(P * 100) / 100, R: Math.round(R * 100) / 100, H },
+      ratings: { speed, efficiency, workload, overload, underload },
+      insights,
+    };
+  }
+
+  /**
    * Get comprehensive desk performance metrics
    */
   async getDeskPerformanceMetrics(

@@ -50,7 +50,7 @@ The repo has a workflow that builds the APK in CI:
 - **Steps:** Check changes → run tests → build APK → upload artifact → create GitHub Release (on master/tag/manual).
 - **Artifact:** After a run, open the workflow run and download **apk-release** from the **Build Android APK** job.
 - **Releases:** On push to master or tag (or manual run), a GitHub Release is created with the APK attached (e.g. `efiling_app-v1.0.0.apk`).
-- **API URL in APK:** In the repo **Settings → Secrets and variables → Actions**, add a secret `API_BASE_URL` (e.g. `https://efmp.santhigiri.cloud/api`). Or when using **Run workflow**, fill **API base URL**. The built APK will then use that URL by default.
+- **API URL in APK:** In the repo **Settings → Secrets and variables → Actions**, add a secret `API_BASE_URL` (e.g. `https://sage.santhigiri.cloud/api`). Or when using **Run workflow**, fill **API base URL**. The built APK will then use that URL by default.
 
 Workflow file: `.github/workflows/release-flutter.yml`.
 

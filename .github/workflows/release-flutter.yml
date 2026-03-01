@@ -18,7 +18,7 @@ on:
         required: false
         default: ''
       api_base_url:
-        description: 'API base URL (optional, e.g. https://efmp.santhigiri.cloud/api)'
+        description: 'API base URL (optional, e.g. https://sage.santhigiri.cloud/api)'
         required: false
         default: ''
 

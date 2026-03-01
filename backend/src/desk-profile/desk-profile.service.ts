@@ -17,6 +17,7 @@ export class DeskProfileService {
 
   private canAccessDeskProfile(roles: string[]): boolean {
     return (
+      roles.includes(UserRole.DEVELOPER) ||
       roles.includes(UserRole.SUPER_ADMIN) ||
       roles.includes(UserRole.DEPT_ADMIN) ||
       roles.includes(UserRole.INWARD_DESK) ||
@@ -134,7 +135,7 @@ export class DeskProfileService {
 
   // ---------- Time ----------
   async getOptimumTimePerFile(roles: string[]) {
-    if (!roles.includes(UserRole.SUPER_ADMIN)) throw new ForbiddenException('Super Admin only');
+    if (!roles.includes(UserRole.DEVELOPER) && !roles.includes(UserRole.SUPER_ADMIN)) throw new ForbiddenException('Super Admin or Developer only');
     const config = await this.prisma.performanceConfig.findUnique({
       where: { key: 'desk_profile_optimum_time_per_file_seconds' },
     });
@@ -143,7 +144,7 @@ export class DeskProfileService {
   }
 
   async setOptimumTimePerFile(seconds: number, roles: string[]) {
-    if (!roles.includes(UserRole.SUPER_ADMIN)) throw new ForbiddenException('Super Admin only');
+    if (!roles.includes(UserRole.DEVELOPER) && !roles.includes(UserRole.SUPER_ADMIN)) throw new ForbiddenException('Super Admin or Developer only');
     await this.prisma.performanceConfig.upsert({
       where: { key: 'desk_profile_optimum_time_per_file_seconds' },
       create: { key: 'desk_profile_optimum_time_per_file_seconds', value: seconds, description: 'Optimum time to process one file (seconds)' },
@@ -260,7 +261,7 @@ export class DeskProfileService {
 
   // ---------- Config (login reset, idle) ----------
   async getDeskProfileConfig(roles: string[]) {
-    if (!roles.includes(UserRole.SUPER_ADMIN) && !roles.includes(UserRole.DEPT_ADMIN)) throw new ForbiddenException('Access denied');
+    if (!roles.includes(UserRole.DEVELOPER) && !roles.includes(UserRole.SUPER_ADMIN) && !roles.includes(UserRole.DEPT_ADMIN)) throw new ForbiddenException('Access denied');
     const keys = [
       'desk_profile_optimum_time_per_file_seconds',
       'desk_profile_login_reset_type',
@@ -289,7 +290,7 @@ export class DeskProfileService {
     },
     roles: string[],
   ) {
-    if (!roles.includes(UserRole.SUPER_ADMIN)) throw new ForbiddenException('Super Admin only');
+    if (!roles.includes(UserRole.DEVELOPER) && !roles.includes(UserRole.SUPER_ADMIN)) throw new ForbiddenException('Super Admin or Developer only');
     const updates = [
       data.loginResetType != null && { key: 'desk_profile_login_reset_type', value: data.loginResetType },
       data.officeHoursStart != null && { key: 'desk_profile_office_hours_start', value: data.officeHoursStart },

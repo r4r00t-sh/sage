@@ -22,7 +22,7 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-import { hasRole } from '@/lib/auth-utils';
+import { hasRole, hasGodRole } from '@/lib/auth-utils';
 import {
   getCachedDepartments,
   setCachedDepartments,
@@ -85,7 +85,7 @@ export function ForwardFileModal({
   const isDispatcher = hasRole(user, 'DISPATCHER');
   const isSectionOfficer = hasRole(user, 'SECTION_OFFICER');
   const isDeptAdmin = hasRole(user, 'DEPT_ADMIN');
-  const isSuperAdmin = hasRole(user, 'SUPER_ADMIN');
+  const isSuperAdmin = hasGodRole(user);
   // Dispatchers can only forward to other departments (external only)
   // Other restricted roles (INWARD_DESK, SECTION_OFFICER) can only forward internally (within their department)
   const isRestrictedRole = (isInwardDesk || isSectionOfficer) && !isDeptAdmin;
@@ -139,32 +139,53 @@ export function ForwardFileModal({
           { id: 4, label: 'Remarks', completed: true },
         ];
 
+  // When modal opens: reset, load divisions/departments, then pre-fill from file intended if any
   useEffect(() => {
     if (!open) return;
+    setRemarks('');
+    setForwardType('internal');
+    setSelectedDepartmentId('');
     setDivisionId('');
     setUserId('');
-    setRemarks('');
     setUsers([]);
-    setForwardType('internal'); // Reset to internal by default
-    
-    // For dispatchers, always show department selection (external only, excluding their own department)
+
     if (isDispatcher) {
-      setSelectedDepartmentId('');
       setDivisions([]);
       fetchDepartments();
-    } else if (forwardType === 'internal' || isRestrictedRole) {
-      setSelectedDepartmentId('');
-      if (user?.departmentId) {
-        fetchDivisions(user.departmentId);
-      } else {
-        setDivisions([]);
-      }
+    } else if (user?.departmentId) {
+      fetchDivisions(user.departmentId);
     } else {
-      setSelectedDepartmentId('');
       setDivisions([]);
-      fetchDepartments();
     }
   }, [open, isDispatcher, user?.departmentId]);
+
+  // Pre-fill division and user from file's intended recipient (inward desk one-click forward)
+  useEffect(() => {
+    if (!open || !fileId) return;
+    let cancelled = false;
+    api.get(`/files/${fileId}`)
+      .then((res) => {
+        if (cancelled) return;
+        const file = res.data as { intendedDivisionId?: string; intendedUserId?: string; intendedDivision?: { id: string }; intendedUser?: { id: string }; departmentId?: string };
+        const intendedDivId = file.intendedDivision?.id ?? file.intendedDivisionId ?? '';
+        const intendedUId = file.intendedUser?.id ?? file.intendedUserId ?? '';
+        if (intendedDivId) setDivisionId(intendedDivId);
+        if (intendedUId) setUserId(intendedUId);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [open, fileId]);
+
+  // Fetch departments when switching to external forwarding
+  useEffect(() => {
+    if (!open) return;
+    if (forwardType === 'external' && !isDispatcher && !isRestrictedRole) {
+      // When switching to external, fetch departments if not already loaded or loading
+      if (departments.length === 0 && !loadingDepartments) {
+        fetchDepartments();
+      }
+    }
+  }, [forwardType, open, isDispatcher, isRestrictedRole, departments.length, loadingDepartments]);
 
   useEffect(() => {
     // Dispatchers don't need divisions (file goes to department's inward desk)
@@ -185,11 +206,11 @@ export function ForwardFileModal({
   }, [selectedDepartmentId, forwardType, isRestrictedRole, isDispatcher, user?.departmentId]);
 
   useEffect(() => {
-    if (isDispatcher || (forwardType === 'internal' || isRestrictedRole)) {
+    if (isDispatcher) {
       setUsers([]);
       setUserId('');
       setReceiverCapacity(null);
-    } else if (forwardType === 'external' && divisionId && effectiveDepartmentId) {
+    } else if (divisionId && effectiveDepartmentId) {
       fetchUsers(effectiveDepartmentId, divisionId);
     } else {
       setUsers([]);
@@ -251,14 +272,25 @@ export function ForwardFileModal({
   };
 
   const fetchDivisions = async (deptId: string) => {
+    if (!deptId) {
+      setDivisions([]);
+      setDivisionId('');
+      setUserId('');
+      setUsers([]);
+      setLoadingDivisions(false);
+      return;
+    }
+    
     const cached = getCachedDivisions(deptId);
-    if (cached && Array.isArray(cached)) {
+    if (cached && Array.isArray(cached) && cached.length > 0) {
       setDivisions(cached as Division[]);
       setDivisionId('');
       setUserId('');
       setUsers([]);
+      setLoadingDivisions(false);
       return;
     }
+    
     setLoadingDivisions(true);
     setDivisionId('');
     setUserId('');
@@ -268,8 +300,11 @@ export function ForwardFileModal({
       const data = response.data ?? [];
       setDivisions(data);
       setCachedDivisions(deptId, data);
-    } catch {
-      toast.error('Failed to load divisions');
+    } catch (error: any) {
+      toast.error('Failed to load divisions', {
+        description: error.response?.data?.message || 'An error occurred',
+      });
+      setDivisions([]);
     } finally {
       setLoadingDivisions(false);
     }
@@ -291,20 +326,20 @@ export function ForwardFileModal({
   };
 
   const handleSubmit = async () => {
-    // For dispatchers, only department is required
     if (isDispatcher) {
       if (!selectedDepartmentId) {
         toast.error('Please select a department to forward the file');
         return;
       }
-    } else {
-      if (!divisionId) {
-        toast.error('Please select a division');
+    } else if (forwardType === 'external' && canForwardExternally) {
+      if (!selectedDepartmentId) {
+        toast.error('Please select a department to forward the file');
         return;
       }
-      // For external forwarding, userId is required; for internal, it's optional (auto-assigns to inward desk)
-      if (forwardType === 'external' && !userId) {
-        toast.error('Please select a recipient');
+    } else {
+      // Inside department: division mandatory
+      if (!divisionId) {
+        toast.error('Please select a division to forward the file');
         return;
       }
       if ((forwardType === 'internal' || isRestrictedRole) && !user?.departmentId) {
@@ -325,13 +360,15 @@ export function ForwardFileModal({
       };
 
       if (isDispatcher) {
-        // Dispatcher forwarding: only send department ID
         payload.toDepartmentId = selectedDepartmentId;
-        payload.toUserId = null; // Will be auto-assigned to department's inward desk
+        payload.toUserId = null;
+      } else if (forwardType === 'external' && canForwardExternally) {
+        payload.toDepartmentId = selectedDepartmentId;
+        payload.toDivisionId = divisionId || undefined;
+        payload.toUserId = userId || null;
       } else {
-        // Other roles: send division ID and user ID
         payload.toDivisionId = divisionId;
-        payload.toUserId = forwardType === 'internal' || isRestrictedRole ? null : userId;
+        payload.toUserId = userId || null;
       }
 
       await api.post(`/files/${fileId}/forward`, payload);
@@ -339,8 +376,14 @@ export function ForwardFileModal({
       const recipientText = isDispatcher
         ? `${selectedDepartment?.name} (inward desk)`
         : forwardType === 'internal' || isRestrictedRole
-        ? `${selectedDivision?.name} (inward desk)`
-        : `${selectedUser?.name} in ${selectedDivision?.name}`;
+        ? selectedUser
+          ? `to ${selectedUser.name} (via ${selectedDivision?.name} inward desk)`
+          : `${selectedDivision?.name} (inward desk)`
+        : selectedUser
+        ? `${selectedDivision?.name} → ${selectedUser.name}`
+        : selectedDivision
+        ? `${selectedDepartment?.name} → ${selectedDivision.name} (inward desk)`
+        : `${selectedDepartment?.name} (inward desk)`;
 
       toast.success('File forwarded successfully', {
         description: `Sent to ${recipientText}`,
@@ -366,17 +409,16 @@ export function ForwardFileModal({
       .slice(0, 2);
   };
 
-  // Dispatchers only show department selection (file goes to department's inward desk)
-  const canShowDivision = 
+  const canShowDivision =
     isDispatcher
-      ? false // Dispatchers don't select division
+      ? false
       : forwardType === 'internal' || isRestrictedRole
       ? !!user?.departmentId
       : !!selectedDepartmentId;
-  // For dispatchers, internal forwarding, or restricted roles, don't show user selection (will auto-assign to inward desk)
-  const canShowUser = !isDispatcher && forwardType === 'external' && !!divisionId;
-  // Show department selection for dispatchers or external forwarding
+  // Show user (optional) for both internal and external when division is selected
+  const canShowUser = !isDispatcher && !!divisionId;
   const canShowDepartment = isDispatcher || (forwardType === 'external' && !isRestrictedRole);
+  const divisionRequired = forwardType === 'internal' || isRestrictedRole;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -477,30 +519,38 @@ export function ForwardFileModal({
                   setUserId('');
                 }}
                 disabled={loading || loadingDepartments}
+                open={undefined} // Let Select manage its own open state
               >
-                <SelectTrigger className="h-11">
+                <SelectTrigger className="h-11 w-full">
                   {loadingDepartments ? (
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Loading departments...
                     </div>
+                  ) : selectedDepartment ? (
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-blue-100 text-blue-600 text-xs font-medium">
+                        {selectedDepartment.code || selectedDepartment.name.charAt(0)}
+                      </div>
+                      <span className="truncate">{selectedDepartment.name}</span>
+                    </div>
                   ) : (
                     <SelectValue placeholder={isDispatcher ? "Choose a department to forward to" : "Choose a department to forward to"} />
                   )}
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[100] max-h-60 min-w-[var(--radix-select-trigger-width)]" position="popper" sideOffset={4}>
                   {departments.length === 0 ? (
                     <div className="p-4 text-center text-sm text-muted-foreground">
                       No departments available
                     </div>
                   ) : (
                     departments.map((dept) => (
-                      <SelectItem key={dept.id} value={dept.id}>
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-6 w-6 items-center justify-center rounded bg-blue-100 text-blue-600 text-xs font-medium">
+                      <SelectItem key={dept.id} value={dept.id} className="py-2.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-blue-100 text-blue-600 text-xs font-medium">
                             {dept.code || dept.name.charAt(0)}
                           </div>
-                          {dept.name}
+                          <span className="truncate">{dept.name}</span>
                         </div>
                       </SelectItem>
                     ))
@@ -509,7 +559,12 @@ export function ForwardFileModal({
               </Select>
               {isDispatcher && selectedDepartmentId && (
                 <p className="text-xs text-muted-foreground">
-                  File will be automatically assigned to the inward desk of the selected department.
+                  File will be assigned to the inward desk of the selected department.
+                </p>
+              )}
+              {!isDispatcher && forwardType === 'external' && canForwardExternally && (
+                <p className="text-xs text-muted-foreground">
+                  Division and user are optional; file will enter the department inward desk. Inward can then forward to division/user in one click.
                 </p>
               )}
             </div>
@@ -518,12 +573,14 @@ export function ForwardFileModal({
           {canShowDivision && (
             <div className="space-y-2">
               <Label className="flex items-center gap-2 text-sm font-medium">
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-                {forwardType === 'internal' || isRestrictedRole
-                  ? 'Select Division (within your department) - File will go to division\'s inward desk'
-                  : 'Select Division'}
-                <Badge variant="secondary" className="ml-auto text-xs">
-                  Required
+                <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="min-w-0 truncate">
+                  {forwardType === 'internal' || isRestrictedRole
+                    ? 'Select Division (file will go to division inward desk)'
+                    : 'Select Division'}
+                </span>
+                <Badge variant={divisionRequired ? 'secondary' : 'outline'} className="ml-auto text-xs shrink-0">
+                  {divisionRequired ? 'Required' : 'Optional'}
                 </Badge>
               </Label>
               <Select
@@ -532,47 +589,59 @@ export function ForwardFileModal({
                   setDivisionId(value);
                   setUserId('');
                 }}
-                disabled={loading || loadingDivisions}
+                disabled={loading || loadingDivisions || (forwardType === 'external' && !selectedDepartmentId)}
               >
-                <SelectTrigger className="h-11">
+                <SelectTrigger className="h-11 w-full min-w-0">
                   {loadingDivisions ? (
                     <div className="flex items-center gap-2 text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading divisions...
+                      <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                      <span>Loading divisions...</span>
+                    </div>
+                  ) : selectedDivision ? (
+                    <div className="flex items-center gap-2 min-w-0 w-full">
+                      <span className="shrink-0 w-7 text-center rounded bg-blue-100 text-blue-600 text-xs font-medium py-0.5">
+                        {selectedDivision.code || selectedDivision.name.charAt(0)}
+                      </span>
+                      <span className="truncate min-w-0">{selectedDivision.name}</span>
                     </div>
                   ) : (
                     <SelectValue placeholder="Choose a division to forward to" />
                   )}
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[100] max-h-60 min-w-[var(--radix-select-trigger-width)] w-[var(--radix-select-trigger-width)]" position="popper" sideOffset={4}>
                   {divisions.length === 0 ? (
                     <div className="p-4 text-center text-sm text-muted-foreground">
                       No divisions available
                     </div>
                   ) : (
                     divisions.map((division) => (
-                      <SelectItem key={division.id} value={division.id}>
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-6 w-6 items-center justify-center rounded bg-blue-100 text-blue-600 text-xs font-medium">
+                      <SelectItem key={division.id} value={division.id} className="py-2.5 focus:bg-muted">
+                        <div className="flex items-center gap-2 min-w-0 w-full">
+                          <span className="shrink-0 w-7 text-center rounded bg-blue-100 text-blue-600 text-xs font-medium py-0.5">
                             {division.code || division.name.charAt(0)}
-                          </div>
-                          {division.name}
+                          </span>
+                          <span className="truncate min-w-0 flex-1">{division.name}</span>
                         </div>
                       </SelectItem>
                     ))
                   )}
                 </SelectContent>
               </Select>
+              {divisionRequired && (
+                <p className="text-xs text-muted-foreground">
+                  User is optional; file will go to division inward desk. If user is selected, inward will see it and can forward in one click.
+                </p>
+              )}
             </div>
           )}
 
           {canShowUser && (
-            <div className="space-y-2">
+            <div className="space-y-2 relative z-10">
               <Label className="flex items-center gap-2 text-sm font-medium">
-                <Users className="h-4 w-4 text-muted-foreground" />
+                <Users className="h-4 w-4 text-muted-foreground shrink-0" />
                 Select Recipient
-                <Badge variant="secondary" className="ml-auto text-xs">
-                  Required
+                <Badge variant="outline" className="ml-auto text-xs shrink-0">
+                  Optional
                 </Badge>
               </Label>
               <Select
@@ -580,7 +649,7 @@ export function ForwardFileModal({
                 onValueChange={setUserId}
                 disabled={loading || loadingUsers}
               >
-                <SelectTrigger className={cn('h-11', !divisionId && 'opacity-60')}>
+                <SelectTrigger className={cn('h-11 w-full', !divisionId && 'opacity-60')}>
                   {loadingUsers ? (
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -590,7 +659,7 @@ export function ForwardFileModal({
                     <SelectValue placeholder="Choose who will receive this file" />
                   )}
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[100] max-h-60" position="popper" sideOffset={4}>
                   {users.length === 0 ? (
                     <div className="p-4 text-center text-sm text-muted-foreground">
                       No users in this division
@@ -711,13 +780,8 @@ export function ForwardFileModal({
             onClick={handleSubmit}
             disabled={
               loading ||
-              // For dispatchers, only department is required
               (isDispatcher && !selectedDepartmentId) ||
-              // For others, division is required
-              (!isDispatcher && !divisionId) ||
-              // For external forwarding (non-dispatcher), userId is required
-              // For internal forwarding or restricted roles, userId is optional (auto-assigned to inward desk)
-              (!isDispatcher && canForwardExternally && forwardType === 'external' && !userId) ||
+              (!isDispatcher && (forwardType === 'external' && canForwardExternally ? !selectedDepartmentId : !divisionId)) ||
               (isInwardDesk && !user?.departmentId)
             }
             className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 min-w-[120px]"

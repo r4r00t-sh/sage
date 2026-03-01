@@ -142,7 +142,7 @@ export function CommandPalette() {
     },
   ];
 
-  if (hasAnyRole(user, ['SUPER_ADMIN', 'DEPT_ADMIN'])) {
+  if (hasAnyRole(user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
     commands.push(
       { id: 'nav-users', label: 'Manage Users', icon: Users, action: () => navigate('/admin/users'), keywords: ['admin', 'staff'] },
       { id: 'nav-analytics', label: 'Analytics', icon: BarChart, action: () => navigate('/admin/analytics'), keywords: ['reports', 'stats'] },

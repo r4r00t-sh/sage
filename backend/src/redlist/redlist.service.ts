@@ -102,6 +102,7 @@ export class RedListService {
       const admins = await this.prisma.user.findMany({
         where: {
           OR: [
+            { roles: { has: 'DEVELOPER' } },
             { roles: { has: 'SUPER_ADMIN' } },
             { roles: { has: 'DEPT_ADMIN' }, departmentId: file.departmentId },
           ],

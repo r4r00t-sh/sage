@@ -11,6 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { UserProfileLink, DepartmentProfileLink, DivisionProfileLink } from '@/components/profile-links';
 import {
   ArrowLeft,
   FileText,
@@ -180,10 +181,10 @@ export default function FileTraceroutePage() {
         </Button>
       </div>
 
-      {/* Split Layout: 80% Left (Flowchart) | 20% Right (Details) */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Side - 80% - Flowchart */}
-        <div className="flex-[0.8] flex flex-col border-r bg-muted/20">
+      {/* Split: Traceroute (flex) | Document Details (fixed min width, always visible) */}
+      <div className="flex-1 flex overflow-hidden min-h-0">
+        {/* Left - Traceroute: takes remaining space, scrolls horizontally */}
+        <div className="flex-1 min-w-0 flex flex-col border-r bg-muted/20">
           <div className="p-6 border-b bg-background">
             <div className="flex items-center justify-between">
               <div>
@@ -209,15 +210,12 @@ export default function FileTraceroutePage() {
             </div>
           </div>
 
-          {/* Vertical timeline - single column, aligned */}
-          <ScrollArea className="flex-1">
-            <div ref={scrollRef} className="p-8 max-w-2xl mx-auto">
-              <div className="relative">
-                {/* Vertical line running down the left */}
-                <div
-                  className="absolute left-6 top-6 bottom-6 w-0.5 bg-gradient-to-b from-muted-foreground/30 via-muted-foreground/20 to-transparent"
-                  aria-hidden
-                />
+          {/* Horizontal timeline - scrollable from left (creation) to right (current) */}
+          <div className="flex-1 overflow-x-auto">
+            <div
+              ref={scrollRef}
+              className="p-6 inline-flex items-stretch gap-4"
+            >
                 {timelineSteps.map((step, index) => {
                   const isLast = index === timelineSteps.length - 1;
                   const actionCfg = actionConfig[step.action] || actionConfig.FORWARDED;
@@ -225,10 +223,10 @@ export default function FileTraceroutePage() {
                   return (
                     <div
                       key={step.id}
-                      className="relative flex gap-6 pb-8 last:pb-0"
+                      className="flex flex-col items-stretch w-[220px] sm:w-[260px] flex-shrink-0"
                     >
-                      {/* Circle + connector */}
-                      <div className="relative flex flex-col items-center flex-shrink-0 z-10">
+                      {/* Top icon row with horizontal connector */}
+                      <div className="flex items-center mb-3">
                         <div
                           className={cn(
                             'h-12 w-12 rounded-full flex items-center justify-center border-2 bg-background shadow-md',
@@ -248,14 +246,14 @@ export default function FileTraceroutePage() {
                           </div>
                         </div>
                         {!isLast && (
-                          <div className="w-0.5 flex-1 min-h-[24px] bg-muted-foreground/25 mt-1" />
+                          <div className="h-0.5 flex-1 bg-muted-foreground/25 ml-2 rounded-full" />
                         )}
                       </div>
 
                       {/* Card */}
                       <div
                         className={cn(
-                          'flex-1 min-w-0 rounded-lg border bg-card p-4 shadow-sm',
+                          'flex-1 rounded-lg border bg-card p-4 shadow-sm',
                           isLast && `ring-2 ${actionCfg.borderColor}`,
                         )}
                       >
@@ -281,7 +279,7 @@ export default function FileTraceroutePage() {
                           </span>
                         </div>
                         <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
-                          {step.remarks || (step.isCreation ? `By ${file.createdBy.name}` : '—')}
+                          {step.remarks || (step.isCreation ? <>By <UserProfileLink userId={file.createdBy.id} name={file.createdBy.name} /></> : '—')}
                         </p>
                         <p className="text-xs text-muted-foreground/80 mt-2">
                           Step {index + 1} of {timelineSteps.length}
@@ -290,9 +288,8 @@ export default function FileTraceroutePage() {
                     </div>
                   );
                 })}
-              </div>
             </div>
-          </ScrollArea>
+          </div>
 
           {/* Legend - Fixed at bottom */}
           <div className="border-t px-6 py-3 bg-background">
@@ -329,8 +326,8 @@ export default function FileTraceroutePage() {
           </div>
         </div>
 
-        {/* Right Side - 20% - Document Details */}
-        <div className="flex-[0.2] flex flex-col bg-background overflow-hidden">
+        {/* Right - Document Details: fixed min width so full panel is visible without horizontal scroll */}
+        <div className="w-[380px] min-w-[380px] max-w-[420px] flex flex-col bg-background overflow-hidden shrink-0">
           <div className="p-6 border-b">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <FileText className="h-5 w-5 text-primary" />
@@ -376,7 +373,9 @@ export default function FileTraceroutePage() {
                 </label>
                 <div className="space-y-1">
                   <p className="text-sm font-semibold">{file.department.code}</p>
-                  <p className="text-xs text-muted-foreground">{file.department.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    <DepartmentProfileLink departmentId={file.department.id} name={file.department.name} />
+                  </p>
                 </div>
               </div>
 
@@ -389,7 +388,11 @@ export default function FileTraceroutePage() {
                   Current Location
                 </label>
                 <p className="text-sm font-medium">
-                  {file.currentDivision?.name || (
+                  {file.currentDivision && file.department?.id ? (
+                    <DivisionProfileLink departmentId={file.department.id} divisionId={file.currentDivision.id} name={file.currentDivision.name} />
+                  ) : file.currentDivision?.name ? (
+                    file.currentDivision.name
+                  ) : (
                     <span className="text-muted-foreground italic">Not assigned</span>
                   )}
                 </p>
@@ -404,7 +407,9 @@ export default function FileTraceroutePage() {
                   Assigned To
                 </label>
                 <p className="text-sm font-medium">
-                  {file.assignedTo?.name || (
+                  {file.assignedTo ? (
+                    <UserProfileLink userId={file.assignedTo.id} name={file.assignedTo.name} />
+                  ) : (
                     <span className="text-muted-foreground italic">Unassigned</span>
                   )}
                 </p>
@@ -418,7 +423,9 @@ export default function FileTraceroutePage() {
                   <User className="h-3.5 w-3.5" />
                   Created By
                 </label>
-                <p className="text-sm font-medium">{file.createdBy.name}</p>
+                <p className="text-sm font-medium">
+                  <UserProfileLink userId={file.createdBy.id} name={file.createdBy.name} />
+                </p>
               </div>
 
               <Separator />

@@ -49,7 +49,7 @@ import api from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store';
-import { hasRole } from '@/lib/auth-utils';
+import { hasRole, hasGodRole } from '@/lib/auth-utils';
 import { format } from 'date-fns';
 
 interface DashboardAnalytics {
@@ -171,7 +171,7 @@ export default function AnalyticsDashboardPage() {
       setBottleneckData(bottleRes.data);
       
       // Only super admin can see all departments
-      if (hasRole(user, 'SUPER_ADMIN')) {
+      if (hasGodRole(user)) {
         const deptRes = await api.get('/analytics/departments');
         setDepartmentAnalytics(deptRes.data);
       }
@@ -657,7 +657,7 @@ export default function AnalyticsDashboardPage() {
 
         {/* Departments Tab */}
         <TabsContent value="departments" className="space-y-6">
-          {hasRole(user, 'SUPER_ADMIN') ? (
+          {hasGodRole(user) ? (
             <div className="grid gap-4">
               {departmentAnalytics.map((dept) => (
                 <Card key={dept.id}>

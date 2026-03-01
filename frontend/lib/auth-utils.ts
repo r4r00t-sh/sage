@@ -17,3 +17,8 @@ export function hasAnyRole(user: { roles?: string[]; role?: string } | null | un
   const userRoles = getRoles(user);
   return roles.some((r) => userRoles.includes(r));
 }
+
+/** God-level: developer or super admin (full app access). */
+export function hasGodRole(user: { roles?: string[]; role?: string } | null | undefined): boolean {
+  return hasAnyRole(user, ['DEVELOPER', 'SUPER_ADMIN']);
+}

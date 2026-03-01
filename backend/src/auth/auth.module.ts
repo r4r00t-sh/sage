@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
+import { RbacService } from './rbac.service';
 import { GamificationModule } from '../gamification/gamification.module';
 import { PresenceModule } from '../presence/presence.module';
 import { JwtModuleOptions } from '@nestjs/jwt';
@@ -28,7 +29,7 @@ import { JwtModuleOptions } from '@nestjs/jwt';
     PresenceModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService, JwtModule],
+  providers: [AuthService, JwtStrategy, RbacService],
+  exports: [AuthService, RbacService, JwtModule],
 })
 export class AuthModule {}

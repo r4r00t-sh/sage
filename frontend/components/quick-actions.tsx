@@ -122,10 +122,15 @@ export function QuickActions({
     }
   };
 
-  const canApprove = ['SECTION_OFFICER', 'APPROVAL_AUTHORITY', 'DEPT_ADMIN', 'SUPER_ADMIN'].includes(userRole);
-  const canReject = ['SECTION_OFFICER', 'APPROVAL_AUTHORITY', 'DEPT_ADMIN', 'SUPER_ADMIN'].includes(userRole);
-  const canHold = ['SECTION_OFFICER', 'DEPT_ADMIN', 'SUPER_ADMIN'].includes(userRole);
-  const canReturn = ['SECTION_OFFICER', 'APPROVAL_AUTHORITY', 'DEPT_ADMIN', 'SUPER_ADMIN'].includes(userRole);
+  const canApprove = ['SECTION_OFFICER', 'APPROVAL_AUTHORITY', 'DEPT_ADMIN', 'SUPER_ADMIN', 'DEVELOPER'].includes(userRole);
+  const canReject = ['SECTION_OFFICER', 'APPROVAL_AUTHORITY', 'DEPT_ADMIN', 'SUPER_ADMIN', 'DEVELOPER'].includes(userRole);
+  const canHold = ['SECTION_OFFICER', 'DEPT_ADMIN', 'SUPER_ADMIN', 'DEVELOPER'].includes(userRole);
+  const canReturn = ['SECTION_OFFICER', 'APPROVAL_AUTHORITY', 'DEPT_ADMIN', 'SUPER_ADMIN', 'DEVELOPER'].includes(userRole);
+
+  // SAGE: Submit = upward (Section Officer → Dept Admin → Approving Authority); Approve = final sign-off only
+  const isApprovingAuthority = userRole === 'APPROVAL_AUTHORITY';
+  const isUpwardSubmit = ['SECTION_OFFICER', 'DEPT_ADMIN'].includes(userRole);
+  const submitOrApproveLabel = isApprovingAuthority ? 'Approve' : isUpwardSubmit ? 'Submit' : 'Approve / Forward';
 
   return (
     <>
@@ -176,19 +181,19 @@ export function QuickActions({
           </Button>
         )}
 
-        {/* Approve / Forward */}
+        {/* Submit (upward) or Approve (final) */}
         {canApprove && (
           <Button
             onClick={() => setShowForwardDialog(true)}
             disabled={loading !== null}
-            className="gap-2 bg-green-600 hover:bg-green-700"
+            className="gap-2 bg-green-600 hover:bg-green-700 transition-all duration-200 hover:shadow-md"
           >
             {loading === 'approve' || loading === 'approve-and-forward' ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <CheckCircle className="h-4 w-4" />
             )}
-            Approve / Forward
+            {submitOrApproveLabel}
           </Button>
         )}
 
@@ -394,30 +399,28 @@ export function QuickActions({
               Cancel
             </Button>
             <Button
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-green-600 hover:bg-green-700 transition-all duration-200 hover:shadow-md"
               onClick={async () => {
-                // For SECTION_OFFICER and APPROVAL_AUTHORITY, use the one-click approve-and-forward
-                if (['SECTION_OFFICER', 'APPROVAL_AUTHORITY'].includes(userRole)) {
+                if (['SECTION_OFFICER', 'DEPT_ADMIN', 'APPROVAL_AUTHORITY'].includes(userRole)) {
                   setLoading('approve-and-forward');
                   try {
                     const response = await api.post(`/files/${fileId}/approve-and-forward`, {
                       remarks: remarks || undefined,
                     });
-                    toast.success('File approved and forwarded successfully', {
+                    toast.success(isApprovingAuthority ? 'File approved and sent to Dispatch' : 'File submitted successfully', {
                       description: `Forwarded to ${response.data.forwardedTo} (${response.data.forwardedToRole})`,
                     });
                     onActionComplete();
                     resetDialogs();
                   } catch (error: unknown) {
                     const err = error as { response?: { data?: { message?: string } } };
-                    toast.error('Failed to approve and forward file', {
+                    toast.error(isApprovingAuthority ? 'Failed to approve file' : 'Failed to submit file', {
                       description: err.response?.data?.message,
                     });
                   } finally {
                     setLoading(null);
                   }
                 } else {
-                  // For other roles, just approve
                   performAction('approve');
                 }
               }}
@@ -426,7 +429,7 @@ export function QuickActions({
               {loading === 'approve' || loading === 'approve-and-forward' ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Approve & Forward
+              {isApprovingAuthority ? 'Approve' : 'Submit'}
             </Button>
           </DialogFooter>
         </DialogContent>

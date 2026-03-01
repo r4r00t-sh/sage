@@ -63,6 +63,7 @@ import {
   FileSearch,
   Activity,
   BookOpen,
+  LifeBuoy,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -88,6 +89,7 @@ const navigation = {
       title: 'Other',
       items: [
         { name: 'Documentation', href: '/docs', icon: BookOpen },
+        { name: 'My tickets', href: '/support', icon: LifeBuoy },
         { name: 'Settings', href: '/settings', icon: Settings },
       ],
     },
@@ -113,6 +115,7 @@ const navigation = {
       title: 'Other',
       items: [
         { name: 'Documentation', href: '/docs', icon: BookOpen },
+        { name: 'My tickets', href: '/support', icon: LifeBuoy },
         { name: 'Settings', href: '/settings', icon: Settings },
       ],
     },
@@ -138,6 +141,7 @@ const navigation = {
       title: 'Other',
       items: [
         { name: 'Documentation', href: '/docs', icon: BookOpen },
+        { name: 'My tickets', href: '/support', icon: LifeBuoy },
         { name: 'Settings', href: '/settings', icon: Settings },
       ],
     },
@@ -255,13 +259,69 @@ const navigation = {
           },
           { name: 'Workflows', href: '/admin/workflows', icon: GitBranch },
           { name: 'Users', href: '/admin/users', icon: Users },
+          { name: 'Departments', href: '/admin/departments', icon: Building2 },
           { name: 'Documents', href: '/admin/documents', icon: FileStack },
+          { name: 'Support Panel', href: '/support?supportView=true', icon: LifeBuoy },
         ],
       },
     {
       title: 'Other',
       items: [
         { name: 'Documentation', href: '/docs', icon: BookOpen },
+        { name: 'My tickets', href: '/support', icon: LifeBuoy },
+        { name: 'Settings', href: '/settings', icon: Settings },
+      ],
+    },
+  ],
+  DEVELOPER: [
+    {
+      title: 'Platform',
+      items: [
+        { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        {
+          name: 'Files',
+          icon: FolderOpen,
+          children: [
+            { name: 'New File', href: '/files/new', icon: FilePlus },
+            { name: 'Inbox', href: '/files/inbox', icon: Inbox },
+            { name: 'Track File', href: '/files/track', icon: MapPin },
+          ],
+        },
+        { name: 'Opinion Inbox', href: '/opinions/inbox', icon: MessageSquare },
+        {
+          name: 'Analytics',
+          icon: BarChart3,
+          children: [
+            { name: 'Overview', href: '/admin/analytics', icon: BarChart3 },
+            { name: 'Desk Performance', href: '/admin/analytics/desk-performance', icon: Activity },
+          ],
+        },
+      ],
+    },
+    {
+      title: 'Admin',
+      items: [
+        {
+          name: 'Desk Management',
+          icon: Monitor,
+          children: [
+            { name: 'Active Desk', href: '/admin/desk', icon: Monitor },
+            { name: 'Desk Capacity', href: '/admin/desks', icon: Building2 },
+          ],
+        },
+        { name: 'Workflows', href: '/admin/workflows', icon: GitBranch },
+        { name: 'Users', href: '/admin/users', icon: Users },
+        { name: 'Departments', href: '/admin/departments', icon: Building2 },
+        { name: 'Documents', href: '/admin/documents', icon: FileStack },
+        { name: 'Recall Protocol', href: '/admin/recall', icon: AlertTriangle },
+        { name: 'Support Panel', href: '/support?supportView=true', icon: LifeBuoy },
+      ],
+    },
+    {
+      title: 'Other',
+      items: [
+        { name: 'Documentation', href: '/docs', icon: BookOpen },
+        { name: 'My tickets', href: '/support', icon: LifeBuoy },
         { name: 'Settings', href: '/settings', icon: Settings },
       ],
     },
@@ -304,14 +364,34 @@ const navigation = {
         },
         { name: 'Workflows', href: '/admin/workflows', icon: GitBranch },
         { name: 'Users', href: '/admin/users', icon: Users },
+        { name: 'Departments', href: '/admin/departments', icon: Building2 },
         { name: 'Documents', href: '/admin/documents', icon: FileStack },
         { name: 'Recall Protocol', href: '/admin/recall', icon: AlertTriangle },
+        { name: 'Support Panel', href: '/support?supportView=true', icon: LifeBuoy },
       ],
     },
     {
       title: 'Other',
       items: [
         { name: 'Documentation', href: '/docs', icon: BookOpen },
+        { name: 'My tickets', href: '/support', icon: LifeBuoy },
+        { name: 'Settings', href: '/settings', icon: Settings },
+      ],
+    },
+  ],
+  SUPPORT: [
+    {
+      title: 'Platform',
+      items: [
+        { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        { name: 'Support Panel', href: '/support?supportView=true', icon: LifeBuoy },
+      ],
+    },
+    {
+      title: 'Other',
+      items: [
+        { name: 'Documentation', href: '/docs', icon: BookOpen },
+        { name: 'My tickets', href: '/support', icon: LifeBuoy },
         { name: 'Settings', href: '/settings', icon: Settings },
       ],
     },
@@ -361,15 +441,12 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r">
       <SidebarHeader className="h-14 flex items-center justify-start border-b px-4 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2">
         <div className="flex items-center gap-3 group-data-[collapsible=icon]:gap-0">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:w-9">
             <img
-              src="/logo.png"
-              alt="EFMP"
-              className="h-11 w-11 object-contain group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8"
+              src="/logo.png?v=2"
+              alt="SAGE"
+              className="h-11 w-11 object-contain group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:w-9"
             />
-          </div>
-          <div className="flex flex-col gap-0 overflow-hidden group-data-[collapsible=icon]:hidden">
-            <span className="text-lg font-extrabold truncate leading-tight tracking-tight">EFMP</span>
           </div>
         </div>
       </SidebarHeader>

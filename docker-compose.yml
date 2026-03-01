@@ -99,8 +99,8 @@ services:
       JWT_EXPIRES_IN: "7d"
       PORT: 3001
       NODE_ENV: production
-      FRONTEND_URL: "https://efmp.santhigiri.cloud"
-      ALLOWED_ORIGINS: "https://efmp.santhigiri.cloud,http://efmp.santhigiri.cloud"
+      FRONTEND_URL: "https://sage.santhigiri.cloud"
+      ALLOWED_ORIGINS: "https://sage.santhigiri.cloud,http://sage.santhigiri.cloud"
     depends_on:
       postgres:
         condition: service_healthy
@@ -135,12 +135,12 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: "https://efmp.santhigiri.cloud/api"
+        NEXT_PUBLIC_API_URL: "https://sage.santhigiri.cloud/api"
     container_name: efiling-frontend
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: "https://efmp.santhigiri.cloud/api"
+      NEXT_PUBLIC_API_URL: "https://sage.santhigiri.cloud/api"
     depends_on:
       - backend
     networks:

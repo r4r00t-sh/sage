@@ -1,15 +1,28 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  Panel,
+  ReactFlowProvider,
+  useNodesState,
+  useEdgesState,
+  type Node,
+  type Edge,
+  type Connection,
+  type OnNodesDelete,
+  type OnEdgesDelete,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Separator } from '@/components/ui/separator';
 import {
   Dialog,
   DialogContent,
@@ -25,24 +38,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   ArrowLeft,
   Plus,
-  Save,
   Play,
-  Eye,
   Settings,
   GitBranch,
-  Circle,
-  Square,
-  Diamond,
-  Hexagon,
   CheckCircle,
   AlertCircle,
   Trash2,
@@ -51,12 +53,15 @@ import {
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import WorkflowNodeComponent from './WorkflowNodeComponent';
 
 interface WorkflowNode {
   id: string;
   nodeType?: string;
   label?: string;
   description?: string;
+  positionX?: number | null;
+  positionY?: number | null;
   [key: string]: unknown;
 }
 
@@ -165,9 +170,18 @@ export default function WorkflowBuilderPage() {
     }
   };
 
+  const defaultNewNodePosition = useMemo(() => {
+    const count = workflow?.nodes?.length ?? 0;
+    return { positionX: 200, positionY: 150 + count * 110 };
+  }, [workflow?.nodes?.length]);
+
   const addNode = async () => {
     try {
-      await api.post(`/workflows/${workflowId}/nodes`, nodeForm);
+      await api.post(`/workflows/${workflowId}/nodes`, {
+        ...nodeForm,
+        positionX: defaultNewNodePosition.positionX,
+        positionY: defaultNewNodePosition.positionY,
+      });
       toast.success('Node added successfully');
       setShowAddNodeDialog(false);
       fetchWorkflow();
@@ -213,6 +227,97 @@ export default function WorkflowBuilderPage() {
     }
   };
 
+  const handleNodeDragStop = useCallback(
+    async (_event: React.MouseEvent, node: Node, _nodes: Node[]) => {
+      const pos = node.position;
+      try {
+        await api.patch(`/workflows/nodes/${node.id}`, {
+          positionX: pos.x,
+          positionY: pos.y,
+        });
+        fetchWorkflow();
+      } catch {
+        toast.error('Failed to update node position');
+      }
+    },
+    [workflowId]
+  );
+
+  const handleConnect = useCallback(
+    async (params: Connection) => {
+      if (!params.source || !params.target) return;
+      try {
+        await api.post(`/workflows/${workflowId}/edges`, {
+          sourceNodeId: params.source,
+          targetNodeId: params.target,
+        });
+        toast.success('Connection added');
+        fetchWorkflow();
+      } catch {
+        toast.error('Failed to add connection');
+      }
+    },
+    [workflowId]
+  );
+
+  const handleNodesDelete: OnNodesDelete = useCallback(
+    async (nodesToDelete) => {
+      for (const node of nodesToDelete) {
+        try {
+          await api.delete(`/workflows/nodes/${node.id}`);
+        } catch {
+          toast.error(`Failed to delete node ${node.id}`);
+        }
+      }
+      if (nodesToDelete.length) fetchWorkflow();
+    },
+    []
+  );
+
+  const handleEdgesDelete: OnEdgesDelete = useCallback(
+    async (edgesToDelete) => {
+      for (const edge of edgesToDelete) {
+        if (edge.id) {
+          try {
+            await api.delete(`/workflows/edges/${edge.id}`);
+          } catch {
+            toast.error(`Failed to delete connection`);
+          }
+        }
+      }
+      if (edgesToDelete.length) fetchWorkflow();
+    },
+    []
+  );
+
+  const nodeTypes = useMemo(() => ({ workflow: WorkflowNodeComponent }), []);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+
+  useEffect(() => {
+    if (!workflow?.nodes) return;
+    const flowNodes: Node[] = workflow.nodes.map((n) => ({
+      id: n.id,
+      type: 'workflow' as const,
+      position: { x: n.positionX ?? 0, y: n.positionY ?? 0 },
+      data: {
+        label: n.label,
+        nodeType: n.nodeType,
+        description: n.description,
+        onDelete: (nodeId: string) => deleteNode(nodeId),
+      },
+    }));
+    const flowEdges: Edge[] = (workflow.edges ?? []).map((e) => ({
+      id: e.id as string,
+      source: e.sourceNodeId,
+      target: e.targetNodeId,
+      label: e.label,
+    }));
+    setNodes(flowNodes);
+    setEdges(flowEdges);
+  }, [workflow?.nodes, workflow?.edges]);
+
   const resetNodeForm = () => {
     setNodeForm({
       nodeId: '',
@@ -233,16 +338,6 @@ export default function WorkflowBuilderPage() {
       label: '',
       condition: null,
     });
-  };
-
-  const getNodeIcon = (nodeType: string) => {
-    switch (nodeType) {
-      case 'start': return Circle;
-      case 'task': return Square;
-      case 'decision': return Diamond;
-      case 'end': return Hexagon;
-      default: return Circle;
-    }
   };
 
   if (loading) {
@@ -337,141 +432,45 @@ export default function WorkflowBuilderPage() {
         </Card>
       )}
 
-      {/* Tabs */}
-      <Tabs defaultValue="nodes" className="space-y-6">
+      {/* Canvas + Settings Tabs */}
+      <Tabs defaultValue="canvas" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="nodes">Nodes ({workflow.nodes?.length || 0})</TabsTrigger>
-          <TabsTrigger value="edges">Connections ({workflow.edges?.length || 0})</TabsTrigger>
+          <TabsTrigger value="canvas">Canvas</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
 
-        {/* Nodes Tab */}
-        <TabsContent value="nodes" className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={() => setShowAddNodeDialog(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Node
-            </Button>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {workflow.nodes?.map((node: WorkflowNode) => {
-              const NodeIcon = getNodeIcon((node.nodeType as string) ?? 'task');
-              return (
-                <Card key={node.id}>
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className={cn(
-                          "h-10 w-10 rounded-lg flex items-center justify-center",
-                          node.nodeType === 'start' && 'bg-emerald-500/10',
-                          node.nodeType === 'task' && 'bg-blue-500/10',
-                          node.nodeType === 'decision' && 'bg-amber-500/10',
-                          node.nodeType === 'end' && 'bg-slate-500/10',
-                        )}>
-                          <NodeIcon className={cn(
-                            "h-5 w-5",
-                            node.nodeType === 'start' && 'text-emerald-600',
-                            node.nodeType === 'task' && 'text-blue-600',
-                            node.nodeType === 'decision' && 'text-amber-600',
-                            node.nodeType === 'end' && 'text-slate-600',
-                          )} />
-                        </div>
-                        <div>
-                          <p className="font-medium">{node.label != null ? String(node.label) : ''}</p>
-                          <Badge variant="outline" className="text-xs capitalize mt-1">
-                            {node.nodeType != null ? String(node.nodeType) : ''}
-                          </Badge>
-                        </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => deleteNode(node.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-
-                    {node.description != null && (
-                      <p className="text-xs text-muted-foreground mb-2">{String(node.description)}</p>
-                    )}
-
-                    {node.assigneeType != null && (
-                      <div className="text-xs">
-                        <span className="text-muted-foreground">Assignee: </span>
-                        <span className="font-medium capitalize">{String(node.assigneeType)}</span>
-                        {node.assigneeValue != null && ` (${String(node.assigneeValue)})`}
-                      </div>
-                    )}
-
-                    {node.timeLimit != null && (
-                      <div className="text-xs mt-1">
-                        <span className="text-muted-foreground">Time Limit: </span>
-                        <span className="font-medium">{Math.floor(Number(node.timeLimit) / 3600)}h</span>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
+        <TabsContent value="canvas" className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Drag nodes to move. Drag from a node&apos;s bottom handle to another&apos;s top to connect. Delete with the node trash icon or select and press Backspace.
+          </p>
+          <div className="rounded-lg border bg-muted/30 h-[600px]">
+            <ReactFlowProvider>
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onNodeDragStop={handleNodeDragStop}
+                onConnect={handleConnect}
+                onNodesDelete={handleNodesDelete}
+                onEdgesDelete={handleEdgesDelete}
+                nodeTypes={nodeTypes}
+                fitView
+                className="bg-background"
+              >
+                <Background />
+                <Controls />
+                <Panel position="top-left" className="m-2">
+                  <Button size="sm" onClick={() => setShowAddNodeDialog(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Node
+                  </Button>
+                </Panel>
+              </ReactFlow>
+            </ReactFlowProvider>
           </div>
         </TabsContent>
 
-        {/* Edges Tab */}
-        <TabsContent value="edges" className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={() => setShowAddEdgeDialog(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Connection
-            </Button>
-          </div>
-
-          <Card>
-            <CardContent className="p-0">
-              <div className="divide-y">
-                {workflow.edges?.map((edge: WorkflowEdge) => {
-                  const sourceNode = workflow.nodes?.find((n: WorkflowNode) => n.id === edge.sourceNodeId);
-                  const targetNode = workflow.nodes?.find((n: WorkflowNode) => n.id === edge.targetNodeId);
-                  
-                  return (
-                    <div key={String(edge.id ?? '')} className="p-4 flex items-center justify-between hover:bg-muted/50">
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline">{sourceNode?.label != null ? String(sourceNode.label) : 'Unknown'}</Badge>
-                          <span className="text-muted-foreground">→</span>
-                          <Badge variant="outline">{targetNode?.label != null ? String(targetNode.label) : 'Unknown'}</Badge>
-                        </div>
-                        {edge.label != null && (
-                          <span className="text-sm text-muted-foreground">
-                            {'\u0022'}{String(edge.label)}{'\u0022'}
-                          </span>
-                        )}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => deleteEdge(edge.id as string)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  );
-                })}
-                {(!workflow.edges || workflow.edges.length === 0) && (
-                  <div className="p-12 text-center text-muted-foreground">
-                    <GitBranch className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No connections yet</p>
-                    <p className="text-sm">Add connections to link nodes together</p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Settings Tab */}
         <TabsContent value="settings">
           <Card>
             <CardHeader>

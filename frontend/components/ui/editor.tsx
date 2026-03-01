@@ -18,7 +18,18 @@ import {
   Quote,
   Undo,
   Redo,
+  SpellCheck,
+  Loader2,
 } from 'lucide-react';
+import { checkGrammar, extractTextFromHTML, applySuggestion, GrammarError } from '@/lib/grammar-check';
+import { toast } from 'sonner';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface EditorProps {
   value?: string;
@@ -33,6 +44,9 @@ const Editor = React.forwardRef<HTMLDivElement, EditorProps>(
   ({ value, onChange, placeholder, disabled, className, minHeight = '200px' }, ref) => {
     const editorRef = React.useRef<HTMLDivElement>(null);
     const [isEmpty, setIsEmpty] = React.useState(!value);
+    const [isCheckingGrammar, setIsCheckingGrammar] = React.useState(false);
+    const [grammarErrors, setGrammarErrors] = React.useState<GrammarError[]>([]);
+    const [showGrammarPanel, setShowGrammarPanel] = React.useState(false);
 
     React.useEffect(() => {
       if (editorRef.current && value !== undefined && editorRef.current.innerHTML !== value) {
@@ -61,6 +75,52 @@ const Editor = React.forwardRef<HTMLDivElement, EditorProps>(
         e.preventDefault();
         execCommand('insertHTML', '&emsp;');
       }
+    };
+
+    const handleGrammarCheck = async () => {
+      if (!editorRef.current) return;
+
+      const htmlContent = editorRef.current.innerHTML;
+      const textContent = extractTextFromHTML(htmlContent);
+
+      if (!textContent.trim()) {
+        toast.info('No text to check');
+        return;
+      }
+
+      setIsCheckingGrammar(true);
+      setShowGrammarPanel(true);
+
+      try {
+        const result = await checkGrammar(textContent);
+        setGrammarErrors(result.errors);
+
+        if (result.hasErrors) {
+          toast.info(`Found ${result.errors.length} grammar issue(s)`);
+        } else {
+          toast.success('No grammar issues found!');
+        }
+      } catch (error) {
+        toast.error('Failed to check grammar. Please try again.');
+        console.error('Grammar check error:', error);
+      } finally {
+        setIsCheckingGrammar(false);
+      }
+    };
+
+    const handleApplySuggestion = (error: GrammarError, replacement: string) => {
+      if (!editorRef.current || !value) return;
+
+      const htmlContent = editorRef.current.innerHTML;
+      const updated = applySuggestion(htmlContent, error.offset, error.length, replacement);
+      
+      editorRef.current.innerHTML = updated;
+      onChange?.(updated);
+      
+      // Remove the error from the list
+      setGrammarErrors(prev => prev.filter(e => e !== error));
+      
+      toast.success('Suggestion applied');
     };
 
     return (
@@ -202,6 +262,91 @@ const Editor = React.forwardRef<HTMLDivElement, EditorProps>(
           >
             <Redo className="h-4 w-4" />
           </Toggle>
+
+          <Separator orientation="vertical" className="mx-1 h-6" />
+
+          <Popover open={showGrammarPanel} onOpenChange={setShowGrammarPanel}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleGrammarCheck}
+                disabled={disabled || isCheckingGrammar}
+                className="h-8 w-8 p-0"
+                aria-label="Check Grammar"
+              >
+                {isCheckingGrammar ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <SpellCheck className="h-4 w-4" />
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="start">
+              <div className="p-3 border-b">
+                <h4 className="font-semibold text-sm">Grammar Check</h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {grammarErrors.length > 0
+                    ? `${grammarErrors.length} issue(s) found`
+                    : 'No issues found'}
+                </p>
+              </div>
+              {grammarErrors.length > 0 ? (
+                <ScrollArea className="h-64">
+                  <div className="p-3 space-y-3">
+                    {grammarErrors.map((error, index) => (
+                      <div
+                        key={index}
+                        className="border rounded-lg p-3 space-y-2 bg-muted/30"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-destructive">
+                              {error.message}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {error.rule.description}
+                            </p>
+                          </div>
+                        </div>
+                        {error.replacements.length > 0 && (
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium">Suggestions:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {error.replacements.slice(0, 3).map((replacement, idx) => (
+                                <Button
+                                  key={idx}
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={() => handleApplySuggestion(error, replacement)}
+                                >
+                                  {replacement}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              ) : (
+                <div className="p-6 text-center text-sm text-muted-foreground">
+                  {isCheckingGrammar ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Checking grammar...</span>
+                    </div>
+                  ) : (
+                    <p>No grammar issues found!</p>
+                  )}
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
         </div>
 
         {/* Editor Content */}
@@ -209,6 +354,7 @@ const Editor = React.forwardRef<HTMLDivElement, EditorProps>(
           <div
             ref={editorRef}
             contentEditable={!disabled}
+            spellCheck={true}
             onInput={handleInput}
             onKeyDown={handleKeyDown}
             className={cn(

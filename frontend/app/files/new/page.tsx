@@ -91,7 +91,7 @@ export default function NewFilePage() {
   useEffect(() => {
     // Permission check: INWARD_DESK cannot create new files
     if (user) {
-      const isInwardDesk = hasRole(user, 'INWARD_DESK') && !hasRole(user, 'DEPT_ADMIN') && !hasRole(user, 'SUPER_ADMIN');
+      const isInwardDesk = hasRole(user, 'INWARD_DESK') && !hasRole(user, 'DEPT_ADMIN') && !hasRole(user, 'SUPER_ADMIN') && !hasRole(user, 'DEVELOPER');
       if (isInwardDesk) {
         router.push('/files');
         toast.error('Inward Desk users cannot create new files. They can only receive and forward files.');
@@ -130,15 +130,20 @@ export default function NewFilePage() {
   };
 
   const createFilePreview = async (file: File): Promise<string | null> => {
+    // Images - create data URL
     if (file.type.startsWith('image/')) {
       return new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = (e) => resolve(e.target?.result as string);
         reader.readAsDataURL(file);
       });
-    } else if (file.type === 'application/pdf') {
+    }
+    // PDF - create object URL
+    if (file.type === 'application/pdf') {
       return URL.createObjectURL(file);
     }
+    // For other file types, we'll show preview after upload
+    // Return null to indicate preview not available locally
     return null;
   };
 
@@ -171,24 +176,39 @@ export default function NewFilePage() {
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'application/vnd.ms-excel',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/vnd.oasis.opendocument.text',
+      'application/vnd.oasis.opendocument.spreadsheet',
+      'application/vnd.oasis.opendocument.presentation',
       'image/jpeg',
       'image/png',
       'image/gif',
       'image/webp',
+      'text/plain',
+      'text/csv',
+      'text/html',
     ];
+
+    // Also check by file extension for better compatibility
+    const allowedExtensions = [
+      '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+      '.odt', '.ods', '.odp', '.txt', '.csv', '.html', '.htm',
+      '.jpg', '.jpeg', '.png', '.gif', '.webp'
+    ];
+    const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
 
     if (file.size > maxSize) {
       toast.error(`File "${file.name}" too large`, { description: 'Maximum file size is 50MB' });
       return false;
     }
 
-    if (!allowedTypes.includes(file.type)) {
+    if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension)) {
       toast.error(`Invalid file type: ${file.name}`, {
-        description: 'Allowed: PDF, Word, Excel, JPEG, PNG, GIF, WebP',
+        description: 'Allowed: PDF, Word, Excel, PowerPoint, ODT, Images, Text files',
       });
       return false;
     }
-
     return true;
   };
 
@@ -534,7 +554,7 @@ export default function NewFilePage() {
                     {dragActive ? 'Drop files here' : 'Drop files here, or'} <span className="text-primary">browse</span>
                   </p>
                   <p className="text-sm text-muted-foreground mb-3">
-                    PDF, Word, Excel, Images (max 50MB each)
+                    PDF, Word, Excel, PowerPoint, ODT, Images, Text files (max 50MB each)
                   </p>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Badge variant="secondary" className="text-xs">Up to 10 files</Badge>
@@ -545,7 +565,7 @@ export default function NewFilePage() {
                     type="file"
                     className="absolute inset-0 cursor-pointer opacity-0"
                     onChange={handleFileChange}
-                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt,.csv,.html,.htm,.jpg,.jpeg,.png,.gif,.webp"
                     multiple
                     disabled={loading || files.length >= 10}
                   />
@@ -710,7 +730,27 @@ export default function NewFilePage() {
                           className="w-full flex-1 rounded-lg border"
                           title="PDF Preview"
                         />
-                      ) : null
+                      ) : (
+                        <div className="flex-1 flex items-center justify-center bg-muted/30 rounded-lg">
+                          <div className="text-center p-6">
+                            {(() => {
+                              const FileIcon = getFileIcon(activeFile.file);
+                              return (
+                                <>
+                                  <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+                                    <FileIcon className="h-10 w-10 text-muted-foreground" />
+                                  </div>
+                                  <p className="font-medium mb-1">{activeFile.file.name}</p>
+                                  <p className="text-sm text-muted-foreground mb-2">
+                                    Preview will be available after upload
+                                  </p>
+                                  <Badge variant="secondary">{formatFileSize(activeFile.file.size)}</Badge>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      )
                     ) : (
                       <div className="flex-1 flex items-center justify-center bg-muted/30 rounded-lg">
                         <div className="text-center">

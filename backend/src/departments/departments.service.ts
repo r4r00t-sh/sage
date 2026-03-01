@@ -43,13 +43,23 @@ export class DepartmentsService {
       where: { id },
       include: {
         organisation: true,
+        _count: { select: { users: true, files: true } },
         divisions: {
           include: {
             _count: { select: { users: true } },
           },
         },
         users: {
-          select: { id: true, name: true, username: true, roles: true },
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            roles: true,
+            designation: true,
+            staffId: true,
+            isActive: true,
+            division: { select: { id: true, name: true, code: true } },
+          },
         },
       },
     });
@@ -115,28 +125,34 @@ export class DepartmentsService {
   }
 
   async getDivisions(departmentId: string) {
-    const key = CACHE_KEY_DIVISIONS(departmentId);
-    const cached = await this.redis.get(key);
-    if (cached) {
-      try {
-        return JSON.parse(cached) as Awaited<ReturnType<typeof this.fetchDivisions>>;
-      } catch {
-        await this.redis.del(key);
-      }
-    }
+    // Always fetch fresh data from database to ensure we get the correct divisions
+    // This ensures we get divisions that match the EFILE_CLUSTER_TREE.md structure
     const data = await this.fetchDivisions(departmentId);
+    // Update cache with fresh data
+    const key = CACHE_KEY_DIVISIONS(departmentId);
     await this.redis.set(key, JSON.stringify(data), CACHE_TTL);
     return data;
   }
 
   private async fetchDivisions(departmentId: string) {
-    return this.prisma.division.findMany({
+    const divisions = await this.prisma.division.findMany({
       where: { departmentId },
       include: {
         _count: { select: { users: true } },
       },
       orderBy: { name: 'asc' },
     });
+    
+    // Return divisions with code field
+    return divisions.map(div => ({
+      id: div.id,
+      name: div.name,
+      code: div.code,
+      departmentId: div.departmentId,
+      createdAt: div.createdAt,
+      updatedAt: div.updatedAt,
+      _count: div._count,
+    }));
   }
 
   async createDivision(departmentId: string, name: string) {
@@ -153,6 +169,18 @@ export class DepartmentsService {
     return division;
   }
 
+  async getDivisionById(divisionId: string) {
+    return this.prisma.division.findUnique({
+      where: { id: divisionId },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        departmentId: true,
+      },
+    });
+  }
+
   async getDivisionUsers(divisionId: string) {
     return this.prisma.user.findMany({
       where: {
@@ -164,8 +192,39 @@ export class DepartmentsService {
         name: true,
         username: true,
         roles: true,
+        designation: true,
+        staffId: true,
       },
       orderBy: { name: 'asc' },
     });
+  }
+
+  /** Get a single division with its department and users (for division profile page). */
+  async getDivisionWithUsers(departmentId: string, divisionId: string) {
+    const division = await this.prisma.division.findFirst({
+      where: { id: divisionId, departmentId },
+      include: {
+        department: { select: { id: true, name: true, code: true } },
+        _count: { select: { users: true, files: true } },
+      },
+    });
+    if (!division) return null;
+    const users = await this.prisma.user.findMany({
+      where: { divisionId },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        roles: true,
+        designation: true,
+        staffId: true,
+        isActive: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+    return {
+      ...division,
+      users,
+    };
   }
 }

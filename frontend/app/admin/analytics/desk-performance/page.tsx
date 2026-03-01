@@ -103,6 +103,15 @@ interface RedListMorgue {
   allFiles: any[];
 }
 
+interface RatingAnalytics {
+  deskId: string;
+  deskName: string;
+  period: { from: string; to: string };
+  variables: { V: number; T: number; O: number; P: number; R: number; H: number };
+  ratings: { speed: number; efficiency: number; workload: number; overload: number; underload: number };
+  insights: string[];
+}
+
 export default function DeskPerformancePage() {
   const { user } = useAuthStore();
   const [loading, setLoading] = useState(true);
@@ -113,10 +122,40 @@ export default function DeskPerformancePage() {
   const [heatmapData, setHeatmapData] = useState<HeatmapData | null>(null);
   const [agingBuckets, setAgingBuckets] = useState<AgingBucket | null>(null);
   const [redListMorgue, setRedListMorgue] = useState<RedListMorgue | null>(null);
+  const [desks, setDesks] = useState<Array<{ id: string; name: string; code: string; type?: string }>>([]);
+  const [selectedDeskId, setSelectedDeskId] = useState<string>('');
+  const [ratingAnalytics, setRatingAnalytics] = useState<RatingAnalytics | null>(null);
+  const [ratingLoading, setRatingLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
   }, [activeTab, timeRange]);
+
+  useEffect(() => {
+    if (activeTab === 'ratings') {
+      api.get('/desks').then((res) => {
+        const list = Array.isArray(res.data) ? res.data : [];
+        const realDesks = list.filter((d: { id: string }) => !d.id.startsWith('dept-') && !d.id.startsWith('div-'));
+        setDesks(realDesks);
+        if (realDesks.length > 0 && !selectedDeskId) setSelectedDeskId(realDesks[0].id);
+      }).catch(() => setDesks([]));
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'ratings' || !selectedDeskId) return;
+    setRatingLoading(true);
+    const to = new Date();
+    const from = new Date(to.getTime() - 24 * 60 * 60 * 1000);
+    api.get(`/desks/${selectedDeskId}/rating-analytics`, {
+      params: { dateFrom: from.toISOString(), dateTo: to.toISOString() },
+    }).then((res) => {
+      setRatingAnalytics(res.data);
+    }).catch(() => {
+      setRatingAnalytics(null);
+      toast.error('Failed to load rating analytics');
+    }).finally(() => setRatingLoading(false));
+  }, [activeTab, selectedDeskId]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -124,6 +163,11 @@ export default function DeskPerformancePage() {
       if (activeTab === 'executive') {
         const res = await api.get('/analytics/executive-dashboard');
         setExecutiveDashboard(res.data);
+      } else if (activeTab === 'ratings') {
+        const res = await api.get('/desks');
+        const list = Array.isArray(res.data) ? res.data : [];
+        const realDesks = list.filter((d: { id: string }) => !d.id.startsWith('dept-') && !d.id.startsWith('div-'));
+        setDesks(realDesks);
       } else if (activeTab === 'heatmap') {
         const res = await api.get(`/analytics/heatmap?timeRange=${timeRange}`);
         setHeatmapData(res.data);
@@ -207,10 +251,14 @@ export default function DeskPerformancePage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 lg:w-[600px]">
+        <TabsList className="grid w-full grid-cols-5 lg:max-w-[800px]">
           <TabsTrigger value="executive" className="gap-2">
             <Gauge className="h-4 w-4" />
-            Executive Dashboard
+            Executive
+          </TabsTrigger>
+          <TabsTrigger value="ratings" className="gap-2">
+            <Activity className="h-4 w-4" />
+            Ratings (0-10)
           </TabsTrigger>
           <TabsTrigger value="heatmap" className="gap-2">
             <Map className="h-4 w-4" />
@@ -218,11 +266,11 @@ export default function DeskPerformancePage() {
           </TabsTrigger>
           <TabsTrigger value="aging" className="gap-2">
             <Clock className="h-4 w-4" />
-            Aging Buckets
+            Aging
           </TabsTrigger>
           <TabsTrigger value="morgue" className="gap-2">
             <AlertTriangle className="h-4 w-4" />
-            Red-List Morgue
+            Morgue
           </TabsTrigger>
         </TabsList>
 
@@ -369,6 +417,84 @@ export default function DeskPerformancePage() {
               )}
             </>
           )}
+        </TabsContent>
+
+        {/* Rating Analytics (0-10) Tab */}
+        <TabsContent value="ratings" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5" />
+                Desk Rating Analytics (0–10 scale)
+              </CardTitle>
+              <CardDescription>
+                Speed, Efficiency, Workload, Overload, Underload. Variables: V = volume on desk, T = allotted time/file (h), O = optimum, P = processed/day, R = received/day, H = working hours.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {desks.length > 0 && (
+                <Select value={selectedDeskId} onValueChange={setSelectedDeskId}>
+                  <SelectTrigger className="w-[280px]">
+                    <SelectValue placeholder="Select desk" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {desks.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name} {d.code && `(${d.code})`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {ratingLoading && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Loading…
+                </div>
+              )}
+              {!ratingLoading && ratingAnalytics && (
+                <div className="space-y-6">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="rounded-lg border p-3">
+                      <p className="text-xs font-medium text-muted-foreground">Variables</p>
+                      <p className="mt-1 text-sm font-mono">V={ratingAnalytics.variables.V} · T={ratingAnalytics.variables.T}h · O={ratingAnalytics.variables.O}</p>
+                      <p className="text-sm font-mono">P={ratingAnalytics.variables.P} · R={ratingAnalytics.variables.R} · H={ratingAnalytics.variables.H}h</p>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                    {[
+                      { key: 'speed', label: 'Speed', value: ratingAnalytics.ratings.speed, desc: 'Processed vs expected' },
+                      { key: 'efficiency', label: 'Efficiency', value: ratingAnalytics.ratings.efficiency, desc: 'P/R clearing rate' },
+                      { key: 'workload', label: 'Workload', value: ratingAnalytics.ratings.workload, desc: 'V/O capacity' },
+                      { key: 'overload', label: 'Overload', value: ratingAnalytics.ratings.overload, desc: 'Above optimum' },
+                      { key: 'underload', label: 'Underload', value: ratingAnalytics.ratings.underload, desc: 'Below optimum' },
+                    ].map(({ key, label, value, desc }) => (
+                      <div key={key} className="rounded-lg border p-4 text-center">
+                        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+                        <p className="mt-1 text-2xl font-bold">{value.toFixed(1)}</p>
+                        <p className="text-xs text-muted-foreground">/ 10</p>
+                        <Progress value={value * 10} className="mt-2 h-2" />
+                        <p className="mt-1 text-xs text-muted-foreground">{desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {ratingAnalytics.insights.length > 0 && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-4">
+                      <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Insights</p>
+                      <ul className="mt-2 list-inside list-disc text-sm text-amber-700 dark:text-amber-300">
+                        {ratingAnalytics.insights.map((line, i) => (
+                          <li key={i}>{line}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+              {!ratingLoading && desks.length === 0 && (
+                <p className="text-sm text-muted-foreground">No desks available. Create desks in Admin → Desks.</p>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Heatmap Tab */}

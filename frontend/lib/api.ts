@@ -7,6 +7,11 @@ export const ANDROID_APK_DOWNLOAD_URL =
   process.env.NEXT_PUBLIC_ANDROID_APK_URL ||
   'https://github.com/r4r00t-sh/eFMP/releases/latest/download/efmp-android.apk';
 
+/** GitHub latest release page (for login page download dropdown). */
+export const GITHUB_RELEASES_URL =
+  process.env.NEXT_PUBLIC_GITHUB_RELEASES_URL ||
+  'https://github.com/r4r00t-sh/eFMP/releases/latest';
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {

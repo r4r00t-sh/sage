@@ -23,17 +23,18 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _error;
   bool _showApiUrl = false;
 
+  // Must match backend seed (prisma/seed.ts). All use password123 except Super Admin (admin123).
   static const _testAccounts = [
     _TestAccount(role: 'Super Admin', username: 'admin', password: 'admin123', name: 'Super Administrator', dept: 'All Departments', color: AppColors.red),
     _TestAccount(role: 'Dept Admin', username: 'fin.admin', password: 'password123', name: 'Finance Department Admin', dept: 'Finance Department', color: Colors.purple),
-    _TestAccount(role: 'Section Officer', username: 'fin.accoun0.section', password: 'password123', name: 'Accounts - Section Officer', dept: 'Finance > Accounts', color: AppColors.blue),
-    _TestAccount(role: 'Approval Auth', username: 'fin.accoun0.approver', password: 'password123', name: 'Accounts - Approval Authority', dept: 'Finance > Accounts', color: AppColors.amber),
-    _TestAccount(role: 'Dispatcher', username: 'fin.accoun0.dispatch', password: 'password123', name: 'Accounts - Dispatcher', dept: 'Finance > Accounts', color: Colors.cyan),
-    _TestAccount(role: 'Inward Desk', username: 'fin.accoun0.inward', password: 'password123', name: 'Accounts - Inward Desk', dept: 'Finance > Accounts', color: AppColors.green),
+    _TestAccount(role: 'Section Officer', username: 'fin.accounts', password: 'password123', name: 'Accounts Section Officer', dept: 'Finance > Accounts', color: AppColors.blue),
+    _TestAccount(role: 'Approval Auth', username: 'fin.approver', password: 'password123', name: 'Finance Approval Authority', dept: 'Finance > Accounts', color: AppColors.amber),
+    _TestAccount(role: 'Dispatcher', username: 'fin.dispatch', password: 'password123', name: 'Finance Dispatcher', dept: 'Finance > Accounts', color: Colors.cyan),
+    _TestAccount(role: 'Inward Desk', username: 'fin.inward', password: 'password123', name: 'Finance Inward Desk', dept: 'Finance > Accounts', color: AppColors.green),
+    _TestAccount(role: 'Clerk', username: 'fin.clerk', password: 'password123', name: 'Finance Clerk', dept: 'Finance', color: Colors.indigo),
+    _TestAccount(role: 'Chat Manager', username: 'fin.chat', password: 'password123', name: 'Finance Chat Manager', dept: 'Finance', color: Colors.teal),
     _TestAccount(role: 'Dept Admin', username: 'agr.admin', password: 'password123', name: 'Agriculture Department Admin', dept: 'Agriculture Department', color: Colors.green),
-    _TestAccount(role: 'Section Officer', username: 'agr.animal0.section', password: 'password123', name: 'Animal Husbandry - Section Officer', dept: 'Agriculture > Animal Husbandry', color: Colors.teal),
     _TestAccount(role: 'Dept Admin', username: 'ops.admin', password: 'password123', name: 'Operations Department Admin', dept: 'Operations Department', color: Colors.orange),
-    _TestAccount(role: 'Section Officer', username: 'shro.medica0.section', password: 'password123', name: 'Medical Education - Section Officer', dept: 'SHRO > Medical Education', color: Colors.pink),
   ];
 
   @override

@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useAuthStore, useChatStore } from '@/lib/store';
+import { UserProfileLink } from '@/components/profile-links';
 
 interface RoutingEntry {
   id: string;
@@ -59,6 +61,23 @@ const actionConfig: Record<string, { icon: React.ComponentType<{ className?: str
   hold: { icon: Pause, color: 'text-amber-600', bgColor: 'bg-amber-500/10', label: 'Put on Hold' },
   recall: { icon: AlertTriangle, color: 'text-purple-600', bgColor: 'bg-purple-500/10', label: 'Recalled' },
 };
+
+function UserNameLink({ userId, name }: { userId: string; name: string }) {
+  const { user } = useAuthStore();
+  const openChatWith = useChatStore((s) => s.openChatWith);
+  if (!user || user.id === userId) {
+    return <span className="font-medium text-foreground">{name}</span>;
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => openChatWith(userId)}
+      className="font-medium text-foreground underline underline-offset-2 hover:text-primary transition-colors duration-200 cursor-pointer"
+    >
+      {name}
+    </button>
+  );
+}
 
 export function FileHistory({ routingHistory, createdAt, createdBy }: FileHistoryProps) {
   // Build timeline including file creation
@@ -126,13 +145,13 @@ export function FileHistory({ routingHistory, createdAt, createdBy }: FileHistor
                   <p className="text-sm">
                     {entry.fromUser && (
                       <span className="text-muted-foreground">
-                        From <span className="font-medium text-foreground">{entry.fromUser.name}</span>
+                        From <UserNameLink userId={entry.fromUser.id} name={entry.fromUser.name} />
                       </span>
                     )}
                     {entry.toUser && (
                       <span className="text-muted-foreground">
                         {entry.fromUser && ' → '}
-                        To <span className="font-medium text-foreground">{entry.toUser.name}</span>
+                        To <UserNameLink userId={entry.toUser.id} name={entry.toUser.name} />
                       </span>
                     )}
                     {entry.toDivision && !entry.toUser && (
@@ -146,7 +165,11 @@ export function FileHistory({ routingHistory, createdAt, createdBy }: FileHistor
 
                 {entry.remarks && (
                   <p className="text-sm text-muted-foreground italic">
-                    {'\u0022'}{entry.remarks}{'\u0022'}
+                    {entry.id === 'created' && createdBy ? (
+                      <>{"\u0022"}File created by <UserProfileLink userId={createdBy.id} name={createdBy.name} />{"\u0022"}</>
+                    ) : (
+                      <>{'\u0022'}{entry.remarks}{'\u0022'}</>
+                    )}
                   </p>
                 )}
 

@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { RecentFiles } from '@/components/recent-files';
+import { DepartmentProfileLink } from '@/components/profile-links';
 
 interface RecentFile {
   id: string;
@@ -36,7 +37,7 @@ interface RecentFile {
   subject?: string;
   isRedListed?: boolean;
   fileNumber?: string;
-  department?: { name: string };
+  department?: { id?: string; name: string };
   createdAt?: string;
 }
 
@@ -285,7 +286,13 @@ export default function DashboardPage() {
                             {file.fileNumber}
                           </code>
                           <span>•</span>
-                          <span>{file.department?.name}</span>
+                          {file.department ? (
+                            file.department.id ? (
+                              <DepartmentProfileLink departmentId={file.department.id} name={file.department.name} />
+                            ) : (
+                              <span>{file.department.name}</span>
+                            )
+                          ) : null}
                           {file.createdAt && (
                             <>
                               <span>•</span>

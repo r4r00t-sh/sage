@@ -12,17 +12,21 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-import { hasRole, getRoles } from '@/lib/auth-utils';
+import { hasRole, hasGodRole, getRoles } from '@/lib/auth-utils';
 import { ForwardFileModal } from '@/components/forward-file-modal';
 import { FileNotes } from '@/components/file-notes';
 import { FileHistory } from '@/components/file-history';
 import { QuickActions } from '@/components/quick-actions';
+import { UserProfileLink, DepartmentProfileLink, DivisionProfileLink } from '@/components/profile-links';
 import { FileTimer, PriorityCategoryBadge } from '@/components/file-timer';
 import { RecallModal } from '@/components/recall-modal';
 import {
@@ -47,10 +51,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Upload,
+  Timer,
+  Loader2,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/api';
+import { getFilePreviewConfig, canPreviewFile } from '@/lib/file-preview';
 
 // Helper to resolve attachment URLs
 function resolveAttachmentUrl(url: string): string {
@@ -132,6 +139,8 @@ interface FileDetails {
   assignedTo?: { id: string; name: string; email?: string };
   department: { id: string; name: string; code: string };
   currentDivision?: { id: string; name: string };
+  intendedDivision?: { id: string; name: string; code?: string } | null;
+  intendedUser?: { id: string; name: string; username?: string } | null;
   originDesk?: {
     id: string;
     name: string;
@@ -249,13 +258,13 @@ function AttachmentsSection({
             <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
               <Upload className="h-10 w-10 text-muted-foreground mb-3" />
               <p className="font-medium mb-1">Upload attachments</p>
-              <p className="text-sm text-muted-foreground">PDF, Word, Excel, Images (max 50MB)</p>
+              <p className="text-sm text-muted-foreground">PDF, Word, Excel, PowerPoint, ODT, Images, Text files (max 50MB)</p>
               <input
                 type="file"
                 className="hidden"
                 onChange={handleFileUpload}
                 multiple
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt,.csv,.html,.htm,.jpg,.jpeg,.png,.gif,.webp"
                 disabled={uploading}
               />
             </label>
@@ -297,7 +306,7 @@ function AttachmentsSection({
                   className="hidden"
                   onChange={handleFileUpload}
                   multiple
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt,.csv,.html,.htm,.jpg,.jpeg,.png,.gif,.webp"
                   disabled={uploading}
                 />
               </label>
@@ -332,26 +341,72 @@ function AttachmentsSection({
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Preview */}
-        <div className="aspect-[4/3] bg-muted rounded-lg overflow-hidden">
-          {activeItem?.mimeType?.startsWith('image/') ? (
-            <img 
-              src={resolveAttachmentUrl(activeItem.url)} 
-              alt={activeItem.filename}
-              className="w-full h-full object-contain"
-            />
-          ) : activeItem?.mimeType === 'application/pdf' || activeItem?.url ? (
-            <iframe
-              src={resolveAttachmentUrl(activeItem.url)}
-              className="w-full h-full"
-              title={activeItem.filename}
-            />
-          ) : (
+        <div className="aspect-[4/3] bg-muted rounded-lg overflow-hidden border">
+          {activeItem ? (() => {
+            const fileUrl = resolveAttachmentUrl(activeItem.url);
+            const previewConfig = getFilePreviewConfig(
+              fileUrl,
+              activeItem.mimeType || '',
+              activeItem.filename
+            );
+
+            if (previewConfig.type === 'image') {
+              return (
+                <img 
+                  src={fileUrl} 
+                  alt={activeItem.filename}
+                  className="w-full h-full object-contain"
+                />
+              );
+            }
+
+            if (previewConfig.type === 'pdf' || previewConfig.type === 'office') {
+              return (
+                <iframe
+                  src={previewConfig.url}
+                  className="w-full h-full border-0"
+                  title={activeItem.filename}
+                  allow="fullscreen"
+                />
+              );
+            }
+
+
+            if (previewConfig.type === 'google-viewer') {
+              return (
+                <iframe
+                  src={previewConfig.url}
+                  className="w-full h-full border-0"
+                  title={activeItem.filename}
+                  allow="fullscreen"
+                />
+              );
+            }
+
+            // Download fallback
+            return (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
+                {(() => {
+                  const Icon = getFileIcon(activeItem.mimeType || '');
+                  return <Icon className="h-16 w-16 mb-3 opacity-50" />;
+                })()}
+                <p className="text-sm font-medium mb-2">Preview not available</p>
+                <p className="text-xs text-center mb-4">{activeItem.filename}</p>
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary bg-primary/10 rounded-md hover:bg-primary/20 transition-colors"
+                >
+                  <Download className="h-4 w-4" />
+                  Download to view
+                </a>
+              </div>
+            );
+          })() : (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-              {(() => {
-                const Icon = getFileIcon(activeItem?.mimeType || '');
-                return <Icon className="h-16 w-16 mb-3 opacity-50" />;
-              })()}
-              <p>Preview not available</p>
+              <FileText className="h-16 w-16 mb-3 opacity-50" />
+              <p>No file selected</p>
             </div>
           )}
         </div>
@@ -487,15 +542,22 @@ function AttachmentsSection({
                         </div>
                       </div>
                       {selectedAttachment.uploadedBy.department && (
-                        <div className="flex justify-between">
+                        <div className="flex justify-between items-center">
                           <span className="text-muted-foreground">Department:</span>
-                          <span className="font-medium">{selectedAttachment.uploadedBy.department.name}</span>
+                          <DepartmentProfileLink
+                            departmentId={selectedAttachment.uploadedBy.department.id}
+                            name={selectedAttachment.uploadedBy.department.name}
+                          />
                         </div>
                       )}
                       {selectedAttachment.uploadedBy.division && (
-                        <div className="flex justify-between">
+                        <div className="flex justify-between items-center">
                           <span className="text-muted-foreground">Division:</span>
-                          <span className="font-medium">{selectedAttachment.uploadedBy.division.name}</span>
+                          <DivisionProfileLink
+                            departmentId={selectedAttachment.uploadedBy.department?.id ?? ''}
+                            divisionId={selectedAttachment.uploadedBy.division.id}
+                            name={selectedAttachment.uploadedBy.division.name}
+                          />
                         </div>
                       )}
                     </div>
@@ -540,6 +602,9 @@ function FileDetailContent() {
   const [loading, setLoading] = useState(true);
   const [forwardModalOpen, setForwardModalOpen] = useState(false);
   const [recallModalOpen, setRecallModalOpen] = useState(false);
+  const [showSetDueTimeDialog, setShowSetDueTimeDialog] = useState(false);
+  const [dueTimeHours, setDueTimeHours] = useState<string>('24');
+  const [settingDueTime, setSettingDueTime] = useState(false);
 
   const fileId = params.id as string;
 
@@ -600,15 +665,16 @@ function FileDetailContent() {
   if (!file) return null;
 
   const statusConfig = getStatusConfig(file.status);
-  const canRecall = hasRole(user, 'SUPER_ADMIN');
+  const canRecall = hasGodRole(user);
   
   // Permission check: Only the assigned user OR creator (if unassigned) can edit/perform actions
   // Super Admin can always edit
   const isAssignee = file.assignedTo?.id === user?.id;
   const isCreator = file.createdBy?.id === user?.id;
   const isUnassigned = !file.assignedTo;
-  const isSuperAdmin = hasRole(user, 'SUPER_ADMIN');
+  const isSuperAdmin = hasGodRole(user);
   const isDeptAdmin = hasRole(user, 'DEPT_ADMIN');
+  const canSetDueTime = isSuperAdmin || isDeptAdmin;
   
   // Role-based permission checks
   const isInwardDesk = hasRole(user, 'INWARD_DESK') && !isDeptAdmin && !isSuperAdmin;
@@ -616,7 +682,7 @@ function FileDetailContent() {
   const isSectionOfficer = hasRole(user, 'SECTION_OFFICER') && !isDeptAdmin && !isSuperAdmin;
   const isApprovalAuthority = hasRole(user, 'APPROVAL_AUTHORITY') && !isDeptAdmin && !isSuperAdmin;
   
-  // Permission: Can add notes (INWARD_DESK and DISPATCHER cannot)
+    // Permission: Can add notes (INWARD_DESK and DISPATCHER cannot)
   const canAddNotes = !isInwardDesk && !isDispatcher && (isAssignee || (isCreator && isUnassigned) || isSuperAdmin || isDeptAdmin);
   
   // Permission: Can add attachments (INWARD_DESK cannot add to incoming files)
@@ -673,6 +739,12 @@ function FileDetailContent() {
 
         {/* Timer Display */}
         <div className="flex flex-col items-end gap-3">
+          {(!file.deskArrivalTime || !file.allottedTime) && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-200 text-sm">
+              <AlertTriangle className="h-4 w-4" />
+              <span>Due time not set - Timer will not work until due time is configured</span>
+            </div>
+          )}
           <FileTimer
             timerPercentage={file.timerPercentage || null}
             deskArrivalTime={file.deskArrivalTime}
@@ -684,9 +756,28 @@ function FileDetailContent() {
           />
           <div className="flex gap-2">
             {canEdit && (
-              <Button variant="outline" onClick={() => setForwardModalOpen(true)}>
+              <Button variant="outline" onClick={() => setForwardModalOpen(true)} className="transition-all duration-200 hover:shadow-md">
                 <Send className="mr-2 h-4 w-4" />
                 Forward
+              </Button>
+            )}
+            {canSetDueTime && (
+              <Button 
+                variant={(!file.deskArrivalTime || !file.allottedTime) ? "default" : "outline"}
+                className={(!file.deskArrivalTime || !file.allottedTime) ? "bg-blue-600 hover:bg-blue-700 text-white" : "text-blue-600 hover:text-blue-700"}
+                onClick={() => {
+                  // Pre-fill with current allotted time if available
+                  if (file.allottedTime) {
+                    setDueTimeHours((file.allottedTime / 3600).toString());
+                  } else {
+                    // Default to 24 hours if not set
+                    setDueTimeHours('24');
+                  }
+                  setShowSetDueTimeDialog(true);
+                }}
+              >
+                <Timer className="mr-2 h-4 w-4" />
+                {(!file.deskArrivalTime || !file.allottedTime) ? 'Set Due Time' : 'Update Due Time'}
               </Button>
             )}
             {file.s3Key && (
@@ -720,7 +811,13 @@ function FileDetailContent() {
               <div>
                 <p className="font-medium text-blue-800 dark:text-blue-200">View Only Mode</p>
                 <p className="text-sm text-blue-700 dark:text-blue-300">
-                  This file is currently assigned to {file.assignedTo?.name || 'another user'}. Only they can perform actions on it.
+                  This file is currently assigned to{' '}
+                  {file.assignedTo ? (
+                    <UserProfileLink userId={file.assignedTo.id} name={file.assignedTo.name} />
+                  ) : (
+                    'another user'
+                  )}
+                  . Only they can perform actions on it.
                 </p>
               </div>
             </div>
@@ -781,9 +878,8 @@ function FileDetailContent() {
               <h4 className="text-sm font-medium text-muted-foreground">Host Department</h4>
               <div className="flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">{file.department.name}</span>
+                <DepartmentProfileLink departmentId={file.department.id} name={file.department.name} code={file.department.code} />
               </div>
-              <p className="text-xs text-muted-foreground">{file.department.code}</p>
             </div>
             {file.originDesk && (
               <div className="space-y-1">
@@ -798,24 +894,54 @@ function FileDetailContent() {
               <h4 className="text-sm font-medium text-muted-foreground">Current Location</h4>
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">{file.currentDivision?.name || 'General'}</span>
+                {file.currentDivision ? (
+                  <DivisionProfileLink departmentId={file.department.id} divisionId={file.currentDivision.id} name={file.currentDivision.name} />
+                ) : (
+                  <span className="font-medium">General</span>
+                )}
               </div>
             </div>
             <div className="space-y-1">
               <h4 className="text-sm font-medium text-muted-foreground">Created By</h4>
               <div className="flex items-center gap-2">
                 <User className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">{file.createdBy.name}</span>
+                <UserProfileLink userId={file.createdBy.id} name={file.createdBy.name} />
               </div>
             </div>
             <div className="space-y-1">
               <h4 className="text-sm font-medium text-muted-foreground">Assigned To</h4>
               <div className="flex items-center gap-2">
                 <User className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">{file.assignedTo?.name || 'Unassigned'}</span>
+                {file.assignedTo ? (
+                  <UserProfileLink userId={file.assignedTo.id} name={file.assignedTo.name} />
+                ) : (
+                  <span className="font-medium">Unassigned</span>
+                )}
               </div>
             </div>
           </div>
+
+          {(file.intendedDivision || file.intendedUser) && (
+            <div className="rounded-lg border bg-muted/30 px-4 py-3 flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-medium text-muted-foreground shrink-0">For:</span>
+              <span className="font-medium flex items-center gap-1 flex-wrap">
+                {file.intendedDivision && (
+                  <DivisionProfileLink
+                    departmentId={file.department.id}
+                    divisionId={file.intendedDivision.id}
+                    name={file.intendedDivision.name}
+                  />
+                )}
+                {file.intendedDivision && file.intendedUser && ' → '}
+                {file.intendedUser && (
+                  <UserProfileLink userId={file.intendedUser.id} name={file.intendedUser.name} />
+                )}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {file.intendedUser ? 'Inward can forward in one click' : 'At department/division inward desk'}
+              </span>
+            </div>
+          )}
 
           <Separator />
 
@@ -927,6 +1053,118 @@ function FileDetailContent() {
             fetchFile();
           }}
         />
+      )}
+
+      {/* Set Due Time Dialog */}
+      {canSetDueTime && (
+        <Dialog open={showSetDueTimeDialog} onOpenChange={setShowSetDueTimeDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Timer className="h-5 w-5 text-blue-600" />
+                Set File Due Time
+              </DialogTitle>
+              <DialogDescription>
+                Set the default due time for file {file.fileNumber}. This will set the allotted time for the file to be processed.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-blue-50 dark:bg-blue-500/10 rounded-lg border border-blue-200 dark:border-blue-500/20">
+                <div className="flex items-start gap-3">
+                  <Clock className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium text-blue-800 dark:text-blue-200">Due Time Information</p>
+                    <p className="text-blue-700 dark:text-blue-300 mt-1">
+                      The due time is calculated from now. The file will be redlisted if not processed within this time.
+                      {file.allottedTime && (
+                        <>
+                          <br />
+                          Current allotted time: {(file.allottedTime / 3600).toFixed(1)} hours
+                        </>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="due-time-hours">Allotted Time (Hours) *</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="due-time-hours"
+                    type="number"
+                    min="1"
+                    step="0.5"
+                    value={dueTimeHours}
+                    onChange={(e) => setDueTimeHours(e.target.value)}
+                    placeholder="e.g., 24, 48, 72"
+                    className="flex-1"
+                  />
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">hours</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Common values: 24 (1 day), 48 (2 days), 72 (3 days), 168 (1 week)
+                </p>
+              </div>
+
+              {dueTimeHours && parseFloat(dueTimeHours) > 0 && (
+                <div className="p-3 bg-muted rounded-lg">
+                  <p className="text-sm font-medium">Due Date Preview:</p>
+                  <p className="text-sm text-muted-foreground">
+                    {new Date(Date.now() + parseFloat(dueTimeHours) * 3600 * 1000).toLocaleString()}
+                  </p>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowSetDueTimeDialog(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={async () => {
+                  const hours = parseFloat(dueTimeHours);
+                  if (!hours || hours <= 0) {
+                    toast.error('Please enter a valid number of hours');
+                    return;
+                  }
+
+                  setSettingDueTime(true);
+                  try {
+                    await api.post(`/files/${file.id}/set-due-time`, {
+                      allottedTimeInHours: hours,
+                    });
+                    toast.success('Due time set successfully', {
+                      description: `File due time set to ${hours} hours`,
+                    });
+                    setShowSetDueTimeDialog(false);
+                    fetchFile();
+                  } catch (error: unknown) {
+                    const err = error as { response?: { data?: { message?: string } } };
+                    toast.error('Failed to set due time', {
+                      description: err.response?.data?.message || 'An error occurred',
+                    });
+                  } finally {
+                    setSettingDueTime(false);
+                  }
+                }}
+                disabled={!dueTimeHours || parseFloat(dueTimeHours) <= 0 || settingDueTime}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {settingDueTime ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Setting...
+                  </>
+                ) : (
+                  <>
+                    <Timer className="mr-2 h-4 w-4" />
+                    Set Due Time
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

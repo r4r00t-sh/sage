@@ -26,6 +26,7 @@ import {
   Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UserProfileLink, DepartmentProfileLink } from '@/components/profile-links';
 
 interface RecallModalProps {
   open: boolean;
@@ -167,7 +168,16 @@ export function RecallModal({
                     Return to Originator
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    Send back to {file.createdBy?.name || 'original creator'} ({file.department?.name || 'Department'})
+                    Send back to{' '}
+                    {file.createdBy ? (
+                      <UserProfileLink userId={file.createdBy.id} name={file.createdBy.name} />
+                    ) : (
+                      'original creator'
+                    )}
+                    {file.department && (
+                      <> ({file.department.id ? <DepartmentProfileLink departmentId={file.department.id} name={file.department.name} /> : file.department.name})</>
+                    )}
+                    {!file.department && ' (Department)'}
                   </p>
                 </div>
                 <User className="h-5 w-5 text-muted-foreground" />

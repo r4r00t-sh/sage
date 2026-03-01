@@ -99,7 +99,7 @@ done
 
 ## Future use: production checklist
 
-When you’re ready to run EFMP on Kubernetes (e.g. for efmp.santhigiri.cloud):
+When you’re ready to run EFMP on Kubernetes (e.g. for sage.santhigiri.cloud):
 
 1. **Cluster and tools**
    - Create or use a Kubernetes cluster.
@@ -115,11 +115,11 @@ When you’re ready to run EFMP on Kubernetes (e.g. for efmp.santhigiri.cloud):
      docker push your-registry/efiling-frontend:latest
      ```
    - Set the frontend image with the right API URL at **build time**, e.g.:
-     `NEXT_PUBLIC_API_URL=https://efmp.santhigiri.cloud/api` (or your Ingress host + `/api`).
+     `NEXT_PUBLIC_API_URL=https://sage.santhigiri.cloud/api` (or your Ingress host + `/api`).
 
 3. **Manifests**
    - In `backend.yaml` / `frontend.yaml`: set `image` to your registry URLs (e.g. `your-registry/efiling-backend:latest`).
-   - In `ingress.yaml`: set `host` to your domain (e.g. `efmp.santhigiri.cloud`) and, if needed, enable TLS (cert-manager or a TLS secret).
+   - In `ingress.yaml`: set `host` to your domain (e.g. `sage.santhigiri.cloud`) and, if needed, enable TLS (cert-manager or a TLS secret).
    - In `secrets.yaml`: replace all placeholders with real values; do not commit real secrets (use a secret manager in production).
 
 4. **Apply**
@@ -127,7 +127,7 @@ When you’re ready to run EFMP on Kubernetes (e.g. for efmp.santhigiri.cloud):
    - If something fails, fix the manifest and re-run `kubectl apply -f k8s/<file>.yaml`.
 
 5. **DNS**
-   - Point your domain (e.g. `efmp.santhigiri.cloud`) to the Ingress (LoadBalancer IP/hostname or Ingress controller).
+   - Point your domain (e.g. `sage.santhigiri.cloud`) to the Ingress (LoadBalancer IP/hostname or Ingress controller).
 
 6. **Landing page (santhigiri.cloud)**
    - The current `k8s/` setup only defines the app (frontend + backend). The static landing at santhigiri.cloud is served by nginx on your current server. If you move everything to Kubernetes, you can add a second Ingress host for santhigiri.cloud and serve the `landing/` files via a small static-server Deployment or keep nginx off-cluster for that.

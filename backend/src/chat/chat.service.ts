@@ -9,6 +9,7 @@ import { UserRole } from '@prisma/client';
 import { ChatGateway } from './chat.gateway';
 
 const GROUP_CREATOR_ROLES: UserRole[] = [
+  'DEVELOPER',
   'SUPER_ADMIN',
   'DEPT_ADMIN',
   'CHAT_MANAGER',
@@ -325,7 +326,7 @@ export class ChatService {
     endDate?: Date,
   ) {
     // Only admins can export for audit purposes
-    if (!['SUPER_ADMIN', 'DEPT_ADMIN', 'CHAT_MANAGER'].some((r) => userRoles.includes(r))) {
+    if (!['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN', 'CHAT_MANAGER'].some((r) => userRoles.includes(r))) {
       throw new ForbiddenException('Only admins can export chat messages');
     }
 
@@ -397,12 +398,12 @@ export class ChatService {
 
   /** Get chat statistics for admin dashboard */
   async getChatStatistics(userRoles: string[], departmentId?: string) {
-    if (!['SUPER_ADMIN', 'DEPT_ADMIN', 'CHAT_MANAGER'].some((r) => userRoles.includes(r))) {
+    if (!['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN', 'CHAT_MANAGER'].some((r) => userRoles.includes(r))) {
       throw new ForbiddenException('Only admins can view chat statistics');
     }
 
     const where: any = {};
-    if (departmentId && userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN')) {
+    if (departmentId && userRoles.includes('DEPT_ADMIN') && !userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN')) {
       where.departmentId = departmentId;
     }
 

@@ -10,7 +10,8 @@ import { HelpCenter } from '@/components/help-center';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import api from '@/lib/api';
-import { Trophy, Search } from 'lucide-react';
+import { Trophy, Search, Ticket } from 'lucide-react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -41,6 +42,7 @@ export function Navbar() {
 
   const getRoleBadgeStyle = () => {
     const roleStyles: Record<string, string> = {
+      DEVELOPER: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800',
       SUPER_ADMIN: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800',
       DEPT_ADMIN: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800',
       SECTION_OFFICER: 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800',
@@ -97,6 +99,17 @@ export function Navbar() {
         <Separator orientation="vertical" className="hidden sm:block h-5 mx-1" />
         
         {/* Action Buttons */}
+        <Button variant="outline" size="sm" className="hidden sm:flex gap-1.5 h-9" asChild>
+          <Link href="/support/new">
+            <Ticket className="h-4 w-4" />
+            Raise a ticket
+          </Link>
+        </Button>
+        <Button variant="outline" size="icon" className="sm:hidden h-9 w-9" asChild>
+          <Link href="/support/new" title="Raise a ticket">
+            <Ticket className="h-4 w-4" />
+          </Link>
+        </Button>
         <NotificationCenter />
         <HelpCenter />
         <ThemeToggle />

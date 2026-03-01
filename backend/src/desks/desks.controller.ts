@@ -40,6 +40,7 @@ export class DesksController {
       divisionId?: string;
       maxFilesPerDay?: number;
       iconType?: string;
+      slaNorm?: number; // SLA norm in hours
     },
   ) {
     return this.desksService.createDesk(req.user.id, req.user.roles ?? [], body);
@@ -127,6 +128,7 @@ export class DesksController {
       maxFilesPerDay?: number;
       iconType?: string;
       isActive?: boolean;
+      slaNorm?: number; // SLA norm in hours
     },
   ) {
     return this.desksService.updateDesk(id, req.user.id, req.user.roles ?? [], body);
@@ -187,5 +189,17 @@ export class DesksController {
   @Get(':id/redlist-check')
   async checkDeskRedList(@Param('id') id: string) {
     return this.deskPerformanceService.checkDeskRedListTriggers(id);
+  }
+
+  // Rating analytics (0–10): Speed, Efficiency, Workload, Overload, Underload
+  @Get(':id/rating-analytics')
+  async getDeskRatingAnalytics(
+    @Param('id') id: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    const from = dateFrom ? new Date(dateFrom) : undefined;
+    const to = dateTo ? new Date(dateTo) : undefined;
+    return this.deskPerformanceService.getDeskRatingAnalytics(id, from, to);
   }
 }

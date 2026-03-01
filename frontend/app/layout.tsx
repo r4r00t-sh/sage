@@ -3,10 +3,11 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthLayout } from "@/components/auth-layout";
 import { LocaleSync } from "@/components/locale-sync";
+import { ClientOnly } from "@/components/client-only";
 
 export const metadata: Metadata = {
-  title: "EFMP",
-  description: "EFMP - E-Filing Management Platform",
+  title: "SAGE",
+  description: "SAGE: Santhigiri Administration & Governance Engine",
 };
 
 export default function RootLayout({
@@ -28,6 +29,10 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Manjari:wght@100;400;700&display=swap"
           rel="stylesheet"
         />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Audiowide&family=Gugi&display=swap"
+          rel="stylesheet"
+        />
         {/* Set data-locale before paint when user previously chose Malayalam */}
         <script
           dangerouslySetInnerHTML={{
@@ -36,11 +41,13 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased" style={{ fontFamily }}>
-        <LocaleSync />
-        <AuthLayout>
-          {children}
-        </AuthLayout>
-        <Toaster />
+        <ClientOnly>
+          <LocaleSync />
+          <AuthLayout>
+            {children}
+          </AuthLayout>
+          <Toaster />
+        </ClientOnly>
       </body>
     </html>
   );

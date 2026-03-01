@@ -20,7 +20,7 @@ import { Readable } from 'stream';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { hasAnyRole, hasRole } from '../auth/auth.helpers';
+import { hasAnyRole, hasRole, hasGodRole } from '../auth/auth.helpers';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
@@ -35,7 +35,7 @@ export class UsersController {
     @Query('search') search?: string,
   ) {
     // Only admins can list users
-    if (!hasAnyRole(req.user, ['SUPER_ADMIN', 'DEPT_ADMIN'])) {
+    if (!hasAnyRole(req.user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
       throw new ForbiddenException('Not authorized');
     }
 
@@ -52,7 +52,7 @@ export class UsersController {
 
   @Get(':id/avatar')
   async getAvatar(@Param('id') id: string, @Request() req) {
-    if (id !== req.user.id && !hasAnyRole(req.user, ['SUPER_ADMIN', 'DEPT_ADMIN'])) {
+    if (id !== req.user.id && !hasAnyRole(req.user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
       throw new ForbiddenException('Not authorized');
     }
     const result = await this.usersService.getAvatarStream(id);
@@ -86,12 +86,29 @@ export class UsersController {
     return result;
   }
 
+  @Get(':id/stats')
+  async getUserStats(@Param('id') id: string, @Request() req) {
+    if (
+      id !== req.user.id &&
+      !hasAnyRole(req.user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])
+    ) {
+      throw new ForbiddenException('Not authorized');
+    }
+    if (id !== req.user.id && hasRole(req.user, 'DEPT_ADMIN')) {
+      const target = await this.usersService.getUserById(id);
+      if (target.department?.id !== req.user.departmentId) {
+        throw new ForbiddenException('Can only view users in your department');
+      }
+    }
+    return this.usersService.getStats(id);
+  }
+
   @Get(':id')
   async getUser(@Param('id') id: string, @Request() req) {
     // Users can view themselves, admins can view others
     if (
       id !== req.user.id &&
-      !hasAnyRole(req.user, ['SUPER_ADMIN', 'DEPT_ADMIN'])
+      !hasAnyRole(req.user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])
     ) {
       throw new ForbiddenException('Not authorized');
     }
@@ -104,7 +121,7 @@ export class UsersController {
     @Request() req,
     @Query('limit') limit?: string,
   ) {
-    if (!hasAnyRole(req.user, ['SUPER_ADMIN', 'DEPT_ADMIN'])) {
+    if (!hasAnyRole(req.user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
       throw new ForbiddenException('Not authorized');
     }
     if (hasRole(req.user, 'DEPT_ADMIN')) {
@@ -125,7 +142,7 @@ export class UsersController {
     @Request() req,
     @Query('limit') limit?: string,
   ) {
-    if (!hasAnyRole(req.user, ['SUPER_ADMIN', 'DEPT_ADMIN'])) {
+    if (!hasAnyRole(req.user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
       throw new ForbiddenException('Not authorized');
     }
     if (hasRole(req.user, 'DEPT_ADMIN')) {
@@ -142,7 +159,7 @@ export class UsersController {
 
   @Get(':id/presence')
   async getPresence(@Param('id') id: string, @Request() req) {
-    if (!hasAnyRole(req.user, ['SUPER_ADMIN', 'DEPT_ADMIN'])) {
+    if (!hasAnyRole(req.user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
       throw new ForbiddenException('Not authorized');
     }
     if (hasRole(req.user, 'DEPT_ADMIN')) {
@@ -172,7 +189,7 @@ export class UsersController {
     },
   ) {
     // Only admins can create users
-    if (!hasAnyRole(req.user, ['SUPER_ADMIN', 'DEPT_ADMIN'])) {
+    if (!hasAnyRole(req.user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
       throw new ForbiddenException('Not authorized');
     }
 
@@ -185,7 +202,7 @@ export class UsersController {
     }
 
     const roles = body.roles?.length ? body.roles : ['USER'];
-    const createdBySuperAdmin = hasRole(req.user, 'SUPER_ADMIN');
+    const createdBySuperAdmin = hasGodRole(req.user);
     return this.usersService.createUser({
       ...body,
       roles,
@@ -204,29 +221,110 @@ export class UsersController {
       designation?: string;
       staffId?: string;
       phone?: string;
+      phoneAlternate?: string;
+      bio?: string;
+      profileCompletedAt?: boolean;
       roles?: string[];
       departmentId?: string;
       divisionId?: string;
       isActive?: boolean;
+      firstName?: string;
+      middleName?: string;
+      lastName?: string;
+      dateOfBirth?: string;
+      gender?: string;
+      nationality?: string;
+      maritalStatus?: string;
+      bloodGroup?: string;
+      personalEmail?: string;
+      address?: string;
+      city?: string;
+      postalCode?: string;
+      employmentType?: string;
+      dateOfJoining?: string;
+      contractEndDate?: string;
+      reportingOfficial?: string;
+      workLocation?: string;
+      officeExtension?: string;
+      accountStatus?: string;
+      highestQualification?: string;
+      fieldOfStudy?: string;
+      institution?: string;
+      yearOfGraduation?: number;
+      skills?: string | string[];
+      emergencyContactName?: string;
+      emergencyContactRelationship?: string;
+      emergencyContactPhone?: string;
+      emergencyContactPhoneAlt?: string;
+      emergencyContactEmail?: string;
+      adminNotes?: string;
     },
   ) {
     // Only admins can update users (except self profile updates)
     if (
       id !== req.user.id &&
-      !hasAnyRole(req.user, ['SUPER_ADMIN', 'DEPT_ADMIN'])
+      !hasAnyRole(req.user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])
     ) {
       throw new ForbiddenException('Not authorized');
     }
 
-    // Regular users can only update name/email for themselves
+    // Regular users can only update their own profile fields (not roles, department, isActive, etc.)
     if (
       id === req.user.id &&
-      !hasAnyRole(req.user, ['SUPER_ADMIN', 'DEPT_ADMIN'])
+      !hasAnyRole(req.user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])
     ) {
       return this.usersService.updateUser(id, {
         name: body.name,
         email: body.email,
+        designation: body.designation,
+        staffId: body.staffId,
+        phone: body.phone,
+        phoneAlternate: body.phoneAlternate,
+        bio: body.bio,
+        profileCompletedAt: body.profileCompletedAt,
+        firstName: body.firstName,
+        middleName: body.middleName,
+        lastName: body.lastName,
+        dateOfBirth: body.dateOfBirth,
+        gender: body.gender,
+        nationality: body.nationality,
+        maritalStatus: body.maritalStatus,
+        bloodGroup: body.bloodGroup,
+        personalEmail: body.personalEmail,
+        address: body.address,
+        city: body.city,
+        postalCode: body.postalCode,
+        employmentType: body.employmentType,
+        dateOfJoining: body.dateOfJoining,
+        contractEndDate: body.contractEndDate,
+        reportingOfficial: body.reportingOfficial,
+        workLocation: body.workLocation,
+        officeExtension: body.officeExtension,
+        accountStatus: body.accountStatus,
+        highestQualification: body.highestQualification,
+        fieldOfStudy: body.fieldOfStudy,
+        institution: body.institution,
+        yearOfGraduation: body.yearOfGraduation,
+        skills: body.skills,
+        emergencyContactName: body.emergencyContactName,
+        emergencyContactRelationship: body.emergencyContactRelationship,
+        emergencyContactPhone: body.emergencyContactPhone,
+        emergencyContactPhoneAlt: body.emergencyContactPhoneAlt,
+        emergencyContactEmail: body.emergencyContactEmail,
+        adminNotes: body.adminNotes,
       });
+    }
+
+    // Dept Admin can only freeze (isActive: false) users in their own department; Remove = Super Admin only
+    if (
+      body.isActive === false &&
+      hasRole(req.user, 'DEPT_ADMIN') &&
+      !hasGodRole(req.user)
+    ) {
+      const targetUser = await this.usersService.getUserById(id);
+      if (targetUser.department?.id !== req.user.departmentId) {
+        throw new ForbiddenException('Department Admin can only freeze users in their own department');
+      }
     }
 
     return this.usersService.updateUser(id, body);
@@ -239,12 +337,12 @@ export class UsersController {
     @Body() body: { currentPassword?: string; newPassword: string },
   ) {
     // Users can change their own password, admins can reset others
-    if (id !== req.user.id && !hasRole(req.user, 'SUPER_ADMIN')) {
+    if (id !== req.user.id && !hasGodRole(req.user)) {
       throw new ForbiddenException('Not authorized');
     }
 
     // If changing own password, require current password
-    if (id === req.user.id && !hasRole(req.user, 'SUPER_ADMIN')) {
+    if (id === req.user.id && !hasGodRole(req.user)) {
       return this.usersService.changePassword(
         id,
         body.currentPassword!,
@@ -258,7 +356,7 @@ export class UsersController {
 
   @Put(':id/approve-profile')
   async approveProfile(@Param('id') id: string, @Request() req) {
-    if (!hasRole(req.user, 'SUPER_ADMIN')) {
+    if (!hasGodRole(req.user)) {
       throw new ForbiddenException('Only Super Admin can approve profiles');
     }
     return this.usersService.approveProfile(id, req.user.id);
@@ -267,7 +365,7 @@ export class UsersController {
   @Delete(':id')
   async deleteUser(@Param('id') id: string, @Request() req) {
     // Only SUPER_ADMIN can delete users
-    if (!hasRole(req.user, 'SUPER_ADMIN')) {
+    if (!hasGodRole(req.user)) {
       throw new ForbiddenException('Not authorized');
     }
     return this.usersService.deactivateUser(id);

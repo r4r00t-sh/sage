@@ -11,7 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
-import { hasRole } from '@/lib/auth-utils';
+import { hasGodRole } from '@/lib/auth-utils';
 import { AlertTriangle, Search, Shield } from 'lucide-react';
 
 export default function RecallProtocolPage() {
@@ -21,7 +21,7 @@ export default function RecallProtocolPage() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  if (!hasRole(user, 'SUPER_ADMIN')) {
+  if (!hasGodRole(user)) {
     return (
       <div className="p-6">
         <Alert variant="destructive">

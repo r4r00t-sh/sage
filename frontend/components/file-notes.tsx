@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import api from '@/lib/api';
 import { MessageSquare, Send, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { UserProfileLink } from '@/components/profile-links';
 
 interface Note {
   id: string;
@@ -94,7 +95,7 @@ export function FileNotes({ fileId, notes: initialNotes, onNoteAdded, canEdit = 
                   </Avatar>
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{note.user.name}</span>
+                      <UserProfileLink userId={note.user.id} name={note.user.name} className="text-sm" />
                       <span className="text-xs text-muted-foreground">
                         {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
                       </span>

@@ -27,13 +27,23 @@ import {
   CheckCircle,
   TrendingUp,
   FileText,
-  MessageSquare,
   Award,
-  Target,
   Zap,
+  Gauge,
+  AlertTriangle,
+  Timer,
+  FileStack,
 } from 'lucide-react';
+import { ActivityHeatmap } from '@/components/activity-heatmap';
+import {
+  StaffProfileForm,
+  staffProfileFromUser,
+  staffProfileToPayload,
+  type StaffProfileFormData,
+} from '@/components/staff-profile-form';
 import api from '@/lib/api';
 import { getRoles } from '@/lib/auth-utils';
+import { DepartmentProfileLink, DivisionProfileLink } from '@/components/profile-links';
 import { toast } from 'sonner';
 import { formatDistanceToNow, format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -46,11 +56,13 @@ interface UserProfile {
   role: string;
   departmentId?: string;
   divisionId?: string;
-  department?: { name: string };
-  division?: { name: string };
+  department?: { id?: string; name: string };
+  division?: { id?: string; name: string };
   createdAt: string;
   bio?: string;
   phone?: string;
+  designation?: string;
+  staffId?: string;
   avatar?: string;
   avatarKey?: string | null;
 }
@@ -80,6 +92,18 @@ interface Activity {
   timestamp: string;
 }
 
+interface MyPerformance {
+  performanceScore: number;
+  completedFiles: number;
+  redListedFiles: number;
+  extensionRequests: number;
+  avgProcessingTimeHours: number | null;
+  totalFilesCreated: number;
+  totalFilesAssigned: number;
+  currentPoints: number;
+  streakMonths: number;
+}
+
 export default function ProfilePage() {
   const { user, setAuth } = useAuthStore();
   const { points } = usePointsStore();
@@ -91,30 +115,47 @@ export default function ProfilePage() {
   const avatarUrl = useAvatarUrl(profile?.id, profile?.avatarKey ?? user?.avatarKey);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    bio: '',
-  });
+  const [myPerformance, setMyPerformance] = useState<MyPerformance | null>(null);
+  const [activityHeatmap, setActivityHeatmap] = useState<{
+    contributions: Record<string, number>;
+    totalContributions: number;
+    year: number;
+  } | null>(null);
+  const [performanceLoading, setPerformanceLoading] = useState(false);
+  const [staffFormData, setStaffFormData] = useState<StaffProfileFormData | null>(null);
 
   useEffect(() => {
     if (user) {
       fetchProfile();
       fetchStats();
+      fetchPerformance();
     }
   }, [user]);
+
+  const fetchPerformance = async () => {
+    if (!user?.id) return;
+    setPerformanceLoading(true);
+    try {
+      const year = new Date().getFullYear();
+      const [perfRes, heatmapRes] = await Promise.all([
+        api.get('/analytics/my-performance'),
+        api.get('/analytics/my-activity-heatmap', { params: { year } }),
+      ]);
+      setMyPerformance(perfRes.data);
+      setActivityHeatmap(heatmapRes.data);
+    } catch {
+      setMyPerformance(null);
+      setActivityHeatmap(null);
+    } finally {
+      setPerformanceLoading(false);
+    }
+  };
 
   const fetchProfile = async () => {
     try {
       const response = await api.get(`/users/${user?.id}`);
       setProfile(response.data);
-      setFormData({
-        name: response.data.name || '',
-        email: response.data.email || '',
-        phone: response.data.phone || '',
-        bio: response.data.bio || '',
-      });
+      setStaffFormData(staffProfileFromUser(response.data));
     } catch (error) {
       toast.error('Failed to load profile');
     } finally {
@@ -131,10 +172,12 @@ export default function ProfilePage() {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!user?.id || !staffFormData) return;
     setSaving(true);
     try {
-      await api.patch(`/users/${user?.id}`, formData);
+      await api.put(`/users/${user?.id}`, staffProfileToPayload(staffFormData));
       toast.success('Profile updated successfully');
       setEditing(false);
       fetchProfile();
@@ -182,18 +225,12 @@ export default function ProfilePage() {
 
   const handleCancel = () => {
     setEditing(false);
-    if (profile) {
-      setFormData({
-        name: profile.name || '',
-        email: profile.email || '',
-        phone: profile.phone || '',
-        bio: profile.bio || '',
-      });
-    }
+    if (profile) setStaffFormData(staffProfileFromUser(profile as unknown as Record<string, unknown>));
   };
 
   const getRoleBadgeColor = (role: string) => {
     const colors: Record<string, string> = {
+      DEVELOPER: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20',
       SUPER_ADMIN: 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20',
       DEPT_ADMIN: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20',
       SECTION_OFFICER: 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
@@ -383,8 +420,10 @@ export default function ProfilePage() {
 
       {/* Tabs */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList>
+        <TabsList className="flex flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="staff">Staff profile</TabsTrigger>
+          <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
         </TabsList>
@@ -392,7 +431,7 @@ export default function ProfilePage() {
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
-            {/* Personal Information */}
+            {/* Personal Information summary */}
             <Card>
               <CardHeader>
                 <CardTitle>Personal Information</CardTitle>
@@ -400,52 +439,33 @@ export default function ProfilePage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    disabled={!editing}
-                  />
+                  <Label>Full Name</Label>
+                  <p className="text-sm font-medium">{profile.name || [staffFormData?.firstName, staffFormData?.middleName, staffFormData?.lastName].filter(Boolean).join(' ') || '—'}</p>
                 </div>
-
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    disabled={!editing}
-                  />
+                  <Label>Email</Label>
+                  <p className="text-sm font-medium">{profile.email || staffFormData?.email || '—'}</p>
                 </div>
-
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    disabled={!editing}
-                    placeholder="Enter your phone number"
-                  />
+                  <Label>Phone</Label>
+                  <p className="text-sm font-medium">{profile.phone || staffFormData?.phone || '—'}</p>
                 </div>
-
                 <div className="space-y-2">
-                  <Label htmlFor="bio">Bio</Label>
-                  <Textarea
-                    id="bio"
-                    value={formData.bio}
-                    onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                    disabled={!editing}
-                    placeholder="Tell us about yourself..."
-                    rows={4}
-                  />
+                  <Label>Designation</Label>
+                  <p className="text-sm font-medium">{profile.designation || staffFormData?.designation || '—'}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Staff ID</Label>
+                  <p className="text-sm font-medium">{profile.staffId || staffFormData?.staffId || '—'}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Bio</Label>
+                  <p className="text-sm font-medium whitespace-pre-wrap">{profile.bio || staffFormData?.bio || '—'}</p>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Account Information */}
+            {/* Account Information (Overview) */}
             <Card>
               <CardHeader>
                 <CardTitle>Account Information</CardTitle>
@@ -478,7 +498,13 @@ export default function ProfilePage() {
                       <Building2 className="h-5 w-5 text-muted-foreground" />
                       <div>
                         <p className="font-medium">Department</p>
-                        <p className="text-sm text-muted-foreground">{profile.department.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {profile.department.id ? (
+                            <DepartmentProfileLink departmentId={profile.department.id} name={profile.department.name} />
+                          ) : (
+                            profile.department.name
+                          )}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -490,7 +516,13 @@ export default function ProfilePage() {
                       <Building2 className="h-5 w-5 text-muted-foreground" />
                       <div>
                         <p className="font-medium">Division</p>
-                        <p className="text-sm text-muted-foreground">{profile.division.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {profile.department?.id && profile.division?.id ? (
+                            <DivisionProfileLink departmentId={profile.department.id} divisionId={profile.division.id} name={profile.division.name} />
+                          ) : (
+                            profile.division.name
+                          )}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -510,6 +542,158 @@ export default function ProfilePage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Staff profile tab */}
+        <TabsContent value="staff" className="space-y-6">
+          {staffFormData && (
+            <>
+              <div className="flex justify-end gap-2">
+                {!editing ? (
+                  <Button onClick={() => setEditing(true)}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit profile
+                  </Button>
+                ) : (
+                  <>
+                    <Button onClick={() => handleSave()} disabled={saving}>
+                      <Save className="h-4 w-4 mr-2" />
+                      {saving ? 'Saving...' : 'Save'}
+                    </Button>
+                    <Button variant="outline" onClick={handleCancel} disabled={saving}>
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel
+                    </Button>
+                  </>
+                )}
+              </div>
+              <StaffProfileForm
+                data={staffFormData}
+                onChange={setStaffFormData}
+                disabled={!editing}
+                onSubmit={handleSave}
+                saving={saving}
+                submitLabel="Save profile"
+                showSubmit={false}
+              />
+            </>
+          )}
+        </TabsContent>
+
+        {/* Performance analytics tab */}
+        <TabsContent value="performance" className="space-y-6">
+          {performanceLoading ? (
+            <div className="flex min-h-[200px] items-center justify-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Gauge className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Performance Score</p>
+                        <p className="text-2xl font-bold">{myPerformance?.performanceScore ?? '—'}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Files Completed</p>
+                        <p className="text-2xl font-bold">{myPerformance?.completedFiles ?? '—'}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-red-500/10 flex items-center justify-center">
+                        <AlertTriangle className="h-5 w-5 text-red-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Red Listed</p>
+                        <p className="text-2xl font-bold">{myPerformance?.redListedFiles ?? '—'}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                        <Timer className="h-5 w-5 text-amber-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Avg. Time (hrs)</p>
+                        <p className="text-2xl font-bold">
+                          {myPerformance?.avgProcessingTimeHours != null
+                            ? myPerformance.avgProcessingTimeHours
+                            : '—'}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                        <FileStack className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Extension Requests</p>
+                        <p className="text-2xl font-bold">{myPerformance?.extensionRequests ?? '—'}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-slate-500/10 flex items-center justify-center">
+                        <FileText className="h-5 w-5 text-slate-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Files Assigned (total)</p>
+                        <p className="text-2xl font-bold">{myPerformance?.totalFilesAssigned ?? '—'}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              {activityHeatmap && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Activity</CardTitle>
+                    <CardDescription>
+                      File-related activity in {activityHeatmap.year} — {activityHeatmap.totalContributions} actions
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ActivityHeatmap
+                      contributions={activityHeatmap.contributions}
+                      totalContributions={activityHeatmap.totalContributions}
+                      year={activityHeatmap.year}
+                      scopeLabel="your"
+                    />
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
         </TabsContent>
 
         {/* Activity Tab */}

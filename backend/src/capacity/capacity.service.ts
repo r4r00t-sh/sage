@@ -246,6 +246,7 @@ export class CapacityService {
   ): Promise<UserCapacity> {
     // Only admins can set capacity
     if (
+      !userRoles.includes('DEVELOPER') &&
       !userRoles.includes('SUPER_ADMIN') &&
       !userRoles.includes('DEPT_ADMIN')
     ) {
@@ -305,6 +306,7 @@ export class CapacityService {
   ): Promise<UserCapacity[]> {
     // Only admins can bulk update
     if (
+      !userRoles.includes('DEVELOPER') &&
       !userRoles.includes('SUPER_ADMIN') &&
       !userRoles.includes('DEPT_ADMIN')
     ) {

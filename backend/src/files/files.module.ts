@@ -5,9 +5,10 @@ import { FilesPublicController } from './files-public.controller';
 import { TimingModule } from '../timing/timing.module';
 import { SecurityModule } from '../security/security.module';
 import { CapacityModule } from '../capacity/capacity.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [TimingModule, SecurityModule, CapacityModule],
+  imports: [TimingModule, SecurityModule, CapacityModule, AuthModule],
   controllers: [FilesPublicController, FilesController],
   providers: [FilesService],
   exports: [FilesService],

@@ -23,7 +23,7 @@ export class WorkflowService {
     },
   ) {
     // Check authorization
-    if (!userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
+    if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can create workflows');
     }
 
@@ -120,7 +120,7 @@ export class WorkflowService {
       isActive: boolean;
     }>,
   ) {
-    if (!userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
+    if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can update workflows');
     }
 
@@ -132,7 +132,7 @@ export class WorkflowService {
 
   // Publish workflow (make it active)
   async publishWorkflow(workflowId: string, userId: string, userRoles: string[]) {
-    if (!userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
+    if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can publish workflows');
     }
 
@@ -165,7 +165,7 @@ export class WorkflowService {
 
   // Delete workflow
   async deleteWorkflow(workflowId: string, userId: string, userRoles: string[]) {
-    if (!userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
+    if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can delete workflows');
     }
 
@@ -210,7 +210,7 @@ export class WorkflowService {
       config?: any;
     },
   ) {
-    if (!userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
+    if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can modify workflows');
     }
 
@@ -252,7 +252,7 @@ export class WorkflowService {
       config: any;
     }>,
   ) {
-    if (!userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
+    if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can modify workflows');
     }
 
@@ -264,7 +264,7 @@ export class WorkflowService {
 
   // Delete node
   async deleteNode(nodeId: string, userId: string, userRoles: string[]) {
-    if (!userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
+    if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can modify workflows');
     }
 
@@ -291,7 +291,7 @@ export class WorkflowService {
       style?: any;
     },
   ) {
-    if (!userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
+    if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can modify workflows');
     }
 
@@ -320,7 +320,7 @@ export class WorkflowService {
       style: any;
     }>,
   ) {
-    if (!userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
+    if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can modify workflows');
     }
 
@@ -332,7 +332,7 @@ export class WorkflowService {
 
   // Delete edge
   async deleteEdge(edgeId: string, userId: string, userRoles: string[]) {
-    if (!userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
+    if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can modify workflows');
     }
 
@@ -356,7 +356,7 @@ export class WorkflowService {
       departmentId?: string;
     },
   ) {
-    if (!userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
+    if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can create workflows');
     }
 
@@ -465,7 +465,7 @@ export class WorkflowService {
       isPublic?: boolean;
     },
   ) {
-    if (!userRoles.includes('SUPER_ADMIN')) {
+    if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN')) {
       throw new ForbiddenException(
         'Only super administrators can create templates',
       );
@@ -599,7 +599,7 @@ export class WorkflowService {
     newCode: string,
     newName: string,
   ) {
-    if (!userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
+    if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can clone workflows');
     }
 

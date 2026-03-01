@@ -9,7 +9,8 @@ import { MinIOService } from '../minio/minio.service';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { TimingService } from '../timing/timing.service';
 import { CapacityService } from '../capacity/capacity.service';
-import { FileStatus, FilePriority, FileAction } from '@prisma/client';
+import { RbacService } from '../auth/rbac.service';
+import { FileStatus, FilePriority, FileAction, UserRole } from '@prisma/client';
 
 @Injectable()
 export class FilesService {
@@ -19,6 +20,7 @@ export class FilesService {
     private rabbitmq: RabbitMQService,
     private timing: TimingService,
     private capacityService: CapacityService,
+    private rbac: RbacService,
   ) {}
 
   async createFile(data: {
@@ -42,7 +44,7 @@ export class FilesService {
       select: { roles: true },
     });
 
-    if (user?.roles?.includes('INWARD_DESK') && !user?.roles?.includes('DEPT_ADMIN') && !user?.roles?.includes('SUPER_ADMIN')) {
+    if (user?.roles?.includes('INWARD_DESK') && !user?.roles?.includes('DEPT_ADMIN') && !user?.roles?.includes('SUPER_ADMIN') && !user?.roles?.includes('DEVELOPER')) {
       throw new ForbiddenException('Inward Desk users cannot create new files. They can only receive and forward files.');
     }
 
@@ -147,7 +149,7 @@ export class FilesService {
       select: { roles: true, departmentId: true },
     });
 
-    if (user?.roles?.includes('INWARD_DESK') && !user?.roles?.includes('DEPT_ADMIN') && !user?.roles?.includes('SUPER_ADMIN')) {
+    if (user?.roles?.includes('INWARD_DESK') && !user?.roles?.includes('DEPT_ADMIN') && !user?.roles?.includes('SUPER_ADMIN') && !user?.roles?.includes('DEVELOPER')) {
       // Check if this is an incoming file (not created by this user's department)
       if (file.createdBy.departmentId !== user.departmentId) {
         throw new ForbiddenException('Inward Desk users cannot attach documents to incoming files from other departments.');
@@ -256,31 +258,29 @@ export class FilesService {
       limit?: number;
     },
   ) {
-    const where: any = {};
     const page = options?.page || 1;
     const limit = options?.limit || 50;
     const skip = (page - 1) * limit;
 
-    // Role-based filtering (user may have multiple roles; highest scope wins)
-    if (userRoles.includes('SUPER_ADMIN')) {
-      // No filtering for Super Admin - they see everything
-    } else if (userRoles.includes('DEPT_ADMIN')) {
-      if (departmentId) {
-        where.departmentId = departmentId;
-      }
-    } else if (userRoles.includes('APPROVAL_AUTHORITY')) {
-      if (departmentId) {
-        where.departmentId = departmentId;
-      }
-    } else if (userRoles.includes('INWARD_DESK') || userRoles.includes('DISPATCHER')) {
-      if (departmentId) {
-        where.departmentId = departmentId;
-      }
-    } else if (userRoles.includes('SECTION_OFFICER')) {
-      where.OR = [{ assignedToId: userId }, { createdById: userId }];
-    } else {
-      where.OR = [{ assignedToId: userId }, { createdById: userId }];
+    // Get user's division ID for proper RBAC
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, roles: true, departmentId: true, divisionId: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
     }
+
+    // Build RBAC filter
+    const accessFilter = this.rbac.buildFileAccessFilter({
+      userId: user.id,
+      roles: user.roles ?? [],
+      departmentId: user.departmentId,
+      divisionId: user.divisionId,
+    });
+
+    const where: any = { ...accessFilter.where };
 
     // Status filter
     if (options?.status) {
@@ -336,6 +336,24 @@ export class FilesService {
 
   /** Recent files for the current user (by audit log activity), for dashboard widget */
   async getRecentFiles(userId: string, limit = 10) {
+    // Get user info for RBAC
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, roles: true, departmentId: true, divisionId: true },
+    });
+
+    if (!user) {
+      return [];
+    }
+
+    // Build RBAC filter
+    const accessFilter = this.rbac.buildFileAccessFilter({
+      userId: user.id,
+      roles: user.roles ?? [],
+      departmentId: user.departmentId,
+      divisionId: user.divisionId,
+    });
+
     const recentLogs = await this.prisma.auditLog.findMany({
       where: { userId, fileId: { not: null } },
       select: { fileId: true, createdAt: true },
@@ -352,10 +370,15 @@ export class FilesService {
       }
     }
     if (fileIdsWithTime.length === 0) return [];
+    
+    // Apply RBAC filter to recent files
+    const where: any = {
+      id: { in: fileIdsWithTime.map((f) => f.fileId) },
+      ...accessFilter.where,
+    };
+
     const files = await this.prisma.file.findMany({
-      where: {
-        id: { in: fileIdsWithTime.map((f) => f.fileId) },
-      },
+      where,
       select: {
         id: true,
         fileNumber: true,
@@ -389,6 +412,8 @@ export class FilesService {
         assignedTo: { select: { id: true, name: true, email: true } },
         department: true,
         currentDivision: true,
+        intendedDivision: { select: { id: true, name: true, code: true } },
+        intendedUser: { select: { id: true, name: true, username: true } },
         originDesk: { select: { id: true, name: true, code: true, department: { select: { name: true, code: true } }, division: { select: { name: true } } } },
         notes: {
           include: {
@@ -453,12 +478,33 @@ export class FilesService {
       throw new NotFoundException('User not found');
     }
 
+    // Check RBAC access
+    const hasAccess = await this.rbac.canAccessFile(
+      {
+        id: file.id,
+        departmentId: file.departmentId,
+        currentDivisionId: file.currentDivisionId,
+        assignedToId: file.assignedToId,
+        createdById: file.createdById,
+      },
+      {
+        userId: user.id,
+        roles: user.roles ?? [],
+        departmentId: user.departmentId,
+        divisionId: user.divisionId,
+      },
+    );
+
+    if (!hasAccess) {
+      throw new ForbiddenException('You do not have access to this file');
+    }
+
     const userRoles = user.roles ?? [];
-    const isInwardDesk = userRoles.includes('INWARD_DESK') && !userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN');
-    const isDispatcher = userRoles.includes('DISPATCHER') && !userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN');
-    const isSectionOfficer = userRoles.includes('SECTION_OFFICER') && !userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN');
-    const isDeptAdmin = userRoles.includes('DEPT_ADMIN') || userRoles.includes('SUPER_ADMIN');
-    const isApprovalAuthority = userRoles.includes('APPROVAL_AUTHORITY') && !userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN');
+    const isInwardDesk = userRoles.includes('INWARD_DESK') && !userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEVELOPER');
+    const isDispatcher = userRoles.includes('DISPATCHER') && !userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEVELOPER');
+    const isSectionOfficer = userRoles.includes('SECTION_OFFICER') && !userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEVELOPER');
+    const isDeptAdmin = userRoles.includes('DEPT_ADMIN') || userRoles.includes('SUPER_ADMIN') || userRoles.includes('DEVELOPER');
+    const isApprovalAuthority = userRoles.includes('APPROVAL_AUTHORITY') && !userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEVELOPER');
 
     // Filter notes based on role and file status
     let filteredNotes = file.notes;
@@ -502,6 +548,9 @@ export class FilesService {
     } else if (isDispatcher) {
       // DISPATCHER: Can view notes (no specific restriction mentioned, but cannot add notes)
       filteredNotes = file.notes;
+    } else {
+      // Tier 1 — Standard User: only the last note (sender's / most recent) for immediate context
+      filteredNotes = file.notes.slice(0, 1);
     }
 
     // Get file URL if exists (backward compatibility)
@@ -611,7 +660,7 @@ export class FilesService {
       }
 
       finalToUserId = inwardDeskUser.id;
-      
+
       // If inward desk user has a division, use it; otherwise find first division in the department
       if (inwardDeskUser.division?.id) {
         finalToDivisionId = inwardDeskUser.division.id;
@@ -633,7 +682,8 @@ export class FilesService {
         finalToDivisionId = firstDivision.id;
       }
     }
-    // For other restricted roles (INWARD_DESK, SECTION_OFFICER), enforce internal forwarding
+    // For restricted roles (INWARD_DESK, SECTION_OFFICER) forwarding inside department.
+    // Section officer: always to division's inward desk and set intended*. Inward desk: can forward to specific user or to division inward.
     else if (isRestrictedRole && fromUser.departmentId) {
       if (!toDivisionId) {
         throw new BadRequestException('Please select a division to forward the file');
@@ -643,15 +693,20 @@ export class FilesService {
         where: { id: toDivisionId },
         select: { departmentId: true },
       });
-      
+
       if (!toDivision || toDivision.departmentId !== fromUser.departmentId) {
         throw new ForbiddenException(
           'You can only forward files to divisions within your own department.',
         );
       }
 
-      // For internal forwarding, find the inward desk user for the target division
-      if (!finalToUserId) {
+      const isInwardDeskSender = userRoles.includes('INWARD_DESK');
+      if (isInwardDeskSender && toUserId) {
+        // Inward desk forwarding to intended user: assign directly to that user
+        finalToUserId = toUserId;
+        finalToDivisionId = toDivisionId;
+      } else {
+        // Section officer or inward desk without user: assign to division's inward desk and store intended
         const inwardDeskUser = await this.prisma.user.findFirst({
           where: {
             divisionId: toDivisionId,
@@ -660,15 +715,75 @@ export class FilesService {
           },
           select: { id: true },
         });
-
         if (!inwardDeskUser) {
           throw new NotFoundException(
             `No inward desk user found for division. Please ensure an inward desk user is assigned to this division.`,
           );
         }
-
         finalToUserId = inwardDeskUser.id;
+        finalToDivisionId = toDivisionId;
       }
+    }
+    // Admin forwarding outside department: department required, division and user optional. Always to dept inward desk.
+    else if (!isDispatcher && !isRestrictedRole && toDepartmentId) {
+      if (toDepartmentId === fromUser.departmentId) {
+        throw new BadRequestException('Use Inside Department to forward within your department.');
+      }
+
+      const inwardDeskUser = await this.prisma.user.findFirst({
+        where: {
+          departmentId: toDepartmentId,
+          roles: { has: 'INWARD_DESK' },
+          isActive: true,
+        },
+        include: { division: { select: { id: true } } },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (!inwardDeskUser) {
+        throw new NotFoundException(
+          `No inward desk user found in the target department. Please ensure an inward desk user is assigned to this department.`,
+        );
+      }
+
+      finalToUserId = inwardDeskUser.id;
+      finalToDivisionId =
+        inwardDeskUser.division?.id ??
+        (
+          await this.prisma.division.findFirst({
+            where: { departmentId: toDepartmentId },
+            select: { id: true },
+            orderBy: { createdAt: 'asc' },
+          })
+        )?.id ??
+        undefined;
+    }
+    // Admin internal: division required, user optional; always to division inward desk.
+    else if (!isDispatcher && !isRestrictedRole && toDivisionId) {
+      const toDivision = await this.prisma.division.findUnique({
+        where: { id: toDivisionId },
+        select: { departmentId: true },
+      });
+      if (!toDivision || toDivision.departmentId !== fromUser.departmentId) {
+        throw new ForbiddenException(
+          'You can only forward to divisions within your own department when using Inside Department.',
+        );
+      }
+      const inwardDeskUser = await this.prisma.user.findFirst({
+        where: {
+          divisionId: toDivisionId,
+          roles: { has: 'INWARD_DESK' },
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      if (!inwardDeskUser) {
+        throw new NotFoundException(
+          `No inward desk user found for division. Please ensure an inward desk user is assigned to this division.`,
+        );
+      }
+      finalToUserId = inwardDeskUser.id;
+      finalToDivisionId = toDivisionId;
     }
 
     if (!finalToUserId) {
@@ -678,6 +793,18 @@ export class FilesService {
     if (!finalToDivisionId) {
       throw new BadRequestException('Target division is required');
     }
+
+    // When assigning to inward desk, store intended division/user so inward can one-click forward
+    const recipient = await this.prisma.user.findFirst({
+      where: { id: finalToUserId },
+      select: { roles: true },
+    });
+    const isSendingToInwardDesk = recipient?.roles?.includes('INWARD_DESK') ?? false;
+    const setIntended =
+      isSendingToInwardDesk &&
+      (isDispatcher || isRestrictedRole || !!toDepartmentId || !!toDivisionId);
+    const intendedDivisionId = setIntended ? (toDivisionId ?? null) : null;
+    const intendedUserId = setIntended ? (toUserId ?? null) : null;
 
     let isQueued = false;
     try {
@@ -698,6 +825,63 @@ export class FilesService {
         .then((r) => (r._max.sortOrder ?? 0) + 1))
       ?? 1;
 
+    // Get the assigned user to find their division/department for desk lookup
+    const assignedUser = await this.prisma.user.findUnique({
+      where: { id: finalToUserId },
+      select: { divisionId: true, departmentId: true },
+    });
+
+    // Direct Forward (Override Workflow): only Super Admin can send directly to a user in another department
+    if (
+      toUserId &&
+      finalToUserId === toUserId &&
+      assignedUser?.departmentId &&
+      fromUser.departmentId &&
+      assignedUser.departmentId !== fromUser.departmentId &&
+      !userRoles.includes('SUPER_ADMIN') &&
+      !userRoles.includes('DEVELOPER')
+    ) {
+      throw new ForbiddenException(
+        'Only Super Admin or Developer can direct forward (override workflow) to a user in another department.',
+      );
+    }
+
+    const now = new Date();
+    let allottedTimeInSeconds: number | null = null;
+    let deskDueDate: Date | null = null;
+    let deskId: string | null = null;
+
+    // Try to find a desk in the user's division or department
+    if (assignedUser) {
+      const orConditions: any[] = [];
+      if (assignedUser.divisionId) {
+        orConditions.push({ divisionId: assignedUser.divisionId });
+      }
+      if (assignedUser.departmentId) {
+        orConditions.push({ departmentId: assignedUser.departmentId });
+      }
+
+      const desk = await this.prisma.desk.findFirst({
+        where: {
+          isActive: true,
+          ...(orConditions.length > 0 && { OR: orConditions }),
+        },
+        select: { id: true, slaNorm: true },
+        orderBy: { createdAt: 'asc' }, // Get the first available desk
+      });
+
+      // Use desk SLA norm, or default from system settings (seeded as 48 hours)
+      const defaultSetting = await this.prisma.systemSettings.findUnique({
+        where: { key: 'defaultSlaNormHours' },
+        select: { value: true },
+      }).catch(() => null);
+      const defaultSlaHours = defaultSetting ? parseInt(defaultSetting.value, 10) : 48;
+      const slaHours = desk?.slaNorm ?? (Number.isNaN(defaultSlaHours) ? 48 : defaultSlaHours);
+      if (desk?.id) deskId = desk.id;
+      allottedTimeInSeconds = slaHours * 3600; // Convert hours to seconds
+      deskDueDate = new Date(now.getTime() + allottedTimeInSeconds * 1000);
+    }
+
     const updatedFile = await this.prisma.file.update({
       where: { id: fileId },
       data: {
@@ -705,8 +889,21 @@ export class FilesService {
         currentDivisionId: finalToDivisionId,
         status: FileStatus.IN_PROGRESS,
         isInQueue: isQueued,
+        ...(deskId && { deskId }),
+        deskArrivalTime: now,
+        ...(allottedTimeInSeconds !== null && {
+          allottedTime: allottedTimeInSeconds,
+          deskDueDate: deskDueDate,
+        }),
+        intendedDivisionId,
+        intendedUserId,
       },
     });
+
+    // Recalculate timer if allotted time was set
+    if (allottedTimeInSeconds !== null) {
+      await this.timing.updateTimeRemaining(fileId);
+    }
 
     if (isQueued) {
       await this.prisma.forwardQueue.create({
@@ -1060,6 +1257,32 @@ export class FilesService {
       throw new NotFoundException('File not found');
     }
 
+    const actor = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { roles: true, departmentId: true },
+    });
+    const roles = (actor?.roles ?? []) as string[];
+    const isDeveloper = roles.includes('DEVELOPER');
+    const isSuperAdmin = roles.includes('SUPER_ADMIN');
+    const isDeptAdmin = roles.includes('DEPT_ADMIN');
+
+    if (action === 'hold') {
+      if (!isDeveloper && !isSuperAdmin && !isDeptAdmin) {
+        throw new ForbiddenException('Only Department Admin, Developer or Super Admin can hold files');
+      }
+      if (isDeptAdmin && !isDeveloper && !isSuperAdmin && file.departmentId !== actor?.departmentId) {
+        throw new ForbiddenException('Department Admin can only hold files within their department');
+      }
+    }
+    if (action === 'release') {
+      if (!isDeveloper && !isSuperAdmin && !isDeptAdmin) {
+        throw new ForbiddenException('Only Department Admin, Developer or Super Admin can release files from hold');
+      }
+      if (isDeptAdmin && !isDeveloper && !isSuperAdmin && file.departmentId !== actor?.departmentId) {
+        throw new ForbiddenException('Department Admin can only release files within their department');
+      }
+    }
+
     let newStatus: FileStatus;
     let fileAction: FileAction;
 
@@ -1251,12 +1474,14 @@ export class FilesService {
     }
 
     if (request.approverId !== userId) {
-      // Check if user is admin
       const user = await this.prisma.user.findUnique({ where: { id: userId } });
       const userRoles = (user?.roles ?? []) as string[];
-      if (!user || !['SUPER_ADMIN', 'DEPT_ADMIN'].some((r) => userRoles.includes(r))) {
+      if (!user) {
+        throw new ForbiddenException('User not found');
+      }
+      if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('SUPPORT')) {
         throw new ForbiddenException(
-          'You are not authorized to approve this request',
+          'Only Developer, Super Admin or Support can grant time extensions when not the sender. Sender can accept/deny.',
         );
       }
     }
@@ -1375,10 +1600,15 @@ export class FilesService {
     fileId: string,
     userId: string,
     userRoles: string[],
+    userDepartmentId: string | null,
     remarks?: string,
   ) {
-    if (!userRoles.includes('SUPER_ADMIN')) {
-      throw new ForbiddenException('Only Super Admin can recall files');
+    const isDeveloper = userRoles.includes('DEVELOPER');
+    const isSuperAdmin = userRoles.includes('SUPER_ADMIN');
+    const isSupport = userRoles.includes('SUPPORT');
+    const isDeptAdmin = userRoles.includes('DEPT_ADMIN');
+    if (!isDeveloper && !isSuperAdmin && !isSupport && !isDeptAdmin) {
+      throw new ForbiddenException('Only Department Admin, Support, or Super Admin can recall files');
     }
 
     const file = await this.prisma.file.findUnique({
@@ -1387,6 +1617,12 @@ export class FilesService {
 
     if (!file) {
       throw new NotFoundException('File not found');
+    }
+
+    if (isDeptAdmin && !isDeveloper && !isSuperAdmin && !isSupport) {
+      if (file.departmentId !== userDepartmentId) {
+        throw new ForbiddenException('Department Admin can only recall files within their department');
+      }
     }
 
     const previousAssigneeId = file.assignedToId;
@@ -1425,6 +1661,15 @@ export class FilesService {
     return updatedFile;
   }
 
+  /**
+   * SAGE: 3-letter uppercase abbreviation from division/section name (e.g. ACCOUNTS → ACC).
+   */
+  private divisionNameToAbbr(name: string): string {
+    const cleaned = name.replace(/\s+/g, '').toUpperCase();
+    if (cleaned.length <= 3) return cleaned;
+    return cleaned.slice(0, 3);
+  }
+
   private async generateFileNumber(
     departmentId: string,
     divisionId?: string,
@@ -1437,20 +1682,21 @@ export class FilesService {
       throw new NotFoundException('Department not found');
     }
 
-    // Get division code if provided
-    let divisionCode = 'GEN'; // Default to GEN (General) if no division
+    const deptCode = department.code.toUpperCase();
+
+    // SAGE: 3-letter abbreviation from division name; avoid duplicate prefix
+    let divisionAbbr = 'GEN';
     if (divisionId) {
       const division = await this.prisma.division.findUnique({
         where: { id: divisionId },
       });
       if (division) {
-        divisionCode = division.code;
+        divisionAbbr = this.divisionNameToAbbr(division.name);
       }
     }
 
     const year = new Date().getFullYear();
 
-    // Count files for this department in current year
     const count = await this.prisma.file.count({
       where: {
         departmentId,
@@ -1460,11 +1706,98 @@ export class FilesService {
       },
     });
 
-    // Format: DEPT-DIV-YEAR-SEQUENCE (e.g., FIN-BUD-2026-0001)
-    return `${department.code}-${divisionCode}-${year}-${String(count + 1).padStart(4, '0')}`;
+    const seq = String(count + 1).padStart(4, '0');
+
+    // SAGE Rule 1: Eliminate duplicate prefix (e.g. FIN-FIN → FIN)
+    if (divisionAbbr === deptCode) {
+      return `${deptCode}-${year}-${seq}`;
+    }
+    return `${deptCode}-${divisionAbbr}-${year}-${seq}`;
   }
 
-  private async createAuditLog(
+  /**
+   * Set due time/allotted time for a file (Department Admin and Super Admin only)
+   */
+  async setFileDueTime(
+    fileId: string,
+    userId: string,
+    userRoles: string[],
+    allottedTimeInHours: number,
+  ) {
+    // Check authorization - Department Admin, Support, and Super Admin can set due time
+    if (
+      !userRoles.includes(UserRole.DEVELOPER) &&
+      !userRoles.includes(UserRole.SUPER_ADMIN) &&
+      !userRoles.includes(UserRole.SUPPORT) &&
+      !userRoles.includes(UserRole.DEPT_ADMIN)
+    ) {
+      throw new ForbiddenException(
+        'Only Department Admin, Support, or Super Admin can set due time for files',
+      );
+    }
+
+    const file = await this.prisma.file.findUnique({
+      where: { id: fileId },
+      include: { department: true },
+    });
+
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    // Department Admin can only set due time for files in their department (Support and Super Admin can set any)
+    if (
+      userRoles.includes(UserRole.DEPT_ADMIN) &&
+      !userRoles.includes(UserRole.DEVELOPER) &&
+      !userRoles.includes(UserRole.SUPER_ADMIN) &&
+      !userRoles.includes(UserRole.SUPPORT)
+    ) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { departmentId: true },
+      });
+
+      if (user?.departmentId !== file.departmentId) {
+        throw new ForbiddenException(
+          'Department Admin can only set due time for files in their own department',
+        );
+      }
+    }
+
+    if (allottedTimeInHours <= 0) {
+      throw new BadRequestException('Allotted time must be greater than 0');
+    }
+
+    const allottedTimeInSeconds = allottedTimeInHours * 3600; // Convert hours to seconds
+    const now = new Date();
+    const dueDate = new Date(now.getTime() + allottedTimeInSeconds * 1000);
+
+    // Update file with due time
+    const updatedFile = await this.prisma.file.update({
+      where: { id: fileId },
+      data: {
+        allottedTime: allottedTimeInSeconds,
+        deskArrivalTime: file.deskArrivalTime || now, // Set arrival time if not already set
+        deskDueDate: dueDate,
+        dueDate: file.dueDate || dueDate, // Set overall due date if not already set
+      },
+    });
+
+    // Recalculate timer
+    await this.timing.updateTimeRemaining(fileId);
+
+    // Create audit log
+    await this.createAuditLog(
+      fileId,
+      userId,
+      'due_time_set',
+      `Due time set to ${allottedTimeInHours} hours by admin`,
+    );
+
+    return updatedFile;
+  }
+
+  async createAuditLog(
     fileId: string,
     userId: string,
     action: string,

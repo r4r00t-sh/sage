@@ -74,9 +74,11 @@ const GROUP_CREATOR_ROLES = ['SUPER_ADMIN', 'DEPT_ADMIN', 'CHAT_MANAGER'];
 type ChatSidebarProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  openWithUserId?: string | null;
+  clearOpenWithUserId?: () => void;
 };
 
-export function ChatSidebar({ open, onOpenChange }: ChatSidebarProps) {
+export function ChatSidebar({ open, onOpenChange, openWithUserId, clearOpenWithUserId }: ChatSidebarProps) {
   const { user, token } = useAuthStore();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -165,6 +167,22 @@ export function ChatSidebar({ open, onOpenChange }: ChatSidebarProps) {
     setListLoading(true);
     loadConversations();
   }, [open, user, token, loadConversations]);
+
+  // SAGE Req 4: Open DM when openWithUserId is set (clickable username elsewhere)
+  useEffect(() => {
+    if (!open || !openWithUserId || openWithUserId === user?.id || !token) return;
+    (async () => {
+      try {
+        const res = await api.post<{ id: string }>(`/chat/dm/${openWithUserId}`);
+        if (res.data?.id) {
+          setSelectedId(res.data.id);
+          loadConversations();
+        }
+      } finally {
+        clearOpenWithUserId?.();
+      }
+    })();
+  }, [open, openWithUserId, user?.id, token, clearOpenWithUserId, loadConversations]);
 
   useEffect(() => {
     if (!open) {

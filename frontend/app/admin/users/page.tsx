@@ -70,11 +70,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { hasAnyRole, getRoles } from '@/lib/auth-utils';
+import { hasAnyRole, hasGodRole, getRoles } from '@/lib/auth-utils';
+import { DepartmentProfileLink, DivisionProfileLink } from '@/components/profile-links';
 
 const ROLE_OPTIONS = [
+  { value: 'DEVELOPER', label: 'Developer' },
   { value: 'SUPER_ADMIN', label: 'Super Admin' },
   { value: 'DEPT_ADMIN', label: 'Department Admin' },
+  { value: 'SUPPORT', label: 'Support' },
   { value: 'CHAT_MANAGER', label: 'Chat Manager' },
   { value: 'APPROVAL_AUTHORITY', label: 'Approval Authority' },
   { value: 'SECTION_OFFICER', label: 'Section Officer' },
@@ -143,7 +146,7 @@ export default function UsersPage() {
   });
 
   useEffect(() => {
-    if (!hasAnyRole(currentUser, ['SUPER_ADMIN', 'DEPT_ADMIN'])) {
+    if (!hasAnyRole(currentUser, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
       router.push('/dashboard');
       return;
     }
@@ -377,7 +380,8 @@ export default function UsersPage() {
 
   const getRoleBadge = (role: string) => {
     const colors: Record<string, string> = {
-      SUPER_ADMIN: 'bg-purple-500/10 text-purple-600',
+      DEVELOPER: 'bg-amber-500/10 text-amber-600',
+  SUPER_ADMIN: 'bg-purple-500/10 text-purple-600',
       DEPT_ADMIN: 'bg-blue-500/10 text-blue-600',
       SECTION_OFFICER: 'bg-green-500/10 text-green-600',
       INWARD_DESK: 'bg-orange-500/10 text-orange-600',
@@ -495,10 +499,12 @@ export default function UsersPage() {
                     <TableCell>
                       {user.department ? (
                         <div>
-                          <p className="text-sm">{user.department.name}</p>
+                          <p className="text-sm">
+                            <DepartmentProfileLink departmentId={user.department.id} name={user.department.name} />
+                          </p>
                           {user.division && (
                             <p className="text-xs text-muted-foreground">
-                              {user.division.name}
+                              <DivisionProfileLink departmentId={user.department.id} divisionId={user.division.id} name={user.division.name} />
                             </p>
                           )}
                         </div>
@@ -610,7 +616,7 @@ export default function UsersPage() {
             >
               <UserMinus className="h-4 w-4" />
             </Button>
-            {hasAnyRole(currentUser, ['SUPER_ADMIN']) && (
+            {hasGodRole(currentUser) && (
               <Button
                 variant="destructive"
                 size="icon"
@@ -734,7 +740,7 @@ export default function UsersPage() {
                       id={`create-${opt.value}`}
                       checked={formData.roles.includes(opt.value)}
                       onCheckedChange={() => toggleRole(opt.value)}
-                      disabled={opt.value === 'SUPER_ADMIN' && !hasAnyRole(currentUser, ['SUPER_ADMIN'])}
+                      disabled={opt.value === 'SUPER_ADMIN' && !hasGodRole(currentUser)}
                     />
                     <label htmlFor={`create-${opt.value}`} className="text-sm font-medium leading-none cursor-pointer">
                       {opt.label}
@@ -857,7 +863,7 @@ export default function UsersPage() {
                       id={`edit-${opt.value}`}
                       checked={formData.roles.includes(opt.value)}
                       onCheckedChange={() => toggleRole(opt.value)}
-                      disabled={opt.value === 'SUPER_ADMIN' && !hasAnyRole(currentUser, ['SUPER_ADMIN'])}
+                      disabled={opt.value === 'SUPER_ADMIN' && !hasGodRole(currentUser)}
                     />
                     <label htmlFor={`edit-${opt.value}`} className="text-sm font-medium leading-none cursor-pointer">
                       {opt.label}

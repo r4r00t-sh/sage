@@ -63,7 +63,7 @@ export class BackFilesService {
         scannedAt: data.file ? new Date() : undefined,
         scannedById: data.file ? userId : undefined,
         isHidden: true, // Hidden by default
-        accessRoles: [UserRole.SUPER_ADMIN, UserRole.DEPT_ADMIN], // Default access
+        accessRoles: [UserRole.DEVELOPER, UserRole.SUPER_ADMIN, UserRole.DEPT_ADMIN], // Default access
       },
     });
 
@@ -173,7 +173,7 @@ export class BackFilesService {
     // Filter based on access roles
     const accessibleBackFiles = links.filter((link) => {
       const backFile = link.backFile;
-      if (userRoles.includes(UserRole.SUPER_ADMIN)) return true;
+      if (userRoles.includes(UserRole.DEVELOPER) || userRoles.includes(UserRole.SUPER_ADMIN)) return true;
       if (backFile.accessRoles.some((r) => userRoles.includes(r))) return true;
       if (backFile.departmentId === file.departmentId) return true;
       return false;
@@ -201,7 +201,7 @@ export class BackFilesService {
     const where: any = {};
 
     // Access control
-    if (userRole !== UserRole.SUPER_ADMIN) {
+    if (userRole !== UserRole.DEVELOPER && userRole !== UserRole.SUPER_ADMIN) {
       where.OR = [
         { accessRoles: { has: userRole } },
         { department: { users: { some: { id: userId } } } },
@@ -271,7 +271,7 @@ export class BackFilesService {
     }
 
     // Check access
-    if (!userRoles.includes(UserRole.SUPER_ADMIN)) {
+    if (!userRoles.includes(UserRole.DEVELOPER) && !userRoles.includes(UserRole.SUPER_ADMIN)) {
       if (!backFile.accessRoles.some((r) => userRoles.includes(r))) {
         // Check if user is in same department
         const user = await this.prisma.user.findUnique({
@@ -300,7 +300,7 @@ export class BackFilesService {
       accessRoles?: string[];
     },
   ) {
-    if (!userRoles.includes(UserRole.SUPER_ADMIN) && !userRoles.includes(UserRole.DEPT_ADMIN)) {
+    if (!userRoles.includes(UserRole.DEVELOPER) && !userRoles.includes(UserRole.SUPER_ADMIN) && !userRoles.includes(UserRole.DEPT_ADMIN)) {
       throw new ForbiddenException(
         'Only administrators can update back file access',
       );

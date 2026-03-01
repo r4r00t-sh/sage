@@ -33,6 +33,7 @@ export class DispatchService {
 
     // Only admins or dispatchers can prepare for dispatch
     if (
+      !userRoles.includes(UserRole.DEVELOPER) &&
       !userRoles.includes(UserRole.SUPER_ADMIN) &&
       !userRoles.includes(UserRole.DEPT_ADMIN) &&
       !userRoles.includes(UserRole.DISPATCHER)
@@ -114,7 +115,7 @@ export class DispatchService {
 
     if (
       !user?.roles?.includes(UserRole.DISPATCHER) &&
-      !user?.roles?.includes(UserRole.SUPER_ADMIN)
+      !user?.roles?.includes(UserRole.DEVELOPER) && !user?.roles?.includes(UserRole.SUPER_ADMIN)
     ) {
       throw new ForbiddenException('Only dispatchers can dispatch files');
     }

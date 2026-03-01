@@ -9,20 +9,39 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { LogIn, Lock, User, ChevronDown, Smartphone } from 'lucide-react';
-import { ANDROID_APK_DOWNLOAD_URL } from '@/lib/api';
+import { LogIn, Lock, User, ChevronDown, Smartphone, Building2, LifeBuoy, UserCircle } from 'lucide-react';
+import { GITHUB_RELEASES_URL } from '@/lib/api';
+import { AuthLeftPanel } from '@/components/auth-left-panel';
 
-const testAccounts = [
-  { role: 'Super Admin', username: 'admin', password: 'admin123', name: 'Super Administrator' },
-  { role: 'Dept Admin', username: 'fin.admin', password: 'password123', name: 'Finance Department Admin' },
-  { role: 'Section Officer', username: 'fin.accoun0.section', password: 'password123', name: 'Accounts - Section Officer' },
-  { role: 'Approval Auth', username: 'fin.accoun0.approver', password: 'password123', name: 'Accounts - Approval Authority' },
-  { role: 'Dispatcher', username: 'fin.accoun0.dispatch', password: 'password123', name: 'Accounts - Dispatcher' },
-  { role: 'Inward Desk', username: 'fin.accoun0.inward', password: 'password123', name: 'Accounts - Inward Desk' },
-  { role: 'Dept Admin', username: 'agr.admin', password: 'password123', name: 'Agriculture Department Admin' },
-  { role: 'Section Officer', username: 'agr.animal0.section', password: 'password123', name: 'Animal Husbandry - Section Officer' },
-  { role: 'Dept Admin', username: 'ops.admin', password: 'password123', name: 'Operations Department Admin' },
-  { role: 'Section Officer', username: 'shro.medica0.section', password: 'password123', name: 'Medical Education - Section Officer' },
+// Must match backend seed (prisma/seed.ts). All use password123 except Super Admin (admin123).
+type TestAccount = {
+  role: string;
+  username: string;
+  password: string;
+  name: string;
+  department: string;
+  division: string;
+  /** Support Panel = view/respond to all tickets (SUPER_ADMIN only in this list). Others get My Tickets only. */
+  supportAccess: 'Support Panel + My Tickets' | 'My Tickets only';
+  email: string;
+};
+const testAccounts: TestAccount[] = [
+  { role: 'Super Admin', username: 'admin', password: 'admin123', name: 'Super Administrator', department: '—', division: '—', supportAccess: 'Support Panel + My Tickets', email: 'admin@santhigiri.org' },
+  { role: 'Finance Dept Admin', username: 'fin.admin', password: 'password123', name: 'Finance Department Admin', department: 'Finance', division: '—', supportAccess: 'My Tickets only', email: 'fin.admin@santhigiri.org' },
+  { role: 'Section Officer', username: 'fin.accounts', password: 'password123', name: 'Accounts Section Officer', department: 'Finance', division: 'Accounts', supportAccess: 'My Tickets only', email: 'fin.accounts@santhigiri.org' },
+  { role: 'Inward Desk', username: 'fin.inward', password: 'password123', name: 'Finance Inward Desk', department: 'Finance', division: 'Accounts', supportAccess: 'My Tickets only', email: 'fin.inward@santhigiri.org' },
+  { role: 'Dispatcher', username: 'fin.dispatch', password: 'password123', name: 'Finance Dispatcher', department: 'Finance', division: 'Accounts', supportAccess: 'My Tickets only', email: 'fin.dispatch@santhigiri.org' },
+  { role: 'Approval Authority', username: 'fin.approver', password: 'password123', name: 'Finance Approval Authority', department: 'Finance', division: 'Accounts', supportAccess: 'My Tickets only', email: 'fin.approver@santhigiri.org' },
+  { role: 'Clerk', username: 'fin.clerk', password: 'password123', name: 'Finance Clerk', department: 'Finance', division: 'Accounts', supportAccess: 'My Tickets only', email: 'fin.clerk@santhigiri.org' },
+  { role: 'Chat Manager', username: 'fin.chat', password: 'password123', name: 'Finance Chat Manager', department: 'Finance', division: 'Accounts', supportAccess: 'My Tickets only', email: 'fin.chat@santhigiri.org' },
+  { role: 'Dept Admin (AGR)', username: 'agr.admin', password: 'password123', name: 'Agriculture Department Admin', department: 'Agriculture', division: '—', supportAccess: 'My Tickets only', email: 'agr.admin@santhigiri.org' },
+  { role: 'Dept Admin (OPS)', username: 'ops.admin', password: 'password123', name: 'Operations Department Admin', department: 'Operations', division: '—', supportAccess: 'My Tickets only', email: 'ops.admin@santhigiri.org' },
+  { role: 'OPS Section Officer', username: 'ops.office', password: 'password123', name: 'Operations Section Officer', department: 'Operations', division: '—', supportAccess: 'My Tickets only', email: 'ops.office@santhigiri.org' },
+  { role: 'OPS Inward Desk', username: 'ops.inward', password: 'password123', name: 'Operations Inward Desk', department: 'Operations', division: '—', supportAccess: 'My Tickets only', email: 'ops.inward@santhigiri.org' },
+  { role: 'OPS Dispatcher', username: 'ops.dispatch', password: 'password123', name: 'Operations Dispatcher', department: 'Operations', division: '—', supportAccess: 'My Tickets only', email: 'ops.dispatch@santhigiri.org' },
+  { role: 'OPS Approval Authority', username: 'ops.approver', password: 'password123', name: 'Operations Approval Authority', department: 'Operations', division: '—', supportAccess: 'My Tickets only', email: 'ops.approver@santhigiri.org' },
+  { role: 'OPS Clerk', username: 'ops.clerk', password: 'password123', name: 'Operations Clerk', department: 'Operations', division: '—', supportAccess: 'My Tickets only', email: 'ops.clerk@santhigiri.org' },
+  { role: 'OPS Chat Manager', username: 'ops.chat', password: 'password123', name: 'Operations Chat Manager', department: 'Operations', division: '—', supportAccess: 'My Tickets only', email: 'ops.chat@santhigiri.org' },
 ];
 
 export default function LoginPage() {
@@ -32,9 +51,11 @@ export default function LoginPage() {
   const [showTestAccounts, setShowTestAccounts] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { setAuth } = useAuthStore();
+  const { setAuth, lastVisitedPath, clearLastVisitedPath } = useAuthStore();
 
-  const rawRedirect = searchParams.get('redirect') || '/dashboard';
+  // Priority: 1. redirect query param, 2. last visited path, 3. dashboard
+  const redirectParam = searchParams.get('redirect');
+  const rawRedirect = redirectParam || lastVisitedPath || '/dashboard';
   const redirectTo =
     rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
       ? rawRedirect
@@ -46,21 +67,28 @@ export default function LoginPage() {
     try {
       const response = await api.post('/auth/login', { username, password });
       setAuth(response.data.user, response.data.access_token);
+      // Clear last visited path after successful login
+      clearLastVisitedPath();
       toast.success('Welcome back!', {
         description: `Logged in as ${response.data.user.name}`,
       });
-      router.push(redirectTo);
+      if (response.data.user.mustChangePassword) {
+        router.push('/profile/change-password');
+      } else {
+        router.push(redirectTo);
+      }
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      const msg = err.response?.data?.message || err.message || 'Invalid username or password';
       toast.error('Login failed', {
-        description: err.response?.data?.message || 'Invalid username or password',
+        description: msg,
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const fillTestAccount = (account: (typeof testAccounts)[0]) => {
+  const fillTestAccount = (account: TestAccount) => {
     setUsername(account.username);
     setPassword(account.password);
     toast.info(`Filled: ${account.name}`);
@@ -71,21 +99,38 @@ export default function LoginPage() {
       {/* Header - spans full width, transparent over columns */}
       <header className="flex items-center justify-between px-6 py-5 lg:px-10 lg:py-6 border-b border-zinc-800/50 lg:border-b-0 lg:absolute lg:top-0 lg:left-0 lg:right-0 z-10 lg:bg-transparent bg-zinc-950">
         <Link href="/" className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-zinc-800 flex items-center justify-center overflow-hidden">
-            <img src="/logo.png" alt="EFMP" className="h-8 w-8 object-contain" />
-          </div>
-          <span className="text-lg font-semibold text-zinc-100">EFMP</span>
+          <img src="/logo.png?v=2" alt="SAGE" className="h-14 w-14 object-contain" />
         </Link>
         <div className="flex items-center gap-4">
-          <a
-            href={ANDROID_APK_DOWNLOAD_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
-          >
-            <Smartphone className="h-4 w-4" />
-            Download Android app
-          </a>
+          <div className="relative group">
+            <button
+              type="button"
+              className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
+              aria-haspopup="true"
+              aria-expanded="false"
+            >
+              <Smartphone className="h-4 w-4" />
+              Download
+              <ChevronDown className="h-4 w-4" />
+            </button>
+            <div className="absolute right-0 top-full mt-1 py-1 min-w-[140px] rounded-lg border border-zinc-800 bg-zinc-900 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+              <a
+                href={GITHUB_RELEASES_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full px-4 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
+              >
+                For Android
+              </a>
+              <button
+                type="button"
+                className="block w-full px-4 py-2 text-left text-sm text-zinc-500 cursor-default"
+                onClick={(e) => e.preventDefault()}
+              >
+                For iOS
+              </button>
+            </div>
+          </div>
           <Link
             href="/"
             className="text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
@@ -95,15 +140,9 @@ export default function LoginPage() {
         </div>
       </header>
 
-      {/* Left column - lighter shade + testimonial */}
-      <div className="hidden lg:flex lg:w-1/2 flex-col justify-end p-12 xl:p-16 lg:min-h-screen bg-zinc-900 lg:border-r border-zinc-800/80">
-        <div className="max-w-md">
-          <blockquote className="text-zinc-400 italic text-lg leading-relaxed">
-            &ldquo;This platform has saved us countless hours and helped us deliver
-            file tracking and approvals faster than ever before.&rdquo;
-          </blockquote>
-          <p className="mt-4 text-sm text-zinc-500">— Santhigiri Ashram</p>
-        </div>
+      {/* Left column - Unicorn Studio background covers fully; acrylic overlay + text on top */}
+      <div className="hidden lg:flex lg:w-1/2 lg:min-h-screen lg:border-r border-zinc-800/80">
+        <AuthLeftPanel />
       </div>
 
       {/* Right column - darker shade + form */}
@@ -200,16 +239,42 @@ export default function LoginPage() {
               />
             </button>
             {showTestAccounts && (
-              <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-1.5 max-h-64 overflow-y-auto">
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2 max-h-[28rem] overflow-y-auto">
+                <p className="text-xs text-zinc-500 px-1 pb-1 border-b border-zinc-800 mb-2">
+                  Click to fill. Password: <code className="text-zinc-400">password123</code> (Super Admin: <code className="text-zinc-400">admin123</code>)
+                </p>
                 {testAccounts.map((account, i) => (
                   <button
                     key={i}
                     type="button"
                     onClick={() => fillTestAccount(account)}
-                    className="w-full text-left px-3 py-2 rounded-md text-sm text-zinc-300 hover:bg-zinc-800/80 hover:text-zinc-100 transition-colors flex items-center justify-between gap-2"
+                    className="w-full text-left px-3 py-3 rounded-md text-sm text-zinc-300 hover:bg-zinc-800/80 hover:text-zinc-100 transition-colors flex flex-col gap-1.5 border border-transparent hover:border-zinc-700"
                   >
-                    <span className="truncate">{account.name}</span>
-                    <span className="text-xs text-zinc-500 shrink-0">{account.role}</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium truncate">{account.name}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-700/80 text-zinc-400 font-mono shrink-0">{account.username}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-500">
+                      <span className="flex items-center gap-1">
+                        <UserCircle className="h-3 w-3" />
+                        {account.role}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Building2 className="h-3 w-3" />
+                        {account.department} {account.division !== '—' ? ` · ${account.division}` : ''}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-500">
+                      <span className="flex items-center gap-1" title="Profile: view in sidebar after login">
+                        <User className="h-3 w-3" />
+                        Profile: name, email, stats in app
+                      </span>
+                      <span className="flex items-center gap-1" title={account.supportAccess}>
+                        <LifeBuoy className="h-3 w-3" />
+                        Support: {account.supportAccess}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-zinc-600 truncate">{account.email}</span>
                   </button>
                 ))}
               </div>

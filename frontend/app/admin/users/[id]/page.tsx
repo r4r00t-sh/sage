@@ -33,7 +33,8 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import api from '@/lib/api';
-import { hasAnyRole, getRoles } from '@/lib/auth-utils';
+import { hasAnyRole, hasGodRole, getRoles } from '@/lib/auth-utils';
+import { DepartmentProfileLink, DivisionProfileLink } from '@/components/profile-links';
 import { format } from 'date-fns';
 
 interface UserDetail {
@@ -118,7 +119,7 @@ export default function UserDetailPage() {
   const [tabLoading, setTabLoading] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (!hasAnyRole(currentUser, ['SUPER_ADMIN', 'DEPT_ADMIN'])) {
+    if (!hasAnyRole(currentUser, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
       router.push('/dashboard');
       return;
     }
@@ -200,6 +201,7 @@ export default function UserDetailPage() {
 
   const getRoleBadge = (role: string) => {
     const colors: Record<string, string> = {
+      DEVELOPER: 'bg-amber-500/10 text-amber-600',
       SUPER_ADMIN: 'bg-purple-500/10 text-purple-600',
       DEPT_ADMIN: 'bg-blue-500/10 text-blue-600',
       SECTION_OFFICER: 'bg-green-500/10 text-green-600',
@@ -333,7 +335,11 @@ export default function UserDetailPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Department</p>
                 <p className="font-medium truncate">
-                  {user.department?.name ?? '—'}
+                  {user.department ? (
+                    <DepartmentProfileLink departmentId={user.department.id} name={user.department.name} />
+                  ) : (
+                    '—'
+                  )}
                 </p>
               </div>
             </div>
@@ -348,7 +354,13 @@ export default function UserDetailPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Division</p>
                 <p className="font-medium truncate">
-                  {user.division?.name ?? '—'}
+                  {user.division && user.department ? (
+                    <DivisionProfileLink departmentId={user.department.id} divisionId={user.division.id} name={user.division.name} />
+                  ) : user.division ? (
+                    user.division.name
+                  ) : (
+                    '—'
+                  )}
                 </p>
               </div>
             </div>
@@ -420,7 +432,7 @@ export default function UserDetailPage() {
                         '—'
                       )}
                       {user.profileApprovalStatus === 'PENDING_APPROVAL' &&
-                        hasAnyRole(currentUser, ['SUPER_ADMIN']) && (
+                        hasGodRole(currentUser) && (
                           <Button
                             size="sm"
                             onClick={async () => {

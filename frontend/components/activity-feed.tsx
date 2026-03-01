@@ -18,6 +18,7 @@ import {
 import api from '@/lib/api';
 import { formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
+import { UserProfileLink } from '@/components/profile-links';
 
 interface Activity {
   id: string;
@@ -132,7 +133,7 @@ export function ActivityFeed() {
                     <div className="flex items-start gap-2">
                       <div className="flex-1">
                         <p className="text-sm">
-                          <span className="font-medium">{activity.user.name}</span>{' '}
+                          <UserProfileLink userId={activity.user.id} name={activity.user.name} />{' '}
                           <span className="text-muted-foreground">{activity.message}</span>
                         </p>
                         <div className="flex items-center gap-2 mt-1">

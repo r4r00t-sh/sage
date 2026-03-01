@@ -5,10 +5,14 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserRole } from '@prisma/client';
+import { TimingService } from '../timing/timing.service';
 
 @Injectable()
 export class DesksService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private timing: TimingService,
+  ) {}
 
   // Create a new desk
   async createDesk(
@@ -22,6 +26,7 @@ export class DesksService {
       divisionId?: string;
       maxFilesPerDay?: number;
       iconType?: string;
+      slaNorm?: number; // SLA norm in hours
     },
   ) {
     // Only admins can create desks
@@ -47,6 +52,7 @@ export class DesksService {
         divisionId: data.divisionId,
         maxFilesPerDay: data.maxFilesPerDay || 10,
         iconType: data.iconType || 'desk',
+        slaNorm: data.slaNorm || null, // SLA norm in hours (optional)
         isActive: true,
         isAutoCreated: false,
       },
@@ -54,52 +60,196 @@ export class DesksService {
   }
 
   // Get all desks for a department
+  // In this system, "desk" means: Departments, Divisions, Users, and actual Desk entities
   async getDesks(departmentId?: string, divisionId?: string) {
-    const where: any = { isActive: true };
+    const allDesks: any[] = [];
 
+    // 1. Get all Departments as desks
+    const deptWhere: any = {};
     if (departmentId) {
-      where.departmentId = departmentId;
+      deptWhere.id = departmentId;
+    }
+    const departments = await this.prisma.department.findMany({
+      where: deptWhere,
+      include: {
+        _count: {
+          select: {
+            files: {
+              where: { status: { in: ['PENDING', 'IN_PROGRESS'] } },
+            },
+          },
+        },
+      },
+    });
+
+    for (const dept of departments) {
+      const currentCount = dept._count.files;
+      allDesks.push({
+        id: `dept-${dept.id}`,
+        name: dept.name,
+        code: dept.code,
+        description: `Department: ${dept.name}`,
+        type: 'department',
+        department: { name: dept.name, code: dept.code },
+        division: null,
+        maxFilesPerDay: 50, // Default capacity for departments
+        currentFileCount: currentCount,
+        capacityUtilizationPercent: Math.round((currentCount / 50) * 100 * 100) / 100,
+        optimumCapacity: 50,
+        isActive: true,
+        isAutoCreated: false,
+        iconType: 'building',
+        estimatedProcessingTimeDays: currentCount > 0 ? Math.ceil(currentCount / 50) : 0,
+        estimatedProcessingTimeHours: currentCount > 0 ? Math.ceil(currentCount / 50) * 8 : 0,
+      });
+    }
+
+    // 2. Get all Divisions as desks
+    const divWhere: any = {};
+    if (departmentId) {
+      divWhere.departmentId = departmentId;
     }
     if (divisionId) {
-      where.divisionId = divisionId;
+      divWhere.id = divisionId;
+    }
+    const divisions = await this.prisma.division.findMany({
+      where: divWhere,
+      include: {
+        department: { select: { name: true, code: true } },
+        _count: {
+          select: {
+            files: {
+              where: { status: { in: ['PENDING', 'IN_PROGRESS'] } },
+            },
+          },
+        },
+      },
+    });
+
+    for (const div of divisions) {
+      const currentCount = div._count.files;
+      allDesks.push({
+        id: `div-${div.id}`,
+        name: div.name,
+        code: div.code,
+        description: `Division: ${div.name}`,
+        type: 'division',
+        department: div.department,
+        division: { name: div.name },
+        maxFilesPerDay: 30, // Default capacity for divisions
+        currentFileCount: currentCount,
+        capacityUtilizationPercent: Math.round((currentCount / 30) * 100 * 100) / 100,
+        optimumCapacity: 30,
+        isActive: true,
+        isAutoCreated: false,
+        iconType: 'folder',
+        estimatedProcessingTimeDays: currentCount > 0 ? Math.ceil(currentCount / 30) : 0,
+        estimatedProcessingTimeHours: currentCount > 0 ? Math.ceil(currentCount / 30) * 8 : 0,
+      });
     }
 
-    const desks = await this.prisma.desk.findMany({
-      where,
+    // 3. Get all Users as desks
+    const userWhere: any = { isActive: true };
+    if (departmentId) {
+      userWhere.departmentId = departmentId;
+    }
+    if (divisionId) {
+      userWhere.divisionId = divisionId;
+    }
+    const users = await this.prisma.user.findMany({
+      where: userWhere,
       include: {
         department: { select: { name: true, code: true } },
         division: { select: { name: true } },
         _count: {
-          select: { files: true },
+          select: {
+            filesAssigned: {
+              where: { status: { in: ['PENDING', 'IN_PROGRESS'] } },
+            },
+          },
+        },
+      },
+    });
+
+    for (const user of users) {
+      const currentCount = user._count.filesAssigned;
+      const maxFiles = user.maxFilesPerDay || 10;
+      allDesks.push({
+        id: `user-${user.id}`,
+        name: user.name,
+        code: user.username,
+        description: `User: ${user.name} (${user.username})`,
+        type: 'user',
+        department: user.department ? { name: user.department.name, code: user.department.code } : null,
+        division: user.division ? { name: user.division.name } : null,
+        maxFilesPerDay: maxFiles,
+        currentFileCount: currentCount,
+        capacityUtilizationPercent: Math.round((currentCount / maxFiles) * 100 * 100) / 100,
+        optimumCapacity: maxFiles,
+        isActive: user.isActive,
+        isAutoCreated: false,
+        iconType: 'user',
+        estimatedProcessingTimeDays: currentCount > 0 ? Math.ceil(currentCount / maxFiles) : 0,
+        estimatedProcessingTimeHours: currentCount > 0 ? Math.ceil(currentCount / maxFiles) * 8 : 0,
+      });
+    }
+
+    // 4. Get actual Desk entities
+    const deskWhere: any = { isActive: true };
+    if (departmentId) {
+      deskWhere.departmentId = departmentId;
+    }
+    if (divisionId) {
+      deskWhere.divisionId = divisionId;
+    }
+
+    const physicalDesks = await this.prisma.desk.findMany({
+      where: deskWhere,
+      include: {
+        department: { select: { name: true, code: true } },
+        division: { select: { name: true } },
+        _count: {
+          select: {
+            files: {
+              where: { status: { in: ['PENDING', 'IN_PROGRESS'] } },
+            },
+          },
         },
       },
       orderBy: { createdAt: 'asc' },
     });
 
-    // Calculate capacity utilization for each desk
-    return desks.map((desk) => {
+    for (const desk of physicalDesks) {
       const currentCount = desk._count.files;
       const utilization =
         desk.maxFilesPerDay > 0
           ? (currentCount / desk.maxFilesPerDay) * 100
           : 0;
-
-      // Calculate estimated processing time
-      // If desk is at capacity, estimate based on files per day
-      // Otherwise, estimate based on current queue
       const estimatedDays =
         currentCount > 0 ? Math.ceil(currentCount / desk.maxFilesPerDay) : 0;
-      const estimatedHours = estimatedDays * 8; // Assuming 8 working hours per day
 
-      return {
-        ...desk,
+      allDesks.push({
+        id: desk.id,
+        name: desk.name,
+        code: desk.code,
+        description: desk.description,
+        type: 'desk',
+        department: desk.department,
+        division: desk.division,
+        maxFilesPerDay: desk.maxFilesPerDay,
         currentFileCount: currentCount,
         capacityUtilizationPercent: Math.round(utilization * 100) / 100,
         optimumCapacity: desk.maxFilesPerDay,
+        isActive: desk.isActive,
+        isAutoCreated: desk.isAutoCreated,
+        iconType: desk.iconType || 'desk',
         estimatedProcessingTimeDays: estimatedDays,
-        estimatedProcessingTimeHours: estimatedHours,
-      };
-    });
+        estimatedProcessingTimeHours: estimatedDays * 8,
+      });
+    }
+
+    // Sort by name for consistent ordering
+    return allDesks.sort((a, b) => a.name.localeCompare(b.name));
   }
 
   // Get desk by ID
@@ -180,14 +330,37 @@ export class DesksService {
       );
     }
 
-    // Assign file; set desk of origin on first assignment
-    return this.prisma.file.update({
+    // Get desk SLA norm to calculate allotted time (or use default 48h from system settings)
+    const deskWithSla = await this.prisma.desk.findUnique({
+      where: { id: deskId },
+      select: { slaNorm: true },
+    });
+    const defaultSetting = await this.prisma.systemSettings.findUnique({
+      where: { key: 'defaultSlaNormHours' },
+      select: { value: true },
+    }).catch(() => null);
+    const defaultSlaHours = defaultSetting ? parseInt(defaultSetting.value, 10) : 48;
+    const slaHours = deskWithSla?.slaNorm ?? (Number.isNaN(defaultSlaHours) ? 48 : defaultSlaHours);
+
+    const now = new Date();
+    const allottedTimeInSeconds = slaHours * 3600; // Convert hours to seconds
+    const deskDueDate = new Date(now.getTime() + allottedTimeInSeconds * 1000);
+
+    // Assign file; set desk of origin on first assignment, and set timing fields
+    const updatedFile = await this.prisma.file.update({
       where: { id: fileId },
       data: {
         deskId,
         ...(file.originDeskId == null && { originDeskId: deskId }),
+        deskArrivalTime: now,
+        allottedTime: allottedTimeInSeconds,
+        deskDueDate: deskDueDate,
       },
     });
+
+    await this.timing.updateTimeRemaining(fileId);
+
+    return updatedFile;
   }
 
   // Calculate and update desk capacity
@@ -301,49 +474,31 @@ export class DesksService {
   }
 
   // Get desk workload and capacity summary
+  // Counts all desks: Departments, Divisions, Users, and actual Desk entities
   async getDeskWorkloadSummary(departmentId?: string) {
-    const where: any = { isActive: true };
-    if (departmentId) {
-      where.departmentId = departmentId;
-    }
+    // Get all desks using the same method
+    const allDesks = await this.getDesks(departmentId);
 
-    const desks = await this.prisma.desk.findMany({
-      where,
-      include: {
-        department: { select: { name: true, code: true } },
-        division: { select: { name: true } },
-        _count: {
-          select: {
-            files: {
-              where: { status: { in: ['PENDING', 'IN_PROGRESS'] } },
-            },
-          },
-        },
-      },
-    });
-
-    const totalFiles = desks.reduce((sum, d) => sum + d._count.files, 0);
-    const totalCapacity = desks.reduce((sum, d) => sum + d.maxFilesPerDay, 0);
+    const totalFiles = allDesks.reduce((sum, d) => sum + d.currentFileCount, 0);
+    const totalCapacity = allDesks.reduce((sum, d) => sum + d.maxFilesPerDay, 0);
     const overallUtilization =
       totalCapacity > 0 ? (totalFiles / totalCapacity) * 100 : 0;
 
     return {
-      totalDesks: desks.length,
-      activeDesks: desks.filter((d) => d._count.files > 0).length,
+      totalDesks: allDesks.length,
+      activeDesks: allDesks.filter((d) => d.currentFileCount > 0).length,
       totalFiles,
       totalCapacity,
       overallUtilization: Math.round(overallUtilization * 100) / 100,
-      desks: desks.map((d) => ({
+      desks: allDesks.map((d) => ({
         id: d.id,
         name: d.name,
         code: d.code,
-        currentFiles: d._count.files,
+        type: d.type,
+        currentFiles: d.currentFileCount,
         maxFiles: d.maxFilesPerDay,
-        utilization:
-          d.maxFilesPerDay > 0
-            ? Math.round((d._count.files / d.maxFilesPerDay) * 100 * 100) / 100
-            : 0,
-        isFull: d._count.files >= d.maxFilesPerDay,
+        utilization: d.capacityUtilizationPercent,
+        isFull: d.currentFileCount >= d.maxFilesPerDay,
         department: d.department,
         division: d.division,
       })),
@@ -361,6 +516,7 @@ export class DesksService {
       maxFilesPerDay?: number;
       iconType?: string;
       isActive?: boolean;
+      slaNorm?: number; // SLA norm in hours
     },
   ) {
     if (!userRoles.includes(UserRole.SUPER_ADMIN) && !userRoles.includes(UserRole.DEPT_ADMIN)) {

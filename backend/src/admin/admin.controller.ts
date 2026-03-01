@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { hasAnyRole, hasRole } from '../auth/auth.helpers';
+import { hasAnyRole, hasRole, hasGodRole } from '../auth/auth.helpers';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard)
@@ -19,7 +19,7 @@ export class AdminController {
   constructor(private adminService: AdminService) {}
 
   private checkAdminAccess(user: { roles?: string[] }) {
-    if (!hasAnyRole(user, ['SUPER_ADMIN', 'DEPT_ADMIN'])) {
+    if (!hasAnyRole(user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
       throw new ForbiddenException('Admin access required');
     }
   }
@@ -75,7 +75,7 @@ export class AdminController {
   // Get department-wise analytics (Super Admin only)
   @Get('analytics/departments')
   async getDepartmentWiseAnalytics(@Request() req) {
-    if (!hasRole(req.user, 'SUPER_ADMIN')) {
+    if (!hasGodRole(req.user)) {
       throw new ForbiddenException('Super Admin access required');
     }
     return this.adminService.getDepartmentWiseAnalytics();

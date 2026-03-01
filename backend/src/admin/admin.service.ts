@@ -13,7 +13,7 @@ export class AdminService {
     // Build query based on role
     const where: any = { isActive: true };
 
-    if (userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN')) {
+    if (userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEVELOPER')) {
       where.departmentId = departmentId;
     }
     // SUPER_ADMIN sees all
@@ -156,7 +156,7 @@ export class AdminService {
 
     // Get user points stats
     const userPointsQuery: any = {};
-    if (departmentId && userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN')) {
+    if (departmentId && userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEVELOPER')) {
       userPointsQuery.user = { departmentId };
     }
 
@@ -186,7 +186,7 @@ export class AdminService {
       }),
       this.prisma.timeExtensionRequest.count({
         where:
-          departmentId && userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN')
+          departmentId && userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEVELOPER')
             ? { file: { departmentId } }
             : {},
       }),
