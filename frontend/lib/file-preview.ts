@@ -4,7 +4,7 @@
  */
 
 export interface PreviewConfig {
-  type: 'image' | 'pdf' | 'office' | 'google-viewer' | 'microsoft-viewer' | 'download';
+  type: 'image' | 'pdf' | 'office' | 'google-viewer' | 'microsoft-viewer' | 'text' | 'download';
   url: string;
   fallback?: string;
 }
@@ -87,10 +87,20 @@ export function getFilePreviewConfig(
     };
   }
 
-  // Text files
+  // Plain text files – use native text preview (auth-required URLs don't work in Google Viewer)
+  if (
+    mimeType === 'text/plain' ||
+    filename?.toLowerCase().endsWith('.txt')
+  ) {
+    return {
+      type: 'text',
+      url: fileUrl,
+    };
+  }
+
+  // Other text/CSV – try viewer or download
   if (
     mimeType.startsWith('text/') ||
-    filename?.endsWith('.txt') ||
     filename?.endsWith('.csv')
   ) {
     return {

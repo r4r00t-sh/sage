@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:efiling_app/core/api/api_client.dart';
+import 'package:efiling_app/core/api/api_config.dart';
 import 'package:efiling_app/core/utils/responsive.dart';
 
 /// Dispatch History – list of dispatch proofs (GET /dispatch/proofs).
@@ -15,6 +18,8 @@ class _DispatchHistoryScreenState extends State<DispatchHistoryScreen> {
   List<dynamic> _proofs = [];
   bool _loading = true;
   String? _error;
+  DateTime? _from;
+  DateTime? _to;
 
   @override
   void initState() {
@@ -28,7 +33,10 @@ class _DispatchHistoryScreenState extends State<DispatchHistoryScreen> {
       _error = null;
     });
     try {
-      final res = await ApiClient().get<dynamic>('/dispatch/proofs');
+      final qp = <String, dynamic>{};
+      if (_from != null) qp['dateFrom'] = DateFormat('yyyy-MM-dd').format(_from!);
+      if (_to != null) qp['dateTo'] = DateFormat('yyyy-MM-dd').format(_to!);
+      final res = await ApiClient().get<dynamic>('/dispatch/proofs', queryParameters: qp.isEmpty ? null : qp);
       final data = res.data;
       final list = data is List ? data : (data is Map && data['data'] is List ? data['data'] as List : []);
       if (mounted) {
@@ -45,6 +53,33 @@ class _DispatchHistoryScreenState extends State<DispatchHistoryScreen> {
         });
       }
     }
+  }
+
+  Future<void> _pickFrom() async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _from ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+    );
+    if (d != null) setState(() => _from = d);
+    await _load();
+  }
+
+  Future<void> _pickTo() async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _to ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+    );
+    if (d != null) setState(() => _to = d);
+    await _load();
+  }
+
+  Future<void> _downloadProof(String proofId, String type) async {
+    final url = Uri.parse('${ApiConfig.baseUrl}/dispatch/proofs/$proofId/download/$type');
+    await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
   @override
@@ -90,6 +125,30 @@ class _DispatchHistoryScreenState extends State<DispatchHistoryScreen> {
                   Text('Past dispatch records', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                   const SizedBox(height: 8),
                   Text('${_proofs.length} record(s)', style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _pickFrom,
+                        icon: const Icon(Icons.calendar_today, size: 18),
+                        label: Text(_from == null ? 'From' : 'From: ${DateFormat.yMd().format(_from!)}'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _pickTo,
+                        icon: const Icon(Icons.calendar_today, size: 18),
+                        label: Text(_to == null ? 'To' : 'To: ${DateFormat.yMd().format(_to!)}'),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          setState(() { _from = null; _to = null; });
+                          await _load();
+                        },
+                        child: const Text('Clear'),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -105,6 +164,8 @@ class _DispatchHistoryScreenState extends State<DispatchHistoryScreen> {
                 delegate: SliverChildBuilderDelegate(
                   (context, i) {
                     final p = _proofs[i] is Map ? _proofs[i] as Map<String, dynamic> : <String, dynamic>{};
+                    final proofId = p['id']?.toString() ?? '';
+                    final fileId = p['fileId']?.toString() ?? '';
                     final fileNumber = p['file'] is Map ? (p['file'] as Map)['fileNumber']?.toString() : p['fileNumber']?.toString() ?? '—';
                     final method = p['dispatchMethod']?.toString() ?? '—';
                     final date = p['dispatchDate']?.toString();
@@ -115,6 +176,19 @@ class _DispatchHistoryScreenState extends State<DispatchHistoryScreen> {
                         leading: const Icon(Icons.history),
                         title: Text('$fileNumber', style: theme.textTheme.titleSmall),
                         subtitle: Text('$method • $by${date != null ? ' • ${DateFormat.yMd().format(DateTime.tryParse(date) ?? DateTime.now())}' : ''}'),
+                        trailing: proofId.isEmpty
+                            ? null
+                            : PopupMenuButton<String>(
+                                onSelected: (v) {
+                                  if (v == 'proof') _downloadProof(proofId, 'proof');
+                                  if (v == 'ack') _downloadProof(proofId, 'acknowledgement');
+                                },
+                                itemBuilder: (_) => const [
+                                  PopupMenuItem(value: 'proof', child: Text('Download proof')),
+                                  PopupMenuItem(value: 'ack', child: Text('Download acknowledgement')),
+                                ],
+                              ),
+                        onTap: fileId.isEmpty ? null : () => GoRouter.of(context).push('/files/$fileId'),
                       ),
                     );
                   },

@@ -41,6 +41,9 @@ import {
   Users,
   ArrowRightLeft,
   Home,
+  ListTodo,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
@@ -110,6 +113,9 @@ export function ForwardFileModal({
     utilizationPercent: number;
   } | null>(null);
   const [loadingCapacity, setLoadingCapacity] = useState(false);
+  // Multi-department forward: each entry has department + task (task shown as note only to that dept)
+  const [forwardMode, setForwardMode] = useState<'single' | 'multiple'>('single');
+  const [multiRecipients, setMultiRecipients] = useState<Array<{ departmentId: string; departmentName: string; task: string }>>([]);
 
   // For internal forwarding, use user's department; for external, use selected department
   const effectiveDepartmentId = 
@@ -125,18 +131,18 @@ export function ForwardFileModal({
     isDispatcher
       ? [
           { id: 1, label: 'Department', completed: !!selectedDepartmentId },
-          { id: 2, label: 'Remarks', completed: true },
+          { id: 2, label: 'Note', completed: true },
         ]
       : forwardType === 'internal' || isRestrictedRole
       ? [
           { id: 1, label: 'Division', completed: !!divisionId },
-          { id: 2, label: 'Remarks', completed: true },
+          { id: 2, label: 'Note', completed: true },
         ]
       : [
           { id: 1, label: 'Department', completed: !!selectedDepartmentId },
           { id: 2, label: 'Division', completed: !!divisionId },
           { id: 3, label: 'Recipient', completed: !!userId },
-          { id: 4, label: 'Remarks', completed: true },
+          { id: 4, label: 'Note', completed: true },
         ];
 
   // When modal opens: reset, load divisions/departments, then pre-fill from file intended if any
@@ -144,6 +150,8 @@ export function ForwardFileModal({
     if (!open) return;
     setRemarks('');
     setForwardType('internal');
+    setForwardMode('single');
+    setMultiRecipients([]);
     setSelectedDepartmentId('');
     setDivisionId('');
     setUserId('');
@@ -258,12 +266,11 @@ export function ForwardFileModal({
     try {
       const response = await api.get('/departments');
       const data = Array.isArray(response.data) ? response.data : [];
-      // For dispatchers, filter out their own department
-      const filtered = isDispatcher && user?.departmentId
-        ? data.filter((d: Department) => d.id !== user.departmentId)
-        : data;
+      // For dispatchers, show all departments (including their own);
+      // behaviour is controlled on the backend.
+      const filtered = data as Department[];
       setDepartments(filtered);
-      setCachedDepartments(data); // Cache all departments, but display filtered
+      setCachedDepartments(data); // Cache all departments
     } catch {
       toast.error('Failed to load departments');
     } finally {
@@ -317,7 +324,16 @@ export function ForwardFileModal({
       const response = await api.get(
         `/departments/${deptId}/divisions/${divId}/users`,
       );
-      setUsers(response.data ?? []);
+      let data: UserOption[] = response.data ?? [];
+
+      // Inward Desk: can only forward to internal Section Officer or Dept Admin
+      if (isInwardDesk) {
+        data = data.filter(
+          (u) => u.role === 'SECTION_OFFICER' || u.role === 'DEPT_ADMIN',
+        );
+      }
+
+      setUsers(data);
     } catch {
       toast.error('Failed to load users');
     } finally {
@@ -326,7 +342,12 @@ export function ForwardFileModal({
   };
 
   const handleSubmit = async () => {
-    if (isDispatcher) {
+    if (forwardType === 'external' && canForwardExternally && forwardMode === 'multiple') {
+      if (multiRecipients.length === 0) {
+        toast.error('Add at least one department to forward to');
+        return;
+      }
+    } else if (isDispatcher) {
       if (!selectedDepartmentId) {
         toast.error('Please select a department to forward the file');
         return;
@@ -355,11 +376,15 @@ export function ForwardFileModal({
         toDepartmentId?: string;
         toUserId?: string | null;
         remarks?: string;
-      } = {
-        remarks,
-      };
+        recipients?: Array<{ toDepartmentId?: string; toDivisionId?: string; toUserId?: string | null; remarks?: string }>;
+      } = { remarks };
 
-      if (isDispatcher) {
+      if (forwardType === 'external' && canForwardExternally && forwardMode === 'multiple' && multiRecipients.length > 0) {
+        payload.recipients = multiRecipients.map((r) => ({
+          toDepartmentId: r.departmentId,
+          remarks: r.task.trim() || undefined,
+        }));
+      } else if (isDispatcher) {
         payload.toDepartmentId = selectedDepartmentId;
         payload.toUserId = null;
       } else if (forwardType === 'external' && canForwardExternally) {
@@ -373,17 +398,24 @@ export function ForwardFileModal({
 
       await api.post(`/files/${fileId}/forward`, payload);
 
-      const recipientText = isDispatcher
-        ? `${selectedDepartment?.name} (inward desk)`
-        : forwardType === 'internal' || isRestrictedRole
-        ? selectedUser
-          ? `to ${selectedUser.name} (via ${selectedDivision?.name} inward desk)`
-          : `${selectedDivision?.name} (inward desk)`
-        : selectedUser
-        ? `${selectedDivision?.name} → ${selectedUser.name}`
-        : selectedDivision
-        ? `${selectedDepartment?.name} → ${selectedDivision.name} (inward desk)`
-        : `${selectedDepartment?.name} (inward desk)`;
+      const dispatcherDeptName =
+        selectedDepartmentId && departments.find((d) => d.id === selectedDepartmentId)?.name;
+      const recipientText =
+        forwardMode === 'multiple' && multiRecipients.length > 0
+          ? `${multiRecipients.length} department(s): ${multiRecipients.map((r) => r.departmentName).join(', ')}`
+          : isDispatcher
+          ? dispatcherDeptName
+            ? `${dispatcherDeptName} (inward desk)`
+            : 'selected department (inward desk)'
+          : forwardType === 'internal' || isRestrictedRole
+          ? selectedUser
+            ? `to ${selectedUser.name} (via ${selectedDivision?.name} inward desk)`
+            : `${selectedDivision?.name} (inward desk)`
+          : selectedUser
+          ? `${selectedDivision?.name} → ${selectedUser.name}`
+          : selectedDivision
+          ? `${selectedDepartment?.name} → ${selectedDivision.name} (inward desk)`
+          : `${selectedDepartment?.name} (inward desk)`;
 
       toast.success('File forwarded successfully', {
         description: `Sent to ${recipientText}`,
@@ -476,7 +508,7 @@ export function ForwardFileModal({
           </div>
         </div>
 
-        <div className="p-6 space-y-5">
+        <div className="p-6 space-y-5 max-h-[min(70vh,560px)] overflow-y-auto">
           {(isRestrictedRole || isDispatcher) && !user?.departmentId && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-4 text-sm text-amber-800 dark:text-amber-200">
               You must be assigned to a department to forward files. Contact your administrator.
@@ -499,8 +531,116 @@ export function ForwardFileModal({
             </Tabs>
           )}
 
-          {/* Department Selection - For Dispatchers (external only) or External Forwarding */}
-          {canShowDepartment && (
+          {/* External: Single vs Multiple departments (with task per department) */}
+          {canForwardExternally && forwardType === 'external' && (
+            <Tabs value={forwardMode} onValueChange={(v) => setForwardMode(v as 'single' | 'multiple')}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="single" className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  One department
+                </TabsTrigger>
+                <TabsTrigger value="multiple" className="flex items-center gap-2">
+                  <ListTodo className="h-4 w-4" />
+                  Multiple departments (tasks)
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
+
+          {/* Multiple departments: add departments + task per department (each task visible only to that dept; host sees all) */}
+          {canForwardExternally && forwardType === 'external' && forwardMode === 'multiple' && (
+            <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+              <Label className="flex items-center gap-2 text-sm font-medium">
+                <ListTodo className="h-4 w-4" />
+                Departments and tasks
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Add departments to forward to. Each task is shown as a note only to that department. Host department sees all.
+              </p>
+              {multiRecipients.length === 0 && (
+                <p className="text-xs text-muted-foreground italic">Add at least one department below.</p>
+              )}
+              <div className="max-h-[min(40vh,320px)] overflow-y-auto space-y-3 pr-1">
+                {multiRecipients.map((r, idx) => (
+                  <div key={r.departmentId} className="flex flex-col gap-2 rounded border bg-background p-3 shrink-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-sm flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        {r.departmentName}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => setMultiRecipients((prev) => prev.filter((_, i) => i !== idx))}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <Textarea
+                      placeholder={`Task for ${r.departmentName} (visible only to them in notes)`}
+                      value={r.task}
+                      onChange={(e) =>
+                        setMultiRecipients((prev) =>
+                          prev.map((x, i) => (i === idx ? { ...x, task: e.target.value } : x))
+                        )
+                      }
+                      className="min-h-[72px] resize-none"
+                      disabled={loading}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value=""
+                  onValueChange={(value) => {
+                    if (!value) return;
+                    const dept = departments.find((d) => d.id === value);
+                    if (!dept || multiRecipients.some((r) => r.departmentId === value)) return;
+                    setMultiRecipients((prev) => [...prev, { departmentId: dept.id, departmentName: dept.name, task: '' }]);
+                  }}
+                  disabled={loading || loadingDepartments}
+                >
+                  <SelectTrigger className="w-[220px] h-9">
+                    <SelectValue placeholder="Add department..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments
+                      .filter(
+                        (d) =>
+                          !multiRecipients.some((r) => r.departmentId === d.id) &&
+                          d.id !== user?.departmentId,
+                      )
+                      .map((dept) => (
+                        <SelectItem key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </SelectItem>
+                      ))}
+                    {departments.filter((d) => !multiRecipients.some((r) => r.departmentId === d.id) && d.id !== user?.departmentId).length === 0 && (
+                      <div className="p-2 text-xs text-muted-foreground">All departments added</div>
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  onClick={() => {
+                    if (departments.length === 0 && !loadingDepartments) fetchDepartments();
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add department
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Department Selection - For Dispatchers or External Single (hidden when External + Multiple) */}
+          {canShowDepartment && (forwardType !== 'external' || forwardMode === 'single') && (
             <div className="space-y-2">
               <Label className="flex items-center gap-2 text-sm font-medium">
                 <Building2 className="h-4 w-4 text-muted-foreground" />
@@ -512,27 +652,20 @@ export function ForwardFileModal({
                 </Badge>
               </Label>
               <Select
-                value={selectedDepartmentId}
+                key={`dept-select-${departments.length}`}
+                value={selectedDepartmentId || undefined}
                 onValueChange={(value) => {
-                  setSelectedDepartmentId(value);
+                  setSelectedDepartmentId(value || '');
                   setDivisionId('');
                   setUserId('');
                 }}
                 disabled={loading || loadingDepartments}
-                open={undefined} // Let Select manage its own open state
               >
                 <SelectTrigger className="h-11 w-full">
                   {loadingDepartments ? (
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Loading departments...
-                    </div>
-                  ) : selectedDepartment ? (
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-blue-100 text-blue-600 text-xs font-medium">
-                        {selectedDepartment.code || selectedDepartment.name.charAt(0)}
-                      </div>
-                      <span className="truncate">{selectedDepartment.name}</span>
                     </div>
                   ) : (
                     <SelectValue placeholder={isDispatcher ? "Choose a department to forward to" : "Choose a department to forward to"} />
@@ -724,23 +857,26 @@ export function ForwardFileModal({
             </div>
           )}
 
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2 text-sm font-medium">
-              <MessageSquare className="h-4 w-4 text-muted-foreground" />
-              Remarks
-              <Badge variant="outline" className="ml-auto text-xs">
-                Optional
-              </Badge>
-            </Label>
-            <Textarea
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              placeholder="Add instructions, context, or notes for the recipient..."
-              rows={3}
-              disabled={loading}
-              className="resize-none"
-            />
-          </div>
+          {/* Global note (single recipient flows). External multi uses per-department task notes instead. */}
+          {!(canForwardExternally && forwardType === 'external' && forwardMode === 'multiple') && (
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2 text-sm font-medium">
+                <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                Note
+                <Badge variant="outline" className="ml-auto text-xs">
+                  Optional
+                </Badge>
+              </Label>
+              <Textarea
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="Add a note/instruction for the receiving department/user (shown in their notes)..."
+                rows={3}
+                disabled={loading}
+                className="resize-none"
+              />
+            </div>
+          )}
 
           {selectedDivision && selectedUser && (
             <>
@@ -781,7 +917,10 @@ export function ForwardFileModal({
             disabled={
               loading ||
               (isDispatcher && !selectedDepartmentId) ||
-              (!isDispatcher && (forwardType === 'external' && canForwardExternally ? !selectedDepartmentId : !divisionId)) ||
+              (forwardType === 'external' && canForwardExternally && forwardMode === 'multiple' && multiRecipients.length === 0) ||
+              (!isDispatcher &&
+                forwardMode === 'single' &&
+                (forwardType === 'external' && canForwardExternally ? !selectedDepartmentId : !divisionId)) ||
               (isInwardDesk && !user?.departmentId)
             }
             className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 min-w-[120px]"
@@ -789,7 +928,7 @@ export function ForwardFileModal({
             {loading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Sending...
+                Sending… This may take a moment
               </>
             ) : (
               <>

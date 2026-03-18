@@ -12,11 +12,13 @@ import 'package:efiling_app/core/auth/auth_provider.dart';
 import 'package:efiling_app/core/theme/app_colors.dart';
 import 'package:efiling_app/core/widgets/file_timer_widget.dart';
 import 'package:efiling_app/models/file_model.dart';
+import 'package:efiling_app/models/user_model.dart';
 
 class FileDetailScreen extends StatefulWidget {
-  const FileDetailScreen({super.key, required this.fileId});
+  const FileDetailScreen({super.key, required this.fileId, this.openForwardOnStart = false});
 
   final String fileId;
+  final bool openForwardOnStart;
 
   @override
   State<FileDetailScreen> createState() => _FileDetailScreenState();
@@ -38,6 +40,19 @@ class _FileDetailScreenState extends State<FileDetailScreen> with SingleTickerPr
   String? _forwardDivisionId;
   String? _forwardUserId;
   final _forwardRemarksController = TextEditingController();
+  // Forwarding parity (web-like): internal/external, single/multiple, department selection (for admins/dispatcher)
+  String _forwardType = 'internal'; // internal | external
+  String _forwardMode = 'single'; // single | multiple (external only)
+  String? _forwardDepartmentId;
+  List<Map<String, dynamic>> _departments = [];
+  bool _loadingDepartments = false;
+  // External divisions/users (optional)
+  List<Map<String, dynamic>>? _extDivisions;
+  List<Map<String, dynamic>>? _extUsers;
+  bool _loadingExtDivisions = false;
+  bool _loadingExtUsers = false;
+  // Multi-department recipients: {departmentId, departmentName, note}
+  List<Map<String, dynamic>> _multiRecipients = [];
   final _recallRemarksController = TextEditingController();
   List<Map<String, dynamic>>? _divisions;
   List<Map<String, dynamic>>? _divisionUsers;
@@ -51,10 +66,12 @@ class _FileDetailScreenState extends State<FileDetailScreen> with SingleTickerPr
   bool _loadingQr = false;
   List<Map<String, dynamic>> _scanHistory = [];
   bool _loadingScanHistory = false;
+  bool _pendingOpenForward = false;
 
   @override
   void initState() {
     super.initState();
+    _pendingOpenForward = widget.openForwardOnStart;
     _notesTabController = TabController(length: 2, vsync: this);
     _load();
   }
@@ -113,6 +130,19 @@ class _FileDetailScreenState extends State<FileDetailScreen> with SingleTickerPr
           _file = FileModel.fromJson(data);
           _loading = false;
         });
+        // If navigated here with action=forward, open the forward sheet once after load.
+        if (_pendingOpenForward && mounted) {
+          _pendingOpenForward = false;
+          final f = _file;
+          if (f != null && _canEdit(f)) {
+            setState(() {
+              _showForward = true;
+              _forwardDivisionId = null;
+              _forwardUserId = null;
+            });
+            _loadDivisions();
+          }
+        }
       } else if (mounted) {
         setState(() => _loading = false);
       }
@@ -217,28 +247,129 @@ class _FileDetailScreenState extends State<FileDetailScreen> with SingleTickerPr
     }
   }
 
+  bool _canForwardExternally(UserModel? user) {
+    final isDispatcher = user?.hasRole('DISPATCHER') == true;
+    final isAdmin = user?.hasAnyRole(['DEPT_ADMIN', 'SUPER_ADMIN']) == true;
+    return isDispatcher || isAdmin;
+  }
+
+  Future<void> _loadDepartments() async {
+    setState(() => _loadingDepartments = true);
+    try {
+      final res = await ApiClient().get<dynamic>('/departments');
+      final data = res.data;
+      final raw = data is List ? data : (data is Map && data['data'] != null ? data['data'] as List : []);
+      final list = raw is List ? raw : [];
+      if (mounted) setState(() {
+        _departments = list.map((e) => e is Map ? Map<String, dynamic>.from(e as Map) : <String, dynamic>{}).toList();
+        _loadingDepartments = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() { _departments = []; _loadingDepartments = false; });
+    }
+  }
+
+  Future<void> _loadExternalDivisions(String deptId) async {
+    if (deptId.isEmpty) return;
+    setState(() {
+      _loadingExtDivisions = true;
+      _extDivisions = null;
+      _forwardDivisionId = null;
+      _forwardUserId = null;
+      _extUsers = null;
+    });
+    try {
+      final res = await ApiClient().get<dynamic>('/departments/$deptId/divisions');
+      final data = res.data;
+      final raw = data is List ? data : (data is Map && data['data'] != null ? data['data'] as List : []);
+      final list = raw is List ? raw : [];
+      if (mounted) setState(() {
+        _extDivisions = list.map((e) => e is Map ? Map<String, dynamic>.from(e as Map) : <String, dynamic>{}).toList();
+        _loadingExtDivisions = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() { _extDivisions = []; _loadingExtDivisions = false; });
+    }
+  }
+
+  Future<void> _loadExternalUsers(String deptId, String divId) async {
+    if (deptId.isEmpty || divId.isEmpty) return;
+    setState(() { _loadingExtUsers = true; _extUsers = null; _forwardUserId = null; });
+    try {
+      final res = await ApiClient().get<dynamic>('/departments/$deptId/divisions/$divId/users');
+      final data = res.data;
+      final raw = data is List ? data : (data is Map && data['data'] != null ? data['data'] as List : []);
+      final list = raw is List ? raw : [];
+      if (mounted) setState(() {
+        _extUsers = list.map((e) => e is Map ? Map<String, dynamic>.from(e as Map) : <String, dynamic>{}).toList();
+        _loadingExtUsers = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() { _extUsers = []; _loadingExtUsers = false; });
+    }
+  }
+
   Future<void> _forward() async {
-    if (_forwardDivisionId == null || _forwardUserId == null || _file == null) return;
+    if (_file == null) return;
+    final auth = context.read<AuthProvider>();
+    final user = auth.user;
+    final isDispatcher = user?.hasRole('DISPATCHER') == true;
+    final canExternal = _canForwardExternally(user);
+
     setState(() => _forwarding = true);
     try {
-      await ApiClient().post('/files/${widget.fileId}/forward', data: {
-        'toDivisionId': _forwardDivisionId,
-        'toUserId': _forwardUserId,
-        'remarks': _forwardRemarksController.text.trim(),
-      });
+      final note = _forwardRemarksController.text.trim();
+      final Map<String, dynamic> payload = {};
+      if (note.isNotEmpty) payload['remarks'] = note;
+
+      if (canExternal && _forwardType == 'external') {
+        if (_forwardMode == 'multiple' && !isDispatcher) {
+          if (_multiRecipients.isEmpty) throw Exception('Add at least one department');
+          payload['recipients'] = _multiRecipients.map((r) => {
+            'toDepartmentId': r['departmentId'],
+            if ((r['note']?.toString().trim() ?? '').isNotEmpty) 'remarks': r['note']?.toString().trim(),
+          }).toList();
+        } else {
+          if ((_forwardDepartmentId ?? '').isEmpty) throw Exception('Select a department');
+          payload['toDepartmentId'] = _forwardDepartmentId;
+          if (isDispatcher) {
+            payload['toUserId'] = null;
+          } else {
+            if ((_forwardDivisionId ?? '').isNotEmpty) payload['toDivisionId'] = _forwardDivisionId;
+            payload['toUserId'] = (_forwardUserId ?? '').isNotEmpty ? _forwardUserId : null;
+          }
+        }
+      } else {
+        // Internal forwarding: division required; user optional
+        if ((_forwardDivisionId ?? '').isEmpty) throw Exception('Select a division');
+        payload['toDivisionId'] = _forwardDivisionId;
+        payload['toUserId'] = (_forwardUserId ?? '').isNotEmpty ? _forwardUserId : null;
+      }
+
+      await ApiClient().post('/files/${widget.fileId}/forward', data: payload);
+
       if (mounted) {
         setState(() {
           _showForward = false;
           _forwarding = false;
           _forwardDivisionId = null;
           _forwardUserId = null;
+          _forwardDepartmentId = null;
+          _forwardType = 'internal';
+          _forwardMode = 'single';
+          _multiRecipients = [];
+          _extDivisions = null;
+          _extUsers = null;
           _forwardRemarksController.clear();
         });
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File forwarded successfully!')));
         await _load();
       }
-    } catch (_) {
-      if (mounted) setState(() => _forwarding = false);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+        setState(() => _forwarding = false);
+      }
     }
   }
 
@@ -817,6 +948,11 @@ class _FileDetailScreenState extends State<FileDetailScreen> with SingleTickerPr
   }
 
   Widget _buildForwardSheet(ThemeData theme, FileModel f) {
+    final auth = context.watch<AuthProvider>();
+    final user = auth.user;
+    final canExternal = _canForwardExternally(user);
+    final isDispatcher = user?.hasRole('DISPATCHER') == true;
+
     return Stack(
       children: [
         ModalBarrier(onDismiss: () => setState(() => _showForward = false)),
@@ -835,42 +971,232 @@ class _FileDetailScreenState extends State<FileDetailScreen> with SingleTickerPr
                   const SizedBox(height: 8),
                   Text('File: ${f.fileNumber}', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                   const SizedBox(height: 24),
-                  Text('Division', style: theme.textTheme.labelMedium),
-                  const SizedBox(height: 4),
-                  DropdownButtonFormField<String>(
-                    value: _forwardDivisionId,
-                    decoration: const InputDecoration(border: OutlineInputBorder()),
-                    items: _divisions?.map((d) {
-                      final id = d['id']?.toString() ?? '';
-                      final name = d['name']?.toString() ?? id;
-                      return DropdownMenuItem(value: id, child: Text(name));
-                    }).toList() ?? [],
-                    onChanged: _loadingDivisions ? null : (v) {
-                      setState(() {
-                        _forwardDivisionId = v;
-                        _forwardUserId = null;
-                        _loadDivisionUsers();
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Recipient', style: theme.textTheme.labelMedium),
-                  const SizedBox(height: 4),
-                  DropdownButtonFormField<String>(
-                    value: _forwardUserId,
-                    decoration: const InputDecoration(border: OutlineInputBorder()),
-                    items: _divisionUsers?.map((u) {
-                      final id = u['id']?.toString() ?? '';
-                      final name = u['name']?.toString() ?? u['username']?.toString() ?? id;
-                      return DropdownMenuItem(value: id, child: Text(name));
-                    }).toList() ?? [],
-                    onChanged: _loadingUsers ? null : (v) => setState(() => _forwardUserId = v),
-                  ),
-                  const SizedBox(height: 16),
+                  if (canExternal) ...[
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'internal', label: Text('Inside dept'), icon: Icon(Icons.home_outlined)),
+                        ButtonSegment(value: 'external', label: Text('Outside dept'), icon: Icon(Icons.swap_horiz)),
+                      ],
+                      selected: {_forwardType},
+                      onSelectionChanged: (s) async {
+                        final next = s.first;
+                        setState(() {
+                          _forwardType = next;
+                          _forwardMode = 'single';
+                          _forwardDepartmentId = null;
+                          _multiRecipients = [];
+                          _extDivisions = null;
+                          _extUsers = null;
+                          _forwardDivisionId = null;
+                          _forwardUserId = null;
+                        });
+                        if (next == 'external' && _departments.isEmpty && !_loadingDepartments) {
+                          await _loadDepartments();
+                        }
+                        if (next == 'internal') {
+                          await _loadDivisions();
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  if (canExternal && _forwardType == 'external') ...[
+                    if (!isDispatcher)
+                      SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(value: 'single', label: Text('One dept'), icon: Icon(Icons.business_outlined)),
+                          ButtonSegment(value: 'multiple', label: Text('Multiple'), icon: Icon(Icons.playlist_add)),
+                        ],
+                        selected: {_forwardMode},
+                        onSelectionChanged: (s) async {
+                          setState(() {
+                            _forwardMode = s.first;
+                            _forwardDepartmentId = null;
+                            _multiRecipients = [];
+                            _extDivisions = null;
+                            _extUsers = null;
+                            _forwardDivisionId = null;
+                            _forwardUserId = null;
+                          });
+                          if (_departments.isEmpty && !_loadingDepartments) await _loadDepartments();
+                        },
+                      ),
+                    if (!isDispatcher) const SizedBox(height: 16),
+
+                    if (_loadingDepartments)
+                      const Center(child: Padding(padding: EdgeInsets.all(8), child: SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))))
+                    else if (_departments.isEmpty)
+                      Text('No departments available.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+
+                    if (_forwardMode == 'multiple' && !isDispatcher) ...[
+                      Text('Departments and notes', style: theme.textTheme.labelMedium),
+                      const SizedBox(height: 6),
+                      ..._multiRecipients.map((r) {
+                        final deptName = r['departmentName']?.toString() ?? 'Department';
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(child: Text(deptName, style: theme.textTheme.titleSmall)),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline),
+                                      onPressed: _forwarding ? null : () => setState(() => _multiRecipients.remove(r)),
+                                    ),
+                                  ],
+                                ),
+                                TextField(
+                                  decoration: InputDecoration(labelText: 'Note for $deptName', border: const OutlineInputBorder()),
+                                  controller: TextEditingController(text: r['note']?.toString() ?? ''),
+                                  onChanged: (v) => r['note'] = v,
+                                  maxLines: 2,
+                                  enabled: !_forwarding,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: null,
+                        decoration: const InputDecoration(labelText: 'Add department', border: OutlineInputBorder()),
+                        items: _departments
+                            .where((d) => !_multiRecipients.any((r) => r['departmentId'] == d['id']))
+                            .map((d) => DropdownMenuItem(value: d['id']?.toString(), child: Text(d['name']?.toString() ?? '')))
+                            .toList(),
+                        onChanged: _forwarding
+                            ? null
+                            : (v) {
+                                if (v == null) return;
+                                final dept = _departments.firstWhere((d) => d['id']?.toString() == v, orElse: () => {});
+                                if (dept.isEmpty) return;
+                                setState(() {
+                                  _multiRecipients.add({
+                                    'departmentId': v,
+                                    'departmentName': dept['name']?.toString() ?? v,
+                                    'note': '',
+                                  });
+                                });
+                              },
+                      ),
+                      const SizedBox(height: 16),
+                    ] else ...[
+                      Text('Department', style: theme.textTheme.labelMedium),
+                      const SizedBox(height: 4),
+                      DropdownButtonFormField<String>(
+                        value: _forwardDepartmentId,
+                        decoration: const InputDecoration(border: OutlineInputBorder()),
+                        items: _departments.map((d) {
+                          final id = d['id']?.toString() ?? '';
+                          final name = d['name']?.toString() ?? id;
+                          return DropdownMenuItem(value: id, child: Text(name));
+                        }).toList(),
+                        onChanged: _forwarding
+                            ? null
+                            : (v) async {
+                                setState(() {
+                                  _forwardDepartmentId = v;
+                                  _extDivisions = null;
+                                  _extUsers = null;
+                                  _forwardDivisionId = null;
+                                  _forwardUserId = null;
+                                });
+                                if (!isDispatcher && v != null && v.isNotEmpty) {
+                                  await _loadExternalDivisions(v);
+                                }
+                              },
+                      ),
+                      const SizedBox(height: 16),
+                      if (!isDispatcher) ...[
+                        Text('Division (optional)', style: theme.textTheme.labelMedium),
+                        const SizedBox(height: 4),
+                        DropdownButtonFormField<String>(
+                          value: _forwardDivisionId,
+                          decoration: const InputDecoration(border: OutlineInputBorder()),
+                          items: (_extDivisions ?? const []).map((d) {
+                            final id = d['id']?.toString() ?? '';
+                            final name = d['name']?.toString() ?? id;
+                            return DropdownMenuItem(value: id, child: Text(name));
+                          }).toList(),
+                          onChanged: (_forwarding || _loadingExtDivisions || (_forwardDepartmentId ?? '').isEmpty)
+                              ? null
+                              : (v) async {
+                                  setState(() {
+                                    _forwardDivisionId = v;
+                                    _forwardUserId = null;
+                                    _extUsers = null;
+                                  });
+                                  final deptId = _forwardDepartmentId ?? '';
+                                  final divId = v ?? '';
+                                  if (deptId.isNotEmpty && divId.isNotEmpty) {
+                                    await _loadExternalUsers(deptId, divId);
+                                  }
+                                },
+                        ),
+                        const SizedBox(height: 16),
+                        Text('Recipient (optional)', style: theme.textTheme.labelMedium),
+                        const SizedBox(height: 4),
+                        DropdownButtonFormField<String>(
+                          value: _forwardUserId,
+                          decoration: const InputDecoration(border: OutlineInputBorder()),
+                          items: (_extUsers ?? const []).map((u) {
+                            final id = u['id']?.toString() ?? '';
+                            final name = u['name']?.toString() ?? u['username']?.toString() ?? id;
+                            return DropdownMenuItem(value: id, child: Text(name));
+                          }).toList(),
+                          onChanged: (_forwarding || _loadingExtUsers) ? null : (v) => setState(() => _forwardUserId = v),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                    ],
+                  ] else ...[
+                    Text('Division', style: theme.textTheme.labelMedium),
+                    const SizedBox(height: 4),
+                    DropdownButtonFormField<String>(
+                      value: _forwardDivisionId,
+                      decoration: const InputDecoration(border: OutlineInputBorder()),
+                      items: _divisions?.map((d) {
+                        final id = d['id']?.toString() ?? '';
+                        final name = d['name']?.toString() ?? id;
+                        return DropdownMenuItem(value: id, child: Text(name));
+                      }).toList() ?? [],
+                      onChanged: _loadingDivisions ? null : (v) {
+                        setState(() {
+                          _forwardDivisionId = v;
+                          _forwardUserId = null;
+                          _loadDivisionUsers();
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Recipient (optional)', style: theme.textTheme.labelMedium),
+                    const SizedBox(height: 4),
+                    DropdownButtonFormField<String>(
+                      value: _forwardUserId,
+                      decoration: const InputDecoration(border: OutlineInputBorder()),
+                      items: _divisionUsers?.map((u) {
+                        final id = u['id']?.toString() ?? '';
+                        final name = u['name']?.toString() ?? u['username']?.toString() ?? id;
+                        return DropdownMenuItem(value: id, child: Text(name));
+                      }).toList() ?? [],
+                      onChanged: _loadingUsers ? null : (v) => setState(() => _forwardUserId = v),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   TextField(
                     controller: _forwardRemarksController,
-                    decoration: const InputDecoration(labelText: 'Remarks (optional)', border: OutlineInputBorder()),
+                    decoration: InputDecoration(
+                      labelText: (canExternal && _forwardType == 'external' && _forwardMode == 'multiple' && !isDispatcher) ? 'General note (optional)' : 'Note (optional)',
+                      border: const OutlineInputBorder(),
+                    ),
                     maxLines: 2,
+                    enabled: !_forwarding,
                   ),
                   const SizedBox(height: 24),
                   Row(
@@ -879,7 +1205,20 @@ class _FileDetailScreenState extends State<FileDetailScreen> with SingleTickerPr
                       const SizedBox(width: 16),
                       Expanded(
                         child: FilledButton(
-                          onPressed: (_forwardDivisionId == null || _forwardUserId == null || _forwarding) ? null : _forward,
+                          onPressed: _forwarding
+                              ? null
+                              : () {
+                                  if (canExternal && _forwardType == 'external') {
+                                    if (_forwardMode == 'multiple' && !isDispatcher) {
+                                      if (_multiRecipients.isEmpty) return;
+                                    } else {
+                                      if ((_forwardDepartmentId ?? '').isEmpty) return;
+                                    }
+                                  } else {
+                                    if ((_forwardDivisionId ?? '').isEmpty) return;
+                                  }
+                                  _forward();
+                                },
                           child: _forwarding ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Forward'),
                         ),
                       ),

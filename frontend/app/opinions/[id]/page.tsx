@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
+import { Editor } from '@/components/ui/editor';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -278,11 +278,11 @@ export default function OpinionDetailPage() {
             {/* Add Opinion Note */}
             <div className="space-y-2">
               <Label>Add Opinion Note</Label>
-              <Textarea
-                placeholder="Add your thoughts or findings..."
+              <Editor
                 value={opinionNote}
-                onChange={(e) => setOpinionNote(e.target.value)}
-                rows={4}
+                onChange={setOpinionNote}
+                placeholder="Add your thoughts or findings..."
+                minHeight="140px"
               />
               <Button onClick={addOpinionNote} disabled={!opinionNote.trim()}>
                 <MessageSquare className="h-4 w-4 mr-2" />

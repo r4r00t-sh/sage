@@ -3,6 +3,7 @@ import {
   NestInterceptor,
   ExecutionContext,
   CallHandler,
+  StreamableFile,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -33,6 +34,10 @@ export class SanitizeInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       map((data) => {
+        // Do not sanitize file/binary responses – would corrupt PDF/downloads
+        if (Buffer.isBuffer(data) || data instanceof StreamableFile) {
+          return data;
+        }
         // Sanitize response data if needed
         if (data && typeof data === 'object') {
           return this.sanitizeResponse(data);
@@ -46,13 +51,18 @@ export class SanitizeInterceptor implements NestInterceptor {
     if (typeof obj !== 'object' || obj === null) {
       return;
     }
+    // Skip Buffer/Uint8Array (e.g. file upload bodies) – do not mutate binary data
+    if (Buffer.isBuffer(obj) || obj instanceof Uint8Array) {
+      return;
+    }
 
     for (const key in obj) {
-      if (obj.hasOwnProperty(key)) {
-        if (typeof obj[key] === 'string') {
-          obj[key] = this.securityService.sanitizeInput(obj[key]);
-        } else if (typeof obj[key] === 'object') {
-          this.sanitizeObject(obj[key]);
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        const val = obj[key];
+        if (typeof val === 'string') {
+          obj[key] = this.securityService.sanitizeInput(val);
+        } else if (typeof val === 'object' && val !== null && !Buffer.isBuffer(val) && !(val instanceof Uint8Array)) {
+          this.sanitizeObject(val);
         }
       }
     }

@@ -306,36 +306,99 @@ export class AdminService {
     return deptStats;
   }
 
-  // Get system settings
+  // Get system settings (Super Admin: all; Dept Admin: global + their department)
   async getSettings(departmentId?: string) {
     const where: any = {};
     if (departmentId) {
       where.OR = [{ departmentId: null }, { departmentId }];
     }
-
-    return this.prisma.systemSettings.findMany({ where });
+    return this.prisma.systemSettings.findMany({
+      where,
+      orderBy: [{ key: 'asc' }, { departmentId: 'asc' }],
+      include: {
+        department: { select: { id: true, name: true, code: true } },
+        updatedBy: { select: { id: true, name: true, username: true } },
+      },
+    });
   }
 
-  // Update system setting
+  // Update system setting (departmentId: null = global, set = per-department). Logs to audit.
+  // Prisma composite unique rejects null at runtime, so for global (scopeId null) we use findFirst + update/create by id.
   async updateSetting(
     key: string,
     value: string,
     userId: string,
-    departmentId?: string,
+    departmentId?: string | null,
   ) {
-    return this.prisma.systemSettings.upsert({
-      where: { key },
-      create: {
-        key,
-        value,
-        departmentId,
-        updatedById: userId,
-      },
-      update: {
-        value,
-        updatedById: userId,
+    const scopeId = departmentId ?? null;
+    let previousValue: string | null = null;
+    let updated: { id: string; key: string; value: string; departmentId: string | null };
+
+    if (scopeId === null) {
+      const existing = await this.prisma.systemSettings.findFirst({
+        where: { key, departmentId: null },
+        select: { id: true, value: true },
+      });
+      previousValue = existing?.value ?? null;
+      if (existing) {
+        updated = await this.prisma.systemSettings.update({
+          where: { id: existing.id },
+          data: { value, updatedById: userId },
+        });
+      } else {
+        updated = await this.prisma.systemSettings.create({
+          data: { key, value, departmentId: null, updatedById: userId },
+        });
+      }
+    } else {
+      const existing = await this.prisma.systemSettings.findUnique({
+        where: { key_departmentId: { key, departmentId: scopeId } },
+        select: { value: true },
+      });
+      previousValue = existing?.value ?? null;
+      updated = await this.prisma.systemSettings.upsert({
+        where: { key_departmentId: { key, departmentId: scopeId } },
+        create: { key, value, departmentId: scopeId, updatedById: userId },
+        update: { value, updatedById: userId },
+      });
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        action: 'setting_updated',
+        entityType: 'SystemSetting',
+        entityId: scopeId ? `${key}:${scopeId}` : key,
+        userId,
+        metadata: {
+          key,
+          departmentId: scopeId,
+          value,
+          previousValue,
+        },
       },
     });
+
+    return updated;
+  }
+
+  // Get recent system setting changes for activity log (Super Admin: all; Dept Admin: global + their dept)
+  async getSettingsActivity(departmentId?: string | null, limit = 30) {
+    const where: any = { entityType: 'SystemSetting' };
+    if (departmentId) {
+      where.OR = [
+        { metadata: { path: ['departmentId'], equals: departmentId } },
+        { metadata: { path: ['departmentId'], equals: null } },
+      ];
+    }
+    const logs = await this.prisma.auditLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        user: { select: { id: true, name: true, username: true } },
+      },
+    });
+    return logs;
   }
 
   // Get extension requests for admin view

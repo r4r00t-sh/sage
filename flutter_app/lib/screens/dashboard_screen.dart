@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:efiling_app/core/auth/auth_provider.dart';
 import 'package:efiling_app/core/api/api_client.dart';
 import 'package:efiling_app/models/file_model.dart';
+import 'package:efiling_app/models/user_model.dart';
 import 'package:efiling_app/core/theme/app_colors.dart';
 import 'package:efiling_app/core/theme/app_spacing.dart';
 import 'package:efiling_app/core/widgets/skeleton_loader.dart';
@@ -47,11 +48,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int get _inProgress => _files.where((f) => f.status == 'IN_PROGRESS').length;
   int get _redListed => _files.where((f) => f.isRedListed).length;
 
+  bool _canCreateFiles(UserModel? user) {
+    if (user == null) return false;
+    // Match web: INWARD_DESK and DISPATCHER cannot create new files.
+    return !(user.hasRole('INWARD_DESK') || user.hasRole('DISPATCHER'));
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
     final theme = Theme.of(context);
     final firstName = user?.name.split(' ').first ?? '';
+    final canCreate = _canCreateFiles(user);
+    final canManageUsers = user?.hasAnyRole(['DEPT_ADMIN', 'SUPER_ADMIN']) == true;
 
     if (_loading) {
       return const DashboardSkeleton();
@@ -91,7 +100,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: () => context.push('/files/new'),
+                      onPressed: canCreate ? () => context.push('/files/new') : null,
                       icon: const Icon(Icons.add, size: 20),
                       label: const Text('Create New File'),
                       style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
@@ -146,7 +155,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Text('No files yet', style: theme.textTheme.titleMedium),
                           Text('Create your first file to get started', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                           const SizedBox(height: 16),
-                          FilledButton.icon(icon: const Icon(Icons.add), label: const Text('Create File'), onPressed: () => context.push('/files/new')),
+                          FilledButton.icon(
+                            icon: const Icon(Icons.add),
+                            label: const Text('Create File'),
+                            onPressed: canCreate ? () => context.push('/files/new') : null,
+                          ),
                         ],
                       ),
                     )
@@ -172,9 +185,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     runSpacing: 8,
                     children: [
                       OutlinedButton.icon(icon: const Icon(Icons.inbox, size: 20), label: Text('View Inbox${_pending > 0 ? ' ($_pending)' : ''}'), onPressed: () => context.push('/files/inbox')),
-                      OutlinedButton.icon(icon: const Icon(Icons.add, size: 20), label: const Text('Create New File'), onPressed: () => context.push('/files/new')),
+                      OutlinedButton.icon(icon: const Icon(Icons.add, size: 20), label: const Text('Create New File'), onPressed: canCreate ? () => context.push('/files/new') : null),
                       OutlinedButton.icon(icon: const Icon(Icons.search, size: 20), label: const Text('Track File'), onPressed: () => context.push('/files/track')),
-                      OutlinedButton.icon(icon: const Icon(Icons.people, size: 20), label: const Text('Manage Users'), onPressed: () => context.push('/admin/users')),
+                      if (canManageUsers)
+                        OutlinedButton.icon(icon: const Icon(Icons.people, size: 20), label: const Text('Manage Users'), onPressed: () => context.push('/admin/users')),
                     ],
                   ),
                 ],

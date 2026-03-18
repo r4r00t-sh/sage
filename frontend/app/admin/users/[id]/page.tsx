@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import api from '@/lib/api';
 import { hasAnyRole, hasGodRole, getRoles } from '@/lib/auth-utils';
+import { cn } from '@/lib/utils';
 import { DepartmentProfileLink, DivisionProfileLink } from '@/components/profile-links';
 import { format } from 'date-fns';
 
@@ -103,6 +104,17 @@ interface Presence {
   logoutType?: string;
 }
 
+interface UserAnalyticsSummary {
+  id: string;
+  completedFiles: number;
+  redListedFiles: number;
+  extensionRequests: number;
+  avgProcessingTimeHours: number | null;
+  totalFilesAssigned: number;
+  totalFilesCreated: number;
+  performanceScore: number;
+}
+
 export default function UserDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -117,6 +129,8 @@ export default function UserDetailPage() {
   const [points, setPoints] = useState<{ currentPoints: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [tabLoading, setTabLoading] = useState<Record<string, boolean>>({});
+  const [userAnalytics, setUserAnalytics] = useState<UserAnalyticsSummary | null>(null);
+  const [analyticsPeriod, setAnalyticsPeriod] = useState<'1d' | '7d' | '30d' | '90d' | '180d' | '365d'>('30d');
 
   useEffect(() => {
     if (!hasAnyRole(currentUser, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
@@ -197,6 +211,70 @@ export default function UserDetailPage() {
     } finally {
       setTabLoading((p) => ({ ...p, points: false }));
     }
+  };
+
+  const fetchUserAnalytics = async () => {
+    setTabLoading((p) => ({ ...p, analytics: true }));
+    try {
+      const res = await api.get('/analytics/users');
+      const list = res.data as any[];
+      const found = list.find((u) => u.id === userId);
+      if (found) {
+        setUserAnalytics({
+          id: found.id,
+          completedFiles: found.completedFiles ?? 0,
+          redListedFiles: found.redListedFiles ?? 0,
+          extensionRequests: found.extensionRequests ?? 0,
+          avgProcessingTimeHours: found.avgProcessingTimeHours ?? null,
+          totalFilesAssigned: found.totalFilesAssigned ?? 0,
+          totalFilesCreated: found.totalFilesCreated ?? 0,
+          performanceScore: found.performanceScore ?? 0,
+        });
+      } else {
+        setUserAnalytics(null);
+      }
+    } catch {
+      setUserAnalytics(null);
+    } finally {
+      setTabLoading((p) => ({ ...p, analytics: false }));
+    }
+  };
+
+  const computeRatingMetrics = (data: UserAnalyticsSummary | null) => {
+    if (!data) {
+      return {
+        speed: 0,
+        efficiency: 0,
+        workload: 0,
+        overload: 0,
+        underload: 0,
+      };
+    }
+    const { avgProcessingTimeHours, completedFiles, totalFilesAssigned } = data;
+    const speed =
+      avgProcessingTimeHours && avgProcessingTimeHours > 0
+        ? Math.max(0, Math.min(10, (8 / avgProcessingTimeHours) * 5))
+        : 0;
+    const efficiency =
+      totalFilesAssigned > 0
+        ? Math.max(0, Math.min(10, (completedFiles / totalFilesAssigned) * 10))
+        : 0;
+    const workloadBase = Math.max(0, Math.min(10, (totalFilesAssigned / 50) * 10));
+    const workload = workloadBase;
+    const overload = workload > 5 ? workload - 5 : 0;
+    const underload = workload < 5 ? 5 - workload : 0;
+    return {
+      speed: Math.round(speed * 10) / 10,
+      efficiency: Math.round(efficiency * 10) / 10,
+      workload: Math.round(workload * 10) / 10,
+      overload: Math.round(overload * 10) / 10,
+      underload: Math.round(underload * 10) / 10,
+    };
+  };
+
+  const ratingToStars = (val: number) => {
+    const clamped = Math.max(0, Math.min(10, val));
+    return Math.round((clamped / 10) * 5);
   };
 
   const getRoleBadge = (role: string) => {
@@ -370,8 +448,11 @@ export default function UserDetailPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4">
+        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="analytics" onClick={fetchUserAnalytics}>
+            Analytics
+          </TabsTrigger>
           <TabsTrigger value="logs" onClick={fetchAuditLogs}>
             Audit Logs
           </TabsTrigger>
@@ -534,6 +615,126 @@ export default function UserDetailPage() {
                 </div>
               </CardContent>
             </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="analytics" className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Activity className="h-5 w-5 text-primary" />
+              Performance analytics
+            </h2>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Range</span>
+              <select
+                className="h-8 rounded-md border bg-background px-2 text-xs"
+                value={analyticsPeriod}
+                onChange={(e) =>
+                  setAnalyticsPeriod(e.target.value as typeof analyticsPeriod)
+                }
+              >
+                <option value="1d">1 day</option>
+                <option value="7d">1 week</option>
+                <option value="30d">1 month</option>
+                <option value="90d">3 months</option>
+                <option value="180d">6 months</option>
+                <option value="365d">1 year</option>
+              </select>
+            </div>
+          </div>
+
+          {tabLoading.analytics ? (
+            <div className="flex min-h-[160px] items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : !userAnalytics ? (
+            <p className="text-sm text-muted-foreground">
+              No analytics available for this user.
+            </p>
+          ) : (
+            (() => {
+              const metrics = computeRatingMetrics(userAnalytics);
+              const cards = [
+                {
+                  key: 'speed',
+                  label: 'Speed',
+                  value: metrics.speed,
+                  note:
+                    userAnalytics.avgProcessingTimeHours != null
+                      ? `Avg handling time: ${userAnalytics.avgProcessingTimeHours}h`
+                      : 'Avg handling time: N/A',
+                },
+                {
+                  key: 'efficiency',
+                  label: 'Efficiency',
+                  value: metrics.efficiency,
+                  note: `Completed ${userAnalytics.completedFiles} of ${userAnalytics.totalFilesAssigned} assigned files`,
+                },
+                {
+                  key: 'workload',
+                  label: 'Workload',
+                  value: metrics.workload,
+                  note: `Total assigned: ${userAnalytics.totalFilesAssigned}`,
+                },
+                {
+                  key: 'overload',
+                  label: 'Overload',
+                  value: metrics.overload,
+                  note:
+                    metrics.overload > 0
+                      ? 'High load relative to nominal capacity'
+                      : 'Within nominal load range',
+                },
+                {
+                  key: 'underload',
+                  label: 'Underload',
+                  value: metrics.underload,
+                  note:
+                    metrics.underload > 0
+                      ? 'Below nominal capacity, potential underutilisation'
+                      : 'Adequate utilisation',
+                },
+              ];
+              return (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {cards.map((card) => {
+                    const stars = ratingToStars(card.value);
+                    return (
+                      <Card key={card.key}>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm flex items-center justify-between">
+                            <span>{card.label}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {card.value.toFixed(1)}/10
+                            </span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <div className="flex items-center gap-1">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <span
+                                key={i}
+                                className={cn(
+                                  'text-sm',
+                                  i < stars
+                                    ? 'text-amber-400'
+                                    : 'text-muted-foreground/30',
+                                )}
+                              >
+                                ★
+                              </span>
+                            ))}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            {card.note}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              );
+            })()
           )}
         </TabsContent>
 

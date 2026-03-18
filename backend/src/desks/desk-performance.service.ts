@@ -560,6 +560,7 @@ export class DeskPerformanceService {
       select: {
         id: true,
         name: true,
+        departmentId: true,
         maxFilesPerDay: true,
         slaNorm: true,
       },
@@ -587,10 +588,19 @@ export class DeskPerformanceService {
       }),
     ]);
 
-    const defaultSla = await this.prisma.systemSettings.findUnique({
-      where: { key: 'defaultSlaNormHours' },
-      select: { value: true },
-    }).catch(() => null);
+    const defaultSla = await this.prisma.systemSettings
+      .findFirst({
+        where: {
+          key: 'defaultSlaNormHours',
+          OR: [
+            ...(desk.departmentId ? [{ departmentId: desk.departmentId }] : []),
+            { departmentId: null },
+          ],
+        },
+        orderBy: { departmentId: 'desc' },
+        select: { value: true },
+      })
+      .catch(() => null);
     const defaultT = defaultSla ? parseInt(defaultSla.value, 10) : 2;
     const T = desk.slaNorm ?? (Number.isNaN(defaultT) ? 2 : defaultT);
     const O = Math.max(1, desk.maxFilesPerDay);

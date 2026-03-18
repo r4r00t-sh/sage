@@ -9,7 +9,10 @@ import 'package:efiling_app/core/widgets/skeleton_loader.dart';
 import 'package:efiling_app/models/file_model.dart';
 
 class InboxScreen extends StatefulWidget {
-  const InboxScreen({super.key});
+  const InboxScreen({super.key, this.initialStatus, this.initialRedlisted = false});
+
+  final String? initialStatus;
+  final bool initialRedlisted;
 
   @override
   State<InboxScreen> createState() => _InboxScreenState();
@@ -23,14 +26,24 @@ class _InboxScreenState extends State<InboxScreen> {
   String _statusFilter = 'all';
   String _priorityFilter = 'all';
   String _search = '';
+  bool _redlistedOnly = false;
   /// Selection mode: entered by long-press; when true, checkboxes appear and bottom action bar shows.
   bool _selectionMode = false;
   final Set<String> _selectedIds = {};
   bool _showExportDialog = false;
 
+  // Forward queue (matches web /files/queue)
+  bool _queueLoading = false;
+  List<Map<String, dynamic>> _queueEntries = [];
+  String? _claimingId;
+
   @override
   void initState() {
     super.initState();
+    if (widget.initialStatus != null && widget.initialStatus!.isNotEmpty) {
+      _statusFilter = widget.initialStatus!;
+    }
+    _redlistedOnly = widget.initialRedlisted;
     _load();
   }
 
@@ -43,14 +56,49 @@ class _InboxScreenState extends State<InboxScreen> {
       final list = raw is List ? raw : [];
       _all = list.map((e) => FileModel.fromJson(e is Map ? Map<String, dynamic>.from(e as Map) : <String, dynamic>{})).toList();
       _applyFilters();
+      await _loadQueue();
       if (mounted) setState(() { _loading = false; _loadError = null; });
     } catch (_) {
       if (mounted) setState(() { _loading = false; _loadError = 'Couldn\'t load files.'; });
     }
   }
 
+  Future<void> _loadQueue() async {
+    setState(() => _queueLoading = true);
+    try {
+      final res = await ApiClient().get<dynamic>('/files/queue');
+      final data = res.data;
+      final raw = data is List ? data : (data is Map && data['data'] != null ? data['data'] as List : []);
+      final list = raw is List ? raw : [];
+      _queueEntries = list.map((e) => e is Map ? Map<String, dynamic>.from(e as Map) : <String, dynamic>{}).toList();
+    } catch (_) {
+      _queueEntries = [];
+    } finally {
+      if (mounted) setState(() => _queueLoading = false);
+    }
+  }
+
+  Future<void> _claimFromQueue(String fileId) async {
+    setState(() => _claimingId = fileId);
+    try {
+      await ApiClient().post('/files/queue/$fileId/claim');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File moved to your inbox')));
+      await _load();
+      if (!mounted) return;
+      context.push('/files/$fileId');
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to claim file')));
+      }
+    } finally {
+      if (mounted) setState(() => _claimingId = null);
+    }
+  }
+
   void _applyFilters() {
     var list = List<FileModel>.from(_all);
+    if (_redlistedOnly) list = list.where((f) => f.isRedListed).toList();
     if (_statusFilter != 'all') list = list.where((f) => f.status == _statusFilter).toList();
     if (_priorityFilter != 'all') list = list.where((f) => f.priority == _priorityFilter).toList();
     if (_search.isNotEmpty) {
@@ -164,6 +212,60 @@ class _InboxScreenState extends State<InboxScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Forward queue (shows files sent when receiver at capacity)
+                if (_queueLoading || _queueEntries.isNotEmpty) ...[
+                  Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.list_alt, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text('Forward queue', style: theme.textTheme.titleSmall)),
+                              if (_queueLoading)
+                                const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                              else
+                                Text('${_queueEntries.length} waiting', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Files sent to you while your desk was at capacity. Claim any file to move it into your inbox.',
+                            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          ),
+                          const SizedBox(height: 8),
+                          if (!_queueLoading && _queueEntries.isEmpty)
+                            Text('No files in your queue.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant))
+                          else if (!_queueLoading)
+                            ..._queueEntries.take(5).map((entry) {
+                              final file = entry['file'] is Map ? Map<String, dynamic>.from(entry['file'] as Map) : null;
+                              final fileId = (entry['fileId'] ?? file?['id'])?.toString() ?? '';
+                              final fileNumber = file?['fileNumber']?.toString() ?? '—';
+                              final subject = file?['subject']?.toString() ?? '—';
+                              final claiming = _claimingId == fileId;
+                              return ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(fileNumber, style: theme.textTheme.labelLarge?.copyWith(fontFamily: 'monospace')),
+                                subtitle: Text(subject, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                trailing: FilledButton(
+                                  onPressed: (fileId.isEmpty || claiming) ? null : () => _claimFromQueue(fileId),
+                                  child: claiming
+                                      ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                      : const Text('Claim'),
+                                ),
+                              );
+                            }),
+                          if (!_queueLoading && _queueEntries.length > 5)
+                            Text('+ ${_queueEntries.length - 5} more…', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 Row(
                   children: [
                     Expanded(
@@ -195,13 +297,13 @@ class _InboxScreenState extends State<InboxScreen> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _StatChip(label: 'Total', value: '$total', onTap: () => setState(() { _statusFilter = 'all'; _applyFilters(); })),
+                  _StatChip(label: 'Total', value: '$total', onTap: () => setState(() { _statusFilter = 'all'; _redlistedOnly = false; _applyFilters(); })),
                   const SizedBox(width: 8),
-                  _StatChip(label: 'Pending', value: '$pending', onTap: () => setState(() { _statusFilter = 'PENDING'; _applyFilters(); })),
+                  _StatChip(label: 'Pending', value: '$pending', onTap: () => setState(() { _statusFilter = 'PENDING'; _redlistedOnly = false; _applyFilters(); })),
                   const SizedBox(width: 8),
-                  _StatChip(label: 'In progress', value: '$inProgress', onTap: () => setState(() { _statusFilter = 'IN_PROGRESS'; _applyFilters(); })),
+                  _StatChip(label: 'In progress', value: '$inProgress', onTap: () => setState(() { _statusFilter = 'IN_PROGRESS'; _redlistedOnly = false; _applyFilters(); })),
                   const SizedBox(width: 8),
-                  _StatChip(label: 'Red listed', value: '$redListed'),
+                  _StatChip(label: 'Red listed', value: '$redListed', onTap: () => setState(() { _statusFilter = 'all'; _redlistedOnly = true; _applyFilters(); })),
                 ],
               ),
             ),
@@ -308,6 +410,29 @@ class _InboxScreenState extends State<InboxScreen> {
                       ],
                     ),
                     subtitle: Text('${f.fileNumber} • ${f.departmentName} • ${f.status}'),
+                    trailing: inSelectionMode
+                        ? null
+                        : PopupMenuButton<String>(
+                            tooltip: 'Actions',
+                            onSelected: (value) {
+                              switch (value) {
+                                case 'view':
+                                  context.push('/files/${f.id}');
+                                  break;
+                                case 'forward':
+                                  context.push('/files/${f.id}?action=forward');
+                                  break;
+                                case 'track':
+                                  context.push('/files/track/${f.id}');
+                                  break;
+                              }
+                            },
+                            itemBuilder: (context) => const [
+                              PopupMenuItem(value: 'view', child: ListTile(leading: Icon(Icons.visibility_outlined), title: Text('View details'))),
+                              PopupMenuItem(value: 'forward', child: ListTile(leading: Icon(Icons.send_outlined), title: Text('Forward file'))),
+                              PopupMenuItem(value: 'track', child: ListTile(leading: Icon(Icons.location_on_outlined), title: Text('Track file'))),
+                            ],
+                          ),
                     onTap: () {
                       if (inSelectionMode) {
                         _toggleSelection(f.id);

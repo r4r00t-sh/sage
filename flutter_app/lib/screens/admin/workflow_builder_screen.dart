@@ -20,6 +20,7 @@ class _WorkflowBuilderScreenState extends State<WorkflowBuilderScreen> {
   List<dynamic> _edges = [];
   bool _loading = true;
   String? _error;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -87,6 +88,268 @@ class _WorkflowBuilderScreenState extends State<WorkflowBuilderScreen> {
       if (n is Map && n['id']?.toString() == id) return Map<String, dynamic>.from(n as Map);
     }
     return null;
+  }
+
+  Future<void> _publish() async {
+    setState(() => _saving = true);
+    try {
+      await ApiClient().post('/workflows/${widget.workflowId}/publish');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Workflow published')));
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Publish failed: ${e.toString().replaceFirst('DioException: ', '')}')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _validate() async {
+    try {
+      final res = await ApiClient().get<dynamic>('/workflows/${widget.workflowId}/validate');
+      final data = res.data;
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Workflow validation'),
+          content: SingleChildScrollView(child: Text(data is Map ? data.toString() : (data?.toString() ?? 'OK'))),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+        ),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Validate failed: ${e.toString().replaceFirst('DioException: ', '')}')));
+    }
+  }
+
+  Future<void> _addNode() async {
+    final nodeIdCtrl = TextEditingController();
+    final labelCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    String nodeType = 'task';
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Add node'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: nodeIdCtrl, decoration: const InputDecoration(labelText: 'Node ID', border: OutlineInputBorder())),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: nodeType,
+                  decoration: const InputDecoration(labelText: 'Type', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'start', child: Text('start')),
+                    DropdownMenuItem(value: 'task', child: Text('task')),
+                    DropdownMenuItem(value: 'decision', child: Text('decision')),
+                    DropdownMenuItem(value: 'end', child: Text('end')),
+                  ],
+                  onChanged: (v) => setLocal(() => nodeType = v ?? 'task'),
+                ),
+                const SizedBox(height: 8),
+                TextField(controller: labelCtrl, decoration: const InputDecoration(labelText: 'Label', border: OutlineInputBorder())),
+                const SizedBox(height: 8),
+                TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Description (optional)', border: OutlineInputBorder()), maxLines: 2),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    final nodeId = nodeIdCtrl.text.trim();
+    final label = labelCtrl.text.trim();
+    if (nodeId.isEmpty || label.isEmpty) return;
+
+    setState(() => _saving = true);
+    try {
+      await ApiClient().post('/workflows/${widget.workflowId}/nodes', data: {
+        'nodeId': nodeId,
+        'nodeType': nodeType,
+        'label': label,
+        if (descCtrl.text.trim().isNotEmpty) 'description': descCtrl.text.trim(),
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Node added')));
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Add node failed: ${e.toString().replaceFirst('DioException: ', '')}')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _editNode(Map<String, dynamic> node) async {
+    final nodeDbId = node['id']?.toString() ?? '';
+    if (nodeDbId.isEmpty) return;
+    final labelCtrl = TextEditingController(text: node['label']?.toString() ?? '');
+    final descCtrl = TextEditingController(text: node['description']?.toString() ?? '');
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit node'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: labelCtrl, decoration: const InputDecoration(labelText: 'Label', border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()), maxLines: 2),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() => _saving = true);
+    try {
+      await ApiClient().patch('/workflows/nodes/$nodeDbId', data: {
+        'label': labelCtrl.text.trim(),
+        'description': descCtrl.text.trim(),
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Node updated')));
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Update failed: ${e.toString().replaceFirst('DioException: ', '')}')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _deleteNode(Map<String, dynamic> node) async {
+    final nodeDbId = node['id']?.toString() ?? '';
+    if (nodeDbId.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete node'),
+        content: Text('Delete "${_nodeLabel(node)}"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() => _saving = true);
+    try {
+      await ApiClient().delete('/workflows/nodes/$nodeDbId');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Node deleted')));
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete failed: ${e.toString().replaceFirst('DioException: ', '')}')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _addEdge() async {
+    if (_nodes.length < 2) return;
+    String? sourceId;
+    String? targetId;
+    final labelCtrl = TextEditingController();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add connection'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                value: sourceId,
+                decoration: const InputDecoration(labelText: 'Source', border: OutlineInputBorder()),
+                items: _nodes.whereType<Map>().map((n) {
+                  final m = Map<String, dynamic>.from(n);
+                  return DropdownMenuItem(value: m['id']?.toString(), child: Text(_nodeLabel(m)));
+                }).toList(),
+                onChanged: (v) => sourceId = v,
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: targetId,
+                decoration: const InputDecoration(labelText: 'Target', border: OutlineInputBorder()),
+                items: _nodes.whereType<Map>().map((n) {
+                  final m = Map<String, dynamic>.from(n);
+                  return DropdownMenuItem(value: m['id']?.toString(), child: Text(_nodeLabel(m)));
+                }).toList(),
+                onChanged: (v) => targetId = v,
+              ),
+              const SizedBox(height: 8),
+              TextField(controller: labelCtrl, decoration: const InputDecoration(labelText: 'Label (optional)', border: OutlineInputBorder())),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    if ((sourceId ?? '').isEmpty || (targetId ?? '').isEmpty) return;
+
+    setState(() => _saving = true);
+    try {
+      await ApiClient().post('/workflows/${widget.workflowId}/edges', data: {
+        'sourceNodeId': sourceId,
+        'targetNodeId': targetId,
+        if (labelCtrl.text.trim().isNotEmpty) 'label': labelCtrl.text.trim(),
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Connection added')));
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Add connection failed: ${e.toString().replaceFirst('DioException: ', '')}')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _deleteEdge(Map<String, dynamic> edge) async {
+    final edgeId = edge['id']?.toString() ?? '';
+    if (edgeId.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete connection'),
+        content: const Text('Delete this connection?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _saving = true);
+    try {
+      await ApiClient().delete('/workflows/edges/$edgeId');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Connection deleted')));
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete failed: ${e.toString().replaceFirst('DioException: ', '')}')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -172,6 +435,17 @@ class _WorkflowBuilderScreenState extends State<WorkflowBuilderScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.tonalIcon(onPressed: _saving ? null : _addNode, icon: const Icon(Icons.add), label: const Text('Add node')),
+                  FilledButton.tonalIcon(onPressed: _saving ? null : _addEdge, icon: const Icon(Icons.arrow_right_alt), label: const Text('Add connection')),
+                  OutlinedButton.icon(onPressed: _saving ? null : _validate, icon: const Icon(Icons.rule), label: const Text('Validate')),
+                  FilledButton.icon(onPressed: _saving ? null : _publish, icon: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.publish), label: const Text('Publish')),
+                ],
+              ),
               const SizedBox(height: 24),
               Text('Nodes', style: theme.textTheme.titleMedium),
               const SizedBox(height: 8),
@@ -210,7 +484,13 @@ class _WorkflowBuilderScreenState extends State<WorkflowBuilderScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(label, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                                Row(
+                                  children: [
+                                    Expanded(child: Text(label, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600))),
+                                    IconButton(icon: const Icon(Icons.edit_outlined, size: 18), onPressed: _saving ? null : () => _editNode(node)),
+                                    IconButton(icon: const Icon(Icons.delete_outline, size: 18), onPressed: _saving ? null : () => _deleteNode(node)),
+                                  ],
+                                ),
                                 Chip(
                                   label: Text(nodeType, style: const TextStyle(fontSize: 11)),
                                   padding: EdgeInsets.zero,
@@ -273,6 +553,10 @@ class _WorkflowBuilderScreenState extends State<WorkflowBuilderScreen> {
                       leading: const Icon(Icons.arrow_forward),
                       title: Text('$sourceLabel → $targetLabel'),
                       subtitle: edgeLabel != null && edgeLabel.isNotEmpty ? Text(edgeLabel) : null,
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: _saving ? null : () => _deleteEdge(edge),
+                      ),
                     ),
                   );
                 }),

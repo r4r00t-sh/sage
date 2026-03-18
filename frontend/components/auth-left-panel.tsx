@@ -2,11 +2,9 @@
 
 import { useEffect, useState } from 'react';
 
-const UNICORN_PROJECT_ID = 'ySJkiD7lWeqjLi9y0qYh';
-const UNICORN_SDK_URL = 'https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v2.0.5/dist/unicornStudio.umd.js';
-
-/** Only mount Unicorn scene once per page load to avoid "Scene already initialized" when React Strict Mode double-mounts. */
-let unicornSceneMounted = false;
+const UNICORN_PROJECT_ID = 'PlgGDsujFNemICtx344j';
+const UNICORN_SDK_URL =
+  'https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v2.1.0-1/dist/unicornStudio.umd.js';
 
 export function AuthLeftPanel() {
   const [UnicornScene, setUnicornScene] = useState<React.ComponentType<{
@@ -20,27 +18,17 @@ export function AuthLeftPanel() {
     import('unicornstudio-react/next').then((mod) => setUnicornScene(() => mod.default));
   }, []);
 
-  const shouldMountScene = UnicornScene && !unicornSceneMounted;
-
-  useEffect(() => {
-    return () => {
-      if (UnicornScene) unicornSceneMounted = true;
-    };
-  }, [UnicornScene]);
-
   return (
     <div className="relative w-full h-full min-h-[50vh] lg:min-h-screen overflow-hidden">
-      {/* Unicorn Studio WebGL scene - mount once to avoid double-init in dev (Strict Mode). */}
+      {/* Unicorn Studio WebGL scene */}
       <div className="absolute inset-0 w-full h-full bg-zinc-900">
-        {shouldMountScene ? (
+        {UnicornScene ? (
           <UnicornScene
             projectId={UNICORN_PROJECT_ID}
             sdkUrl={UNICORN_SDK_URL}
             width="100%"
             height="100%"
           />
-        ) : UnicornScene ? (
-          <div className="w-full h-full bg-zinc-900" aria-hidden />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-zinc-900" />
         )}

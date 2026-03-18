@@ -169,6 +169,14 @@ export class DispatchService {
       },
     });
 
+    // Close current process cycle when file is closed (Rule 3)
+    if (file.currentProcessCycleId) {
+      await this.prisma.processCycle.update({
+        where: { id: file.currentProcessCycleId },
+        data: { closedAt: new Date() },
+      });
+    }
+
     // Create routing history
     await this.prisma.fileRouting.create({
       data: {

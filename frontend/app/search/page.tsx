@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-import { hasAnyRole } from '@/lib/auth-utils';
+import { hasAnyRole, canCreateFiles } from '@/lib/auth-utils';
 import {
   Search,
   Home,
@@ -35,10 +35,12 @@ function getPagesForUser(user: Record<string, unknown> | null): PageItem[] {
     { label: 'Track File', path: '/files/track', icon: MapPin, keywords: ['track', 'find', 'locate', 'status'] },
     { label: 'My Files', path: '/files', icon: FileText, keywords: ['files', 'my files', 'documents'] },
     { label: 'Chat', path: '/chat', icon: MessageSquare, keywords: ['chat', 'messages'] },
-    { label: 'New File', path: '/files/new', icon: Plus, keywords: ['new', 'create', 'add file'] },
     { label: 'Profile', path: '/profile', icon: User, keywords: ['profile', 'account', 'me'] },
     { label: 'Settings', path: '/settings', icon: Settings, keywords: ['settings', 'preferences'] },
   ];
+  if (canCreateFiles(u)) {
+    pages.push({ label: 'New File', path: '/files/new', icon: Plus, keywords: ['new', 'create', 'add file'] });
+  }
   if (hasAnyRole(u, ['SUPER_ADMIN', 'DEPT_ADMIN'])) {
     pages.push(
       { label: 'Manage Users', path: '/admin/users', icon: Users, keywords: ['users', 'admin'] },

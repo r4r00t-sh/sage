@@ -24,9 +24,10 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import api from '@/lib/api';
-import { hasRole } from '@/lib/auth-utils';
+import { canCreateFiles } from '@/lib/auth-utils';
 import {
   FileText,
   Upload,
@@ -89,14 +90,11 @@ export default function NewFilePage() {
   const [activePreviewIndex, setActivePreviewIndex] = useState(0);
 
   useEffect(() => {
-    // Permission check: INWARD_DESK cannot create new files
-    if (user) {
-      const isInwardDesk = hasRole(user, 'INWARD_DESK') && !hasRole(user, 'DEPT_ADMIN') && !hasRole(user, 'SUPER_ADMIN') && !hasRole(user, 'DEVELOPER');
-      if (isInwardDesk) {
-        router.push('/files');
-        toast.error('Inward Desk users cannot create new files. They can only receive and forward files.');
-        return;
-      }
+    // Permission check: INWARD_DESK and DISPATCHER cannot create new files
+    if (user && !canCreateFiles(user)) {
+      router.push('/files/inbox');
+      toast.error('You cannot create new files. You can only view files in your inbox and forward them.');
+      return;
     }
     fetchUserInfo();
   }, [user]);
@@ -393,7 +391,6 @@ export default function NewFilePage() {
         <div className="grid gap-8 lg:grid-cols-2">
           {/* Left Side - Form */}
           <div className="space-y-8">
-            {/* Basic Information */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -505,7 +502,7 @@ export default function NewFilePage() {
               </CardContent>
             </Card>
 
-            {/* Upload Area */}
+            {/* Attachments */}
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -515,7 +512,7 @@ export default function NewFilePage() {
                       Attachments
                     </CardTitle>
                     <CardDescription>
-                      Upload documents or images (up to 10 files, max 50MB each)
+                      Upload documents or images (up to 10 files, max 50MB each). Optional.
                     </CardDescription>
                   </div>
                   {files.length > 0 && (
@@ -570,7 +567,6 @@ export default function NewFilePage() {
                     disabled={loading || files.length >= 10}
                   />
                 </div>
-
                 {/* File List */}
                 {files.length > 0 && (
                   <div className="space-y-2 animate-fade-in">
@@ -643,7 +639,7 @@ export default function NewFilePage() {
             </Card>
 
             {/* Actions */}
-            <div className="flex gap-4">
+            <div className="flex gap-4 pt-4">
               <Button
                 type="button"
                 variant="outline"
@@ -654,11 +650,11 @@ export default function NewFilePage() {
               >
                 Cancel
               </Button>
-              <Button type="submit" size="lg" disabled={loading} className="flex-1 h-12">
+              <Button type="submit" size="lg" disabled={loading || !subject.trim()} className="flex-1 h-12" title={!subject.trim() ? 'Enter a subject in Step 1 first' : undefined}>
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Creating...
+                    Creating… This may take a moment
                   </>
                 ) : (
                   <>

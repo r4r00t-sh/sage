@@ -194,11 +194,17 @@ export class AnalyticsService {
           }),
         ]);
 
-        // Get department user points average
-        const userPointsAvg = await this.prisma.userPoints.aggregate({
-          where: { user: { departmentId: dept.id } },
-          _avg: { currentPoints: true },
-        });
+        const totalFiles = dept._count.files;
+        const completionRate =
+          totalFiles > 0 ? completedCount / totalFiles : 0;
+        const redListRate =
+          totalFiles > 0 ? redListCount / totalFiles : 0;
+        const reliability = 1 - redListRate;
+        const composite = Math.max(
+          0,
+          Math.min(1, 0.7 * completionRate + 0.3 * reliability),
+        );
+        const rating = Math.round(composite * 5 * 10) / 10;
 
         return {
           id: dept.id,
@@ -215,10 +221,10 @@ export class AnalyticsService {
                 (avgProcessingTime._avg.totalProcessingTime / 3600) * 10,
               ) / 10
             : null,
-          avgUserPoints: Math.round(userPointsAvg._avg.currentPoints || 0),
+          rating,
           efficiency:
-            dept._count.files > 0
-              ? Math.round((completedCount / dept._count.files) * 100)
+            totalFiles > 0
+              ? Math.round((completedCount / totalFiles) * 100)
               : 0,
         };
       }),
@@ -235,7 +241,6 @@ export class AnalyticsService {
     const users = await this.prisma.user.findMany({
       where: whereUser,
       include: {
-        points: true,
         department: { select: { name: true, code: true } },
         division: { select: { name: true } },
         _count: {
@@ -279,9 +284,6 @@ export class AnalyticsService {
           department: user.department?.name,
           departmentCode: user.department?.code,
           division: user.division?.name,
-          currentPoints: user.points?.currentPoints || 0,
-          basePoints: user.points?.basePoints || 1000,
-          streakMonths: user.points?.streakMonths || 0,
           totalFilesAssigned: user._count.filesAssigned,
           totalFilesCreated: user._count.filesCreated,
           completedFiles,
@@ -294,7 +296,6 @@ export class AnalyticsService {
           performanceScore: this.calculatePerformanceScore(
             completedFiles,
             redListedFiles,
-            user.points?.currentPoints || 1000,
             extensionRequests,
           ),
         };
@@ -312,7 +313,6 @@ export class AnalyticsService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
-        points: true,
         department: { select: { name: true, code: true } },
         division: { select: { name: true } },
         _count: {
@@ -347,9 +347,6 @@ export class AnalyticsService {
       id: user.id,
       name: user.name,
       username: user.username,
-      currentPoints: user.points?.currentPoints || 0,
-      basePoints: user.points?.basePoints || 1000,
-      streakMonths: user.points?.streakMonths || 0,
       totalFilesAssigned: user._count.filesAssigned,
       totalFilesCreated: user._count.filesCreated,
       completedFiles,
@@ -361,7 +358,6 @@ export class AnalyticsService {
       performanceScore: this.calculatePerformanceScore(
         completedFiles,
         redListedFiles,
-        user.points?.currentPoints || 1000,
         extensionRequests,
       ),
     };
@@ -638,19 +634,16 @@ export class AnalyticsService {
   private calculatePerformanceScore(
     completed: number,
     redListed: number,
-    points: number,
     extensionRequests: number,
   ): number {
-    // Weighted scoring formula
+    // Weighted scoring formula (0–100), independent of legacy points system
     const completedWeight = 10;
-    const redListPenalty = -20;
-    const pointsWeight = 0.05;
-    const extensionPenalty = -5;
+    const redListPenalty = -25;
+    const extensionPenalty = -8;
 
     let score = 50; // Base score
     score += completed * completedWeight;
     score += redListed * redListPenalty;
-    score += (points - 1000) * pointsWeight; // Bonus/penalty from base
     score += extensionRequests * extensionPenalty;
 
     return Math.max(0, Math.min(100, Math.round(score)));

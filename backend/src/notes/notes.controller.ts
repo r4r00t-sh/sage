@@ -21,13 +21,23 @@ export class NotesController {
     @Request() req,
     @Body() body: { content: string },
   ) {
-    // Permission check: INWARD_DESK and DISPATCHER cannot add notes
+    // Permission: INWARD_DESK and DISPATCHER cannot add notes, unless user is from host (originating) department
     const user = await this.prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { roles: true },
+      select: { roles: true, departmentId: true },
     });
 
-    if (user?.roles?.includes('INWARD_DESK') || user?.roles?.includes('DISPATCHER')) {
+    const file = await this.prisma.file.findUnique({
+      where: { id: fileId },
+      select: { currentProcessCycleId: true, originDepartmentId: true },
+    });
+
+    const isHostDepartment =
+      file?.originDepartmentId &&
+      user?.departmentId &&
+      file.originDepartmentId === user.departmentId;
+
+    if (!isHostDepartment && (user?.roles?.includes('INWARD_DESK') || user?.roles?.includes('DISPATCHER'))) {
       if (!user?.roles?.includes('DEPT_ADMIN') && !user?.roles?.includes('SUPER_ADMIN')) {
         throw new ForbiddenException('Inward Desk and Dispatcher users cannot add notes to files.');
       }
@@ -38,6 +48,8 @@ export class NotesController {
         fileId,
         userId: req.user.id,
         content: body.content,
+        departmentId: user?.departmentId ?? undefined,
+        processCycleId: file?.currentProcessCycleId ?? undefined,
       },
       include: {
         user: {

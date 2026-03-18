@@ -51,11 +51,11 @@ Request body size is limited to prevent DoS attacks:
 **Environment Variables:**
 - `MAX_REQUEST_SIZE`: Maximum request body size (default: `10mb`)
 
-### 5. Input Sanitization
+### 5. Input Sanitization (Global – A03 Injection)
 
-Input sanitization interceptor automatically sanitizes:
+**SanitizeInterceptor** is registered globally in `SecurityModule` and runs on every request. It sanitizes:
 - Query parameters
-- Request body parameters
+- Request body parameters (string values only; Buffers left unchanged for file uploads)
 - Response data (optional)
 
 Removes:
@@ -88,7 +88,20 @@ Enhanced validation pipe configuration:
 - **Transform**: Automatically transforms payloads to DTOs
 - **Error Messages**: Hidden in production for security
 
-### 8. JWT Authentication
+### 8. SSRF Protection (A10)
+
+**SsrfService** (`src/security/ssrf.service.ts`) validates URLs before outbound requests. Use it for any user-supplied URL:
+- `validateUrl(url, options?)` – throws if URL is not safe (private IPs, localhost, metadata, disallowed scheme).
+- `safeFetch(url, options?)` – validates then fetches.
+- Optional `allowedHosts` allowlist; default blocks private/internal addresses.
+- Env: `SSRF_ALLOWED_SCHEMES` (default: `https`).
+
+### 9. Dependency Audits (A06, A08)
+
+- Run `npm run audit` and `npm run audit:fix` in backend (and frontend) regularly.
+- See repo root `docs/DEPENDENCY_INTEGRITY.md` for using `npm ci` in CI and audit process.
+
+### 10. JWT Authentication
 
 JWT-based authentication with:
 - Configurable expiration (default: 7 days)

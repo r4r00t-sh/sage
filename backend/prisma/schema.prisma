@@ -77,13 +77,19 @@ model Department {
   divisions   Division[]
   users       User[]
   files       File[]
+  fileNumberCounters FileNumberCounter[]
   isInwardDesk Boolean   @default(false) // Marks department as "Inward Desk"
   desks       Desk[]
   opinionRequestsFrom OpinionRequest[] @relation("OpinionRequestedFrom")
   opinionRequestsTo   OpinionRequest[] @relation("OpinionRequestedTo")
   backFiles   BackFile[]
   workflows   Workflow[]
+  defaultWorkflowId String?
+  defaultWorkflow   Workflow?  @relation("DepartmentDefaultWorkflow", fields: [defaultWorkflowId], references: [id], onDelete: SetNull)
   chatConversations ChatConversation[]
+  systemSettings   SystemSettings[]
+  originFiles      File[]         @relation("FileOriginDepartment")
+  notes            Note[]
 }
 
 model Division {
@@ -186,9 +192,13 @@ model User {
   chatReadReceipts ChatReadReceipt[]
   forwardQueueToMe ForwardQueue[]
   forwardQueueFromMe ForwardQueue[] @relation("ForwardQueueFrom")
+  fileRoutingsFrom  FileRouting[]   @relation("FileRoutingFrom")
+  fileRoutingsTo    FileRouting[]   @relation("FileRoutingTo")
+  fileAssignments  FileAssignment[]
   ticketsCreated   Ticket[] @relation("TicketCreatedBy")
   ticketsAssigned  Ticket[] @relation("TicketAssignedTo")
   ticketReplies    TicketReply[]
+  systemSettingsUpdated SystemSettings[] @relation("SystemSettingsUpdatedBy")
 }
 
 model File {
@@ -269,6 +279,28 @@ model File {
   hasBackFiles Boolean @default(false) // Indicator: file has linked back files
   workflowExecutions WorkflowExecution[]
   fileMovements FileMovement[] @relation("FileMovements")
+  // Host/origin and process cycles (E-File logical rules)
+  originDepartmentId   String?      // Host department that originated the file (denormalized from createdBy)
+  originDepartment     Department?  @relation("FileOriginDepartment", fields: [originDepartmentId], references: [id], onDelete: SetNull)
+  currentProcessCycleId String?    @unique // one-to-one: at most one file has this cycle as current
+  currentProcessCycle   ProcessCycle? @relation("FileCurrentProcessCycle", fields: [currentProcessCycleId], references: [id], onDelete: SetNull)
+  processCycles        ProcessCycle[] @relation("FileProcessCycles")
+  fileAssignments      FileAssignment[]
+}
+
+// Atomic per-department-per-year counter for generating unique file numbers.
+// Prevents collisions under concurrent file creation.
+model FileNumberCounter {
+  id           String     @id @default(uuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  year         Int
+  currentSeq   Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([departmentId, year])
+  @@index([departmentId, year])
 }
 
 // File Attachments - Support multiple file uploads
@@ -369,22 +401,72 @@ model FileRouting {
   fileId          String
   file            File       @relation(fields: [fileId], references: [id], onDelete: Cascade)
   fromUserId      String?
+  fromUser        User?      @relation("FileRoutingFrom", fields: [fromUserId], references: [id], onDelete: SetNull)
   toUserId        String?
+  toUser          User?      @relation("FileRoutingTo", fields: [toUserId], references: [id], onDelete: SetNull)
   fromDivisionId  String?
   toDivisionId    String?
   fromDepartmentId String?
   toDepartmentId  String?
   action          FileAction
   actionString    String?    // Legacy string action for backwards compat
-  remarks         String?
+  remarks         String?    // Department-specific note when forwarding to this recipient
   timeSpentAtDesk Int?       // Seconds spent at this desk before action
   wasOverdue      Boolean    @default(false) // Was the file overdue when actioned
+  processCycleId  String?    // Process cycle this forward belongs to
+  processCycle    ProcessCycle? @relation(fields: [processCycleId], references: [id], onDelete: SetNull)
   
   createdAt       DateTime   @default(now())
   
+  fileAssignments FileAssignment[]
   @@index([fileId])
   @@index([fromUserId])
   @@index([toUserId])
+  @@index([processCycleId])
+}
+
+// One lifecycle: file leaves host → returns to host → host closes. New cycle when sent again.
+model ProcessCycle {
+  id          String    @id @default(uuid())
+  fileId      String
+  file        File      @relation("FileProcessCycles", fields: [fileId], references: [id], onDelete: Cascade)
+  cycleNumber Int       // 1, 2, 3...
+  openedAt    DateTime  @default(now())  // When file left host (first forward of this cycle)
+  closedAt    DateTime? // When host closed the process after return
+  routingHistory FileRouting[]
+  fileAssignments FileAssignment[]
+  notes       Note[]
+  currentProcessCycleFor File? @relation("FileCurrentProcessCycle") // File that has this cycle as currentProcessCycle
+  @@index([fileId])
+}
+
+// Parallel inbox entries: one file can be with multiple recipients (multi-forward).
+// Inbox = files with FileAssignment where toUserId=me and status IN (PENDING, IN_PROGRESS).
+enum FileAssignmentStatus {
+  PENDING
+  IN_PROGRESS
+  RETURNED
+  CLOSED
+}
+
+model FileAssignment {
+  id              String              @id @default(uuid())
+  fileId          String
+  file            File                @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  processCycleId  String?
+  processCycle    ProcessCycle?       @relation(fields: [processCycleId], references: [id], onDelete: SetNull)
+  fileRoutingId   String?             // The forward that created this assignment
+  fileRouting     FileRouting?        @relation(fields: [fileRoutingId], references: [id], onDelete: SetNull)
+  toDepartmentId  String
+  toDivisionId    String
+  toUserId        String
+  toUser          User                @relation(fields: [toUserId], references: [id], onDelete: Cascade)
+  status          FileAssignmentStatus @default(PENDING)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  @@index([fileId])
+  @@index([toUserId])
+  @@index([processCycleId])
 }
 
 // Queue for files forwarded when receiver desk is at/over capacity
@@ -407,14 +489,21 @@ model ForwardQueue {
 }
 
 model Note {
-  id        String   @id @default(uuid())
-  content   String   @db.Text // Rich text content
-  fileId    String
-  file      File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String        @id @default(uuid())
+  content         String        @db.Text // Rich text content
+  fileId          String
+  file            File          @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  departmentId    String?       // Department of the user who wrote (for clustering by department within cycle)
+  department      Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  processCycleId  String?       // Process cycle for grouping; notes grouped by department within cycle
+  processCycle    ProcessCycle? @relation(fields: [processCycleId], references: [id], onDelete: SetNull)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  @@index([fileId])
+  @@index([processCycleId])
+  @@index([departmentId])
 }
 
 model UserPoints {
@@ -433,16 +522,19 @@ model UserPoints {
   updatedAt       DateTime @updatedAt
 }
 
-// System Settings for configurable thresholds
+// System Settings for configurable thresholds (global or per-department)
 model SystemSettings {
   id                    String   @id @default(uuid())
-  key                   String   @unique
+  key                   String
   value                 String
   description           String?
   departmentId          String?  // Null = global, otherwise department-specific
   updatedById           String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+  department            Department? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  updatedBy             User?    @relation("SystemSettingsUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  @@unique([key, departmentId])
 }
 
 // Points Transaction Log
@@ -1075,7 +1167,8 @@ model Workflow {
   nodes           WorkflowNode[]
   edges           WorkflowEdge[]
   executions      WorkflowExecution[]
-  
+  departmentsUsingAsDefault Department[] @relation("DepartmentDefaultWorkflow")
+
   @@index([code])
   @@index([departmentId])
   @@index([isActive])

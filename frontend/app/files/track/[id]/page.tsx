@@ -3,11 +3,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -59,6 +63,7 @@ interface FileTracking {
     fromUserId?: string;
     toUserId?: string;
     toDivisionId?: string;
+    toUser?: { id: string; name: string; department?: { name: string } };
   }[];
 }
 
@@ -161,6 +166,7 @@ export default function FileTraceroutePage() {
       remarks: `Created by ${file.createdBy.name}`,
       createdAt: file.createdAt,
       isCreation: true,
+      toUser: undefined as undefined,
     },
     ...file.routingHistory.map((entry) => ({
       id: entry.id,
@@ -168,8 +174,20 @@ export default function FileTraceroutePage() {
       remarks: entry.remarks,
       createdAt: entry.createdAt,
       isCreation: false,
+      toUser: entry.toUser,
     })),
   ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  const getStepDescription = (step: (typeof timelineSteps)[0]) => {
+    if (step.remarks?.trim()) return step.remarks;
+    if (step.isCreation)
+      return <>By <UserProfileLink userId={file.createdBy.id} name={file.createdBy.name} /></>;
+    if (step.action === 'FORWARDED' && step.toUser)
+      return `Forwarded to ${step.toUser.department?.name ?? step.toUser.name}`;
+    // Fallback for FORWARDED steps with no remarks (e.g. Dispatcher → Inward Desk before backend stored default)
+    if (step.action === 'FORWARDED') return 'Forwarded';
+    return '—';
+  };
 
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col">
@@ -181,37 +199,174 @@ export default function FileTraceroutePage() {
         </Button>
       </div>
 
-      {/* Split: Traceroute (flex) | Document Details (fixed min width, always visible) */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* Left - Traceroute: takes remaining space, scrolls horizontally */}
-        <div className="flex-1 min-w-0 flex flex-col border-r bg-muted/20">
-          <div className="p-6 border-b bg-background">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight flex items-center gap-3">
-                  <Route className="h-6 w-6 text-primary" />
-                  File Journey Flowchart
-                </h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Visual representation of file movement
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <code className="text-sm font-mono font-semibold px-3 py-1.5 bg-muted rounded-md">
-                  {file.fileNumber}
-                </code>
-                {file.isRedListed && (
-                  <Badge variant="destructive" className="gap-1">
-                    <AlertTriangle className="h-3 w-3" />
-                    Red Listed
-                  </Badge>
-                )}
-              </div>
-            </div>
+      {/* Single column: heading, accordion (file details), then flowchart */}
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+        <div className="p-6 border-b bg-background shrink-0">
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-3">
+            <Route className="h-6 w-6 text-primary" />
+            File Journey Flowchart
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Visual representation of file movement
+          </p>
+          <div className="flex items-center gap-2 mt-3">
+            <code className="text-sm font-mono font-semibold px-3 py-1.5 bg-muted rounded-md">
+              {file.fileNumber}
+            </code>
+            {file.isRedListed && (
+              <Badge variant="destructive" className="gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                Red Listed
+              </Badge>
+            )}
           </div>
 
+          {/* File details accordion - below heading */}
+          <Accordion type="single" collapsible className="w-full mt-4 rounded-lg border bg-muted/30">
+            <AccordionItem value="details" className="border-none">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50 rounded-t-lg [&[data-state=open]]:rounded-b-none">
+                <span className="flex items-center gap-2 font-semibold">
+                  <FileText className="h-4 w-4 text-primary" />
+                  File details
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pb-4 pt-0">
+                <div className="space-y-4 pt-2">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-2 block">Subject</label>
+                    <p className="text-sm font-medium leading-relaxed">{file.subject}</p>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-2 block">Status</label>
+                      <Badge className={`${config.bgColor} ${config.color} border-0 gap-1.5 py-1.5 px-3`}>
+                        <StatusIcon className="h-4 w-4" />
+                        {config.label}
+                      </Badge>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-2 block">Priority</label>
+                      <Badge variant="outline" className={`gap-1.5 ${priority.color}`}>
+                        <span className={`h-2 w-2 rounded-full ${priority.bgColor}`} />
+                        {priority.label}
+                      </Badge>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                        <Building2 className="h-3.5 w-3.5" />
+                        Department
+                      </label>
+                      <p className="text-sm font-semibold">{file.department.code}</p>
+                      <p className="text-xs text-muted-foreground">
+                        <DepartmentProfileLink departmentId={file.department.id} name={file.department.name} />
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5" />
+                        Current Location
+                      </label>
+                      <p className="text-sm font-medium">
+                        {file.currentDivision && file.department?.id ? (
+                          <DivisionProfileLink departmentId={file.department.id} divisionId={file.currentDivision.id} name={file.currentDivision.name} />
+                        ) : file.currentDivision?.name ? (
+                          file.currentDivision.name
+                        ) : (
+                          <span className="text-muted-foreground italic">Not assigned</span>
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                        <User className="h-3.5 w-3.5" />
+                        Assigned To
+                      </label>
+                      <p className="text-sm font-medium">
+                        {file.assignedTo ? (
+                          <UserProfileLink userId={file.assignedTo.id} name={file.assignedTo.name} />
+                        ) : (
+                          <span className="text-muted-foreground italic">Unassigned</span>
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                        <User className="h-3.5 w-3.5" />
+                        Created By
+                      </label>
+                      <p className="text-sm font-medium">
+                        <UserProfileLink userId={file.createdBy.id} name={file.createdBy.name} />
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5" />
+                        Created Date
+                      </label>
+                      <p className="text-sm font-medium">{format(new Date(file.createdAt), 'MMM d, yyyy')}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(file.createdAt), 'h:mm a')} · {formatDistanceToNow(new Date(file.createdAt), { addSuffix: true })}
+                      </p>
+                    </div>
+                    {file.dueDate && (
+                      <div className={cn(
+                        'p-3 rounded-lg border',
+                        new Date(file.dueDate) < new Date()
+                          ? 'border-red-500/50 bg-red-500/5'
+                          : 'border-amber-500/50 bg-amber-500/5'
+                      )}>
+                        <label className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5" />
+                          Due Date
+                        </label>
+                        <p className={cn(
+                          'text-sm font-medium',
+                          new Date(file.dueDate) < new Date()
+                            ? 'text-red-600 dark:text-red-400'
+                            : 'text-amber-600 dark:text-amber-400'
+                        )}>
+                          {format(new Date(file.dueDate), 'MMM d, yyyy \'at\' h:mm a')}
+                        </p>
+                        <p className={cn(
+                          'text-xs mt-1',
+                          new Date(file.dueDate) < new Date()
+                            ? 'text-red-600/80 dark:text-red-400/80'
+                            : 'text-amber-600/80 dark:text-amber-400/80'
+                        )}>
+                          {new Date(file.dueDate) < new Date() ? 'Overdue' : 'Due ' + formatDistanceToNow(new Date(file.dueDate), { addSuffix: true })}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  {file.description && (
+                    <>
+                      <Separator />
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-2 block">Description</label>
+                        <div className="text-sm text-muted-foreground prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: file.description }} />
+                      </div>
+                    </>
+                  )}
+                  <Separator />
+                  <Button className="w-full sm:w-auto" onClick={() => router.push(`/files/${file.id}`)}>
+                    <Eye className="mr-2 h-4 w-4" />
+                    View Full File Details
+                  </Button>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </div>
+
+        {/* Flowchart area - takes remaining space, scrolls horizontally */}
+        <div className="flex-1 min-h-0 min-w-0 flex flex-col bg-muted/20">
           {/* Horizontal timeline - scrollable from left (creation) to right (current) */}
-          <div className="flex-1 overflow-x-auto">
+          <div className="flex-1 min-h-0 overflow-x-auto">
             <div
               ref={scrollRef}
               className="p-6 inline-flex items-stretch gap-4"
@@ -250,12 +405,24 @@ export default function FileTraceroutePage() {
                         )}
                       </div>
 
-                      {/* Card */}
+                      {/* Card – colour-coded by action for visual progress */}
                       <div
                         className={cn(
-                          'flex-1 rounded-lg border bg-card p-4 shadow-sm',
+                          'flex-1 rounded-lg border p-4 shadow-sm',
                           isLast && `ring-2 ${actionCfg.borderColor}`,
                         )}
+                        style={{
+                          backgroundColor: isLast
+                            ? undefined
+                            : (actionCfg.bgColor === 'bg-emerald-500' ? 'rgba(16, 185, 129, 0.08)' :
+                               actionCfg.bgColor === 'bg-blue-500' ? 'rgba(59, 130, 246, 0.08)' :
+                               actionCfg.bgColor === 'bg-green-500' ? 'rgba(34, 197, 94, 0.08)' :
+                               actionCfg.bgColor === 'bg-orange-500' ? 'rgba(249, 115, 22, 0.08)' :
+                               actionCfg.bgColor === 'bg-red-500' ? 'rgba(239, 68, 68, 0.08)' :
+                               actionCfg.bgColor === 'bg-purple-500' ? 'rgba(168, 85, 247, 0.08)' :
+                               actionCfg.bgColor === 'bg-indigo-500' ? 'rgba(99, 102, 241, 0.08)' :
+                               actionCfg.bgColor === 'bg-gray-500' ? 'rgba(107, 114, 128, 0.08)' : 'var(--muted)'),
+                        }}
                       >
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <Badge
@@ -279,7 +446,7 @@ export default function FileTraceroutePage() {
                           </span>
                         </div>
                         <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
-                          {step.remarks || (step.isCreation ? <>By <UserProfileLink userId={file.createdBy.id} name={file.createdBy.name} /></> : '—')}
+                          {getStepDescription(step)}
                         </p>
                         <p className="text-xs text-muted-foreground/80 mt-2">
                           Step {index + 1} of {timelineSteps.length}
@@ -292,7 +459,7 @@ export default function FileTraceroutePage() {
           </div>
 
           {/* Legend - Fixed at bottom */}
-          <div className="border-t px-6 py-3 bg-background">
+          <div className="border-t px-6 py-3 bg-background shrink-0">
             <div className="flex items-center justify-center gap-4 flex-wrap text-xs">
               <div className="flex items-center gap-1.5">
                 <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
@@ -324,188 +491,6 @@ export default function FileTraceroutePage() {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Right - Document Details: fixed min width so full panel is visible without horizontal scroll */}
-        <div className="w-[380px] min-w-[380px] max-w-[420px] flex flex-col bg-background overflow-hidden shrink-0">
-          <div className="p-6 border-b">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <FileText className="h-5 w-5 text-primary" />
-              Document Details
-            </h2>
-          </div>
-
-          <ScrollArea className="flex-1">
-            <div className="p-6 space-y-6">
-              {/* File Subject */}
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-2 block">Subject</label>
-                <p className="text-sm font-medium leading-relaxed">{file.subject}</p>
-              </div>
-
-              <Separator />
-
-              {/* Status & Priority */}
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-2 block">Status</label>
-                  <Badge className={`${config.bgColor} ${config.color} border-0 gap-1.5 py-1.5 px-3`}>
-                    <StatusIcon className="h-4 w-4" />
-                    {config.label}
-                  </Badge>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-2 block">Priority</label>
-                  <Badge variant="outline" className={`gap-1.5 ${priority.color}`}>
-                    <span className={`h-2 w-2 rounded-full ${priority.bgColor}`} />
-                    {priority.label}
-                  </Badge>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Department */}
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
-                  <Building2 className="h-3.5 w-3.5" />
-                  Department
-                </label>
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold">{file.department.code}</p>
-                  <p className="text-xs text-muted-foreground">
-                    <DepartmentProfileLink departmentId={file.department.id} name={file.department.name} />
-                  </p>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Current Location */}
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5" />
-                  Current Location
-                </label>
-                <p className="text-sm font-medium">
-                  {file.currentDivision && file.department?.id ? (
-                    <DivisionProfileLink departmentId={file.department.id} divisionId={file.currentDivision.id} name={file.currentDivision.name} />
-                  ) : file.currentDivision?.name ? (
-                    file.currentDivision.name
-                  ) : (
-                    <span className="text-muted-foreground italic">Not assigned</span>
-                  )}
-                </p>
-              </div>
-
-              <Separator />
-
-              {/* Assigned To */}
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
-                  <User className="h-3.5 w-3.5" />
-                  Assigned To
-                </label>
-                <p className="text-sm font-medium">
-                  {file.assignedTo ? (
-                    <UserProfileLink userId={file.assignedTo.id} name={file.assignedTo.name} />
-                  ) : (
-                    <span className="text-muted-foreground italic">Unassigned</span>
-                  )}
-                </p>
-              </div>
-
-              <Separator />
-
-              {/* Created By */}
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
-                  <User className="h-3.5 w-3.5" />
-                  Created By
-                </label>
-                <p className="text-sm font-medium">
-                  <UserProfileLink userId={file.createdBy.id} name={file.createdBy.name} />
-                </p>
-              </div>
-
-              <Separator />
-
-              {/* Created Date */}
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
-                  <Calendar className="h-3.5 w-3.5" />
-                  Created Date
-                </label>
-                <div className="space-y-0.5">
-                  <p className="text-sm font-medium">
-                    {format(new Date(file.createdAt), 'MMM d, yyyy')}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {format(new Date(file.createdAt), 'h:mm a')} • {formatDistanceToNow(new Date(file.createdAt), { addSuffix: true })}
-                  </p>
-                </div>
-              </div>
-
-              {/* Due Date */}
-              {file.dueDate && (
-                <>
-                  <Separator />
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5" />
-                      Due Date
-                    </label>
-                    <div className={cn(
-                      "p-3 rounded-lg border",
-                      new Date(file.dueDate) < new Date() 
-                        ? 'border-red-500/50 bg-red-500/5' 
-                        : 'border-amber-500/50 bg-amber-500/5'
-                    )}>
-                      <p className={cn(
-                        "text-sm font-medium",
-                        new Date(file.dueDate) < new Date() 
-                          ? 'text-red-600 dark:text-red-400' 
-                          : 'text-amber-600 dark:text-amber-400'
-                      )}>
-                        {format(new Date(file.dueDate), 'MMM d, yyyy \'at\' h:mm a')}
-                      </p>
-                      <p className={cn(
-                        "text-xs mt-1",
-                        new Date(file.dueDate) < new Date() 
-                          ? 'text-red-600/80 dark:text-red-400/80' 
-                          : 'text-amber-600/80 dark:text-amber-400/80'
-                      )}>
-                        {new Date(file.dueDate) < new Date() ? 'Overdue' : 'Due ' + formatDistanceToNow(new Date(file.dueDate), { addSuffix: true })}
-                      </p>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Description */}
-              {file.description && (
-                <>
-                  <Separator />
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-2 block">Description</label>
-                    <div className="text-sm text-muted-foreground prose prose-sm max-w-none" 
-                      dangerouslySetInnerHTML={{ __html: file.description }} 
-                    />
-                  </div>
-                </>
-              )}
-
-              {/* Action Button */}
-              <Separator />
-              <Button 
-                className="w-full" 
-                onClick={() => router.push(`/files/${file.id}`)}
-              >
-                <Eye className="mr-2 h-4 w-4" />
-                View Full File Details
-              </Button>
-            </div>
-          </ScrollArea>
         </div>
       </div>
     </div>

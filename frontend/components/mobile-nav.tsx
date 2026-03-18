@@ -17,7 +17,7 @@ import {
 const navigation = {
   INWARD_DESK: [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'New File', href: '/files/new', icon: FileText },
+    { name: 'Inbox', href: '/files/inbox', icon: FileText },
   ],
   SECTION_OFFICER: [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },

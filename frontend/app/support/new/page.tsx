@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/lib/store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,29 +26,127 @@ const CATEGORIES = [
   { value: 'account', label: 'Account / Login' },
   { value: 'bug', label: 'Bug report' },
   { value: 'feature', label: 'Feature request' },
+  { value: 'user_new', label: 'User – New user' },
+  { value: 'user_delete', label: 'User – Delete user' },
+  { value: 'user_transfer', label: 'User – Transfer user' },
   { value: 'other', label: 'Other' },
 ];
 
+const ROLE_OPTIONS = [
+  { value: 'DEPT_ADMIN', label: 'Department Admin' },
+  { value: 'APPROVAL_AUTHORITY', label: 'Approval Authority' },
+  { value: 'SECTION_OFFICER', label: 'Section Officer' },
+  { value: 'INWARD_DESK', label: 'Inward Desk' },
+  { value: 'DISPATCHER', label: 'Dispatcher' },
+  { value: 'USER', label: 'User' },
+] as const;
+
+interface Department {
+  id: string;
+  name: string;
+  code: string;
+  divisions: { id: string; name: string }[];
+}
+
 export default function NewTicketPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuthStore();
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<string>('NORMAL');
-  const [category, setCategory] = useState<string>('other');
+  const [category, setCategory] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [requestedRole, setRequestedRole] = useState<string>('');
+  const [requestedDepartmentId, setRequestedDepartmentId] = useState<string>('');
+  const [requestedDivisionId, setRequestedDivisionId] = useState<string>('');
+  const [requestedFullName, setRequestedFullName] = useState<string>('');
+
+  const isUserRequest =
+    category === 'user_new' || category === 'user_delete' || category === 'user_transfer';
+
+  const selectedDepartment = departments.find((d) => d.id === requestedDepartmentId);
+
+  useEffect(() => {
+    const initialCategory = searchParams.get('category');
+    if (initialCategory && CATEGORIES.find((c) => c.value === initialCategory)) {
+      setCategory(initialCategory);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!isUserRequest) return;
+    api
+      .get('/departments')
+      .then((res) => setDepartments(res.data))
+      .catch(() => setDepartments([]));
+  }, [isUserRequest]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!subject.trim() || !description.trim()) {
-      toast.error('Subject and description are required');
+    if (!category.trim()) {
+      toast.error('Category is required');
       return;
     }
+    if (!subject.trim() && !isUserRequest) {
+      toast.error('Subject is required');
+      return;
+    }
+    if (!description.trim() && !isUserRequest) {
+      toast.error('Description is required');
+      return;
+    }
+
+    if (isUserRequest) {
+      if (!requestedRole || !requestedDepartmentId || !requestedFullName.trim()) {
+        toast.error('Role, department, and full name are required for user requests');
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
+      const userTypeLabel =
+        category === 'user_new'
+          ? 'New User'
+          : category === 'user_delete'
+          ? 'Delete User'
+          : category === 'user_transfer'
+          ? 'Transfer User'
+          : '';
+
+      const finalSubject =
+        subject.trim() ||
+        (isUserRequest
+          ? `[User Request] ${userTypeLabel}${requestedFullName ? ` - ${requestedFullName}` : ''}`
+          : 'Support ticket');
+
+      const baseDetails = description.trim();
+
+      const deptLabel = selectedDepartment
+        ? `${selectedDepartment.name} (${selectedDepartment.code})`
+        : requestedDepartmentId || '-';
+      const divLabel =
+        selectedDepartment?.divisions.find((d) => d.id === requestedDivisionId)?.name ||
+        (requestedDivisionId || '-');
+
+      const composedDescription = isUserRequest
+        ? [
+            `User Request Type: ${userTypeLabel}`,
+            `Role: ${requestedRole}`,
+            `Department: ${deptLabel}`,
+            `Division: ${divLabel}`,
+            `Full Name: ${requestedFullName}`,
+            '',
+            'Details:',
+            baseDetails || '(no additional details provided)',
+          ].join('\n')
+        : baseDetails;
+
       const res = await api.post('/tickets', {
-        subject: subject.trim(),
-        description: description.trim(),
+        subject: finalSubject,
+        description: composedDescription,
         priority: priority || 'NORMAL',
         category: category || undefined,
       });
@@ -94,7 +192,6 @@ export default function NewTicketPage() {
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 placeholder="Brief summary of the issue"
-                required
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -114,10 +211,10 @@ export default function NewTicketPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Category</Label>
-                <Select value={category} onValueChange={setCategory}>
+                <Label>Category *</Label>
+                <Select value={category || undefined} onValueChange={setCategory} required>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
                     {CATEGORIES.map((c) => (
@@ -129,6 +226,81 @@ export default function NewTicketPage() {
                 </Select>
               </div>
             </div>
+            {isUserRequest && (
+              <div className="space-y-4 rounded-lg border p-3 bg-muted/40">
+                <p className="text-xs text-muted-foreground">
+                  This is a user management request. Please provide details for the account to be
+                  created/updated.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Role *</Label>
+                    <Select value={requestedRole} onValueChange={setRequestedRole}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ROLE_OPTIONS.map((r) => (
+                          <SelectItem key={r.value} value={r.value}>
+                            {r.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Full name *</Label>
+                    <Input
+                      value={requestedFullName}
+                      onChange={(e) => setRequestedFullName(e.target.value)}
+                      placeholder="User full name"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Department *</Label>
+                    <Select
+                      value={requestedDepartmentId}
+                      onValueChange={(val) => {
+                        setRequestedDepartmentId(val);
+                        setRequestedDivisionId('');
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments.map((d) => (
+                          <SelectItem key={d.id} value={d.id}>
+                            {d.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Division</Label>
+                    <Select
+                      value={requestedDivisionId}
+                      onValueChange={setRequestedDivisionId}
+                      disabled={!requestedDepartmentId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select division" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {selectedDepartment?.divisions.map((div) => (
+                          <SelectItem key={div.id} value={div.id}>
+                            {div.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
               <Textarea
@@ -137,7 +309,6 @@ export default function NewTicketPage() {
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Describe your issue in detail..."
                 rows={6}
-                required
               />
             </div>
             <div className="flex gap-2">

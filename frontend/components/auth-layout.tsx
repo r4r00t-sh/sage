@@ -36,7 +36,8 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
   const isOnboardingRoute = isChangePasswordRoute || isCompleteProfileRoute;
   const isAuthenticated = !!user;
   const mustChangePassword = isAuthenticated && user?.mustChangePassword === true;
-  const mustCompleteProfile = isAuthenticated && (mustChangePassword || user?.profileCompletedAt == null || user?.profileCompletedAt === '');
+  const mustCompleteProfile =
+    isAuthenticated && (user?.profileCompletedAt == null || user?.profileCompletedAt === '');
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setMounted(true));
@@ -50,17 +51,25 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
     }
   }, [mounted, isAuthenticated, isPublicRoute, pathname, mustCompleteProfile, setLastVisitedPath]);
 
-  // Redirect: first change temp password, then complete staff profile
+  // Redirect: first change temporary password (if required), then complete staff profile
   useEffect(() => {
     if (!mounted || !isAuthenticated) return;
     if (mustChangePassword && !isChangePasswordRoute) {
       router.replace(changePasswordPath);
       return;
     }
-    if (!mustChangePassword && (user?.profileCompletedAt == null || user?.profileCompletedAt === '') && !isCompleteProfileRoute) {
+    if (!mustChangePassword && mustCompleteProfile && !isCompleteProfileRoute) {
       router.replace(completeProfilePath);
     }
-  }, [mounted, isAuthenticated, mustChangePassword, user?.profileCompletedAt, isChangePasswordRoute, isCompleteProfileRoute, router]);
+  }, [
+    mounted,
+    isAuthenticated,
+    mustChangePassword,
+    mustCompleteProfile,
+    isChangePasswordRoute,
+    isCompleteProfileRoute,
+    router,
+  ]);
 
   // Redirect unauthenticated users to login when they try to access protected routes
   useEffect(() => {
@@ -122,7 +131,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
               <PresenceClient />
               <ToastConsumer />
               {/* Content container with proper spacing */}
-              <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">
+              <div className="flex flex-1 flex-col gap-3 p-4 md:p-5">
                 <BreadcrumbNav />
                 <PageTransition>{children}</PageTransition>
               </div>

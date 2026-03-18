@@ -13,7 +13,7 @@ class OpinionDetailScreen extends StatefulWidget {
 }
 
 class _OpinionDetailScreenState extends State<OpinionDetailScreen> {
-  Map<String, dynamic>? _file;
+  Map<String, dynamic>? _data;
   bool _loading = true;
   String? _error;
   final _noteController = TextEditingController();
@@ -41,7 +41,7 @@ class _OpinionDetailScreenState extends State<OpinionDetailScreen> {
       final res = await ApiClient().get<dynamic>('/opinions/requests/${widget.opinionRequestId}/file');
       if (mounted) {
         setState(() {
-          _file = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : null;
+          _data = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : null;
           _loading = false;
         });
       }
@@ -89,10 +89,10 @@ class _OpinionDetailScreenState extends State<OpinionDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    if (_loading && _file == null) {
+    if (_loading && _data == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (_error != null && _file == null) {
+    if (_error != null && _data == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Opinion')),
         body: Center(
@@ -117,10 +117,17 @@ class _OpinionDetailScreenState extends State<OpinionDetailScreen> {
       );
     }
 
-    final file = _file!;
-    final fileNumber = file['fileNumber']?.toString() ?? file['id']?.toString() ?? '—';
+    final data = _data!;
+    final file = data['file'] is Map ? Map<String, dynamic>.from(data['file'] as Map) : <String, dynamic>{};
+    final req = data['opinionRequest'] is Map ? Map<String, dynamic>.from(data['opinionRequest'] as Map) : <String, dynamic>{};
+    final fileNumber = file['fileNumber']?.toString() ?? '—';
     final subject = file['subject']?.toString() ?? '—';
-    final status = file['status']?.toString() ?? '—';
+    final description = file['description']?.toString();
+    final requestedBy = req['requestedBy'] is Map ? (req['requestedBy']['name']?.toString() ?? '—') : '—';
+    final fromDept = req['requestedFromDepartment'] is Map ? (req['requestedFromDepartment']['code']?.toString() ?? '—') : '—';
+    final reason = req['requestReason']?.toString() ?? '—';
+    final special = req['specialPermissionGranted'] == true;
+    final opinionNotes = file['opinionNotes'] is List ? (file['opinionNotes'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() : <Map<String, dynamic>>[];
 
     return Scaffold(
       appBar: AppBar(
@@ -151,13 +158,62 @@ class _OpinionDetailScreenState extends State<OpinionDetailScreen> {
                         leading: const Icon(Icons.description),
                         title: Text(fileNumber),
                         subtitle: Text(subject),
-                        trailing: Text(status),
+                        trailing: Icon(special ? Icons.lock_open : Icons.lock_outline, color: theme.colorScheme.onSurfaceVariant),
                       ),
+                      const Divider(),
+                      Wrap(
+                        spacing: 16,
+                        runSpacing: 8,
+                        children: [
+                          _Meta(label: 'Requested by', value: requestedBy),
+                          _Meta(label: 'From dept', value: fromDept),
+                          _Meta(label: 'Reason', value: reason),
+                          _Meta(label: 'Access', value: special ? 'Full' : 'Limited'),
+                        ],
+                      ),
+                      if (description != null && description.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Text(description, style: theme.textTheme.bodyMedium),
+                      ],
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 24),
+              if (opinionNotes.isNotEmpty) ...[
+                Text('Opinion notes', style: theme.textTheme.titleMedium),
+                const SizedBox(height: 8),
+                ...opinionNotes.map((n) {
+                  final content = n['content']?.toString() ?? '';
+                  final user = n['user'] is Map ? Map<String, dynamic>.from(n['user'] as Map) : null;
+                  final name = user?['name']?.toString() ?? '—';
+                  final createdAt = n['createdAt']?.toString() ?? '';
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(radius: 12, child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?')),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(name, style: theme.textTheme.labelLarge)),
+                              if (createdAt.isNotEmpty) Text(createdAt.length > 19 ? createdAt.substring(0, 19) : createdAt, style: theme.textTheme.labelSmall),
+                            ],
+                          ),
+                          if (content.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(content),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 16),
+              ],
               Text('Add note', style: theme.textTheme.titleMedium),
               const SizedBox(height: 8),
               Row(
@@ -192,7 +248,10 @@ class _OpinionDetailScreenState extends State<OpinionDetailScreen> {
               Row(
                 children: [
                   FilledButton.icon(
-                    onPressed: _provideOpinion,
+                    onPressed: () {
+                      if (_opinionController.text.trim().isEmpty) return;
+                      _provideOpinion();
+                    },
                     icon: const Icon(Icons.check),
                     label: const Text('Submit opinion'),
                   ),
@@ -207,6 +266,28 @@ class _OpinionDetailScreenState extends State<OpinionDetailScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _Meta extends StatelessWidget {
+  const _Meta({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: 180,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          const SizedBox(height: 2),
+          Text(value, style: theme.textTheme.bodyMedium),
+        ],
       ),
     );
   }

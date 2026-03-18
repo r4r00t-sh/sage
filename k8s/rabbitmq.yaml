@@ -19,6 +19,7 @@ spec:
       containers:
         - name: rabbitmq
           image: rabbitmq:3-management-alpine
+          command: ["sh", "-c", "rabbitmq-plugins enable rabbitmq_amqp1_0 && exec rabbitmq-server"]
           ports:
             - containerPort: 5672
             - containerPort: 15672

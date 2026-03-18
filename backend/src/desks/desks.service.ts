@@ -335,10 +335,19 @@ export class DesksService {
       where: { id: deskId },
       select: { slaNorm: true },
     });
-    const defaultSetting = await this.prisma.systemSettings.findUnique({
-      where: { key: 'defaultSlaNormHours' },
-      select: { value: true },
-    }).catch(() => null);
+    const defaultSetting = await this.prisma.systemSettings
+      .findFirst({
+        where: {
+          key: 'defaultSlaNormHours',
+          OR: [
+            ...(file.departmentId ? [{ departmentId: file.departmentId }] : []),
+            { departmentId: null },
+          ],
+        },
+        orderBy: { departmentId: 'desc' },
+        select: { value: true },
+      })
+      .catch(() => null);
     const defaultSlaHours = defaultSetting ? parseInt(defaultSetting.value, 10) : 48;
     const slaHours = deskWithSla?.slaNorm ?? (Number.isNaN(defaultSlaHours) ? 48 : defaultSlaHours);
 

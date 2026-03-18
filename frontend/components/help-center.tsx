@@ -235,7 +235,7 @@ export function HelpCenter() {
             <TabsContent value="docs" className="p-6 pt-4">
               <div className="space-y-3">
                 <a
-                  href="/docs/user-guide.pdf"
+                  href="/docs#user-guide"
                   target="_blank"
                   className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors group"
                 >
@@ -252,7 +252,7 @@ export function HelpCenter() {
                 </a>
 
                 <a
-                  href="/docs/api-reference.pdf"
+                  href="/docs#api-reference"
                   target="_blank"
                   className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors group"
                 >

@@ -28,6 +28,7 @@ export class RbacService {
       currentDivisionId?: string | null;
       assignedToId?: string | null;
       createdById: string;
+      originDepartmentId?: string | null;
     },
     user: UserAccessInfo,
   ): Promise<boolean> {
@@ -58,38 +59,34 @@ export class RbacService {
       return true;
     }
 
+    // Check if user has an active FileAssignment (multi-forward inbox entry)
+    const assignment = await this.prisma.fileAssignment.findFirst({
+      where: {
+        fileId: file.id,
+        toUserId: user.userId,
+        status: { in: ['PENDING', 'IN_PROGRESS'] },
+      },
+    });
+    if (assignment) {
+      return true;
+    }
+
     // Check if user created the file
     if (file.createdById === user.userId) {
       return true;
     }
 
-    // Check if file was forwarded to user's division/department
-    if (user.departmentId && file.departmentId === user.departmentId) {
-      // File is in user's department
-      if (isSectionOfficer || isApprovalAuthority) {
-        // Section Officers and Approval Authorities can see files in their department
-        // that are assigned to their division or to users in their division
-        if (user.divisionId && file.currentDivisionId === user.divisionId) {
-          return true;
-        }
-        // Also check if assigned to a user in their division
-        if (file.assignedToId) {
-          const assignedUser = await this.prisma.user.findUnique({
-            where: { id: file.assignedToId },
-            select: { divisionId: true, departmentId: true },
-          });
-          if (assignedUser?.divisionId === user.divisionId) {
-            return true;
-          }
-        }
-      }
+    // Host department: originator can always view (Rule 7 & 9)
+    if (file.originDepartmentId && user.departmentId && file.originDepartmentId === user.departmentId) {
+      return true;
     }
 
-    // Inward Desk and Dispatcher: files in their department OR assigned to them (e.g. forwarded from another dept)
-    if (isInwardDesk || isDispatcher) {
-      if (file.assignedToId === user.userId) return true;
-      if (user.departmentId && file.departmentId === user.departmentId) return true;
-    }
+    // IMPORTANT: For regular staff (Section Officer, Approval Authority,
+    // Inward Desk, Dispatcher), access is restricted to:
+    //  - files assigned directly to them
+    //  - files they created
+    //  - files explicitly forwarded to them in routing history
+    // No broad department-wide visibility is granted here.
 
     // Check routing history to see if file was forwarded to user
     const routingHistory = await this.prisma.fileRouting.findFirst({
@@ -140,25 +137,17 @@ export class RbacService {
       };
     }
 
-    // Section Officer: files assigned to them, created by them, or in their department/division
-    if (isSectionOfficer) {
-      const conditions: any[] = [
+    // For Section Officer, Approval Authority, Inward Desk and Dispatcher,
+    // as well as the default case, we start from the same strict filter:
+    // - assignedToId = user
+    // - createdById = user
+    // - routingHistory contains an entry sent to user
+    // - fileAssignments: active assignment to user (multi-forward inbox)
+    // - originDepartmentId = user's department (host sees all originated files)
+    if (isSectionOfficer || isApprovalAuthority || isInwardDesk || isDispatcher) {
+      where.OR = [
         { assignedToId: user.userId },
         { createdById: user.userId },
-      ];
-
-      if (user.departmentId) {
-        // Files in their department
-        conditions.push({ departmentId: user.departmentId });
-        // Files in their division
-        if (user.divisionId) {
-          conditions.push({ currentDivisionId: user.divisionId });
-        }
-      }
-
-      // Also include files forwarded to them via routing history
-      where.OR = [
-        ...conditions,
         {
           routingHistory: {
             some: {
@@ -166,7 +155,40 @@ export class RbacService {
             },
           },
         },
+        {
+          fileAssignments: {
+            some: {
+              toUserId: user.userId,
+              status: { in: ['PENDING', 'IN_PROGRESS'] },
+            },
+          },
+        },
+        ...(user.departmentId ? [{ originDepartmentId: user.departmentId }] : []),
       ];
+
+      // Additional inbound queue rules per role
+      // DISPATCHER (Outward Desk): should only ever see files that are already APPROVED
+      if (isDispatcher) {
+        where.AND = [
+          ...(where.AND ?? []),
+          { status: 'APPROVED' },
+        ];
+      }
+
+      // INWARD_DESK (Inward Desk): show files assigned to them (including when file was
+      // just forwarded to this department and file.departmentId was set to ours), or
+      // files from other departments not yet assigned (routing/assignment).
+      if (isInwardDesk && user.departmentId) {
+        where.AND = [
+          ...(where.AND ?? []),
+          {
+            OR: [
+              { assignedToId: user.userId },
+              { departmentId: { not: user.departmentId } },
+            ],
+          },
+        ];
+      }
 
       return {
         where,
@@ -174,22 +196,6 @@ export class RbacService {
           if (file.assignedToId === user.userId || file.createdById === user.userId) {
             return true;
           }
-          if (user.departmentId && file.departmentId === user.departmentId) {
-            if (user.divisionId && file.currentDivisionId === user.divisionId) {
-              return true;
-            }
-            // Check if assigned to user in same division
-            if (file.assignedToId) {
-              const assignedUser = await this.prisma.user.findUnique({
-                where: { id: file.assignedToId },
-                select: { divisionId: true },
-              });
-              if (assignedUser?.divisionId === user.divisionId) {
-                return true;
-              }
-            }
-          }
-          // Check routing history
           const routing = await this.prisma.fileRouting.findFirst({
             where: {
               fileId: file.id,
@@ -201,30 +207,7 @@ export class RbacService {
       };
     }
 
-    // Approval Authority: files in their department
-    if (isApprovalAuthority && user.departmentId) {
-      where.departmentId = user.departmentId;
-      return {
-        where,
-        canAccess: (file: any) => file.departmentId === user.departmentId,
-      };
-    }
-
-    // Inward Desk and Dispatcher: files in their department OR assigned to them (forwarded from another dept)
-    if (isInwardDesk || isDispatcher) {
-      where.OR = [
-        { assignedToId: user.userId },
-        ...(user.departmentId ? [{ departmentId: user.departmentId }] : []),
-      ];
-      return {
-        where,
-        canAccess: (file: any) =>
-          file.assignedToId === user.userId ||
-          (!!user.departmentId && file.departmentId === user.departmentId),
-      };
-    }
-
-    // Default: only files assigned to user, created by user, or forwarded to them
+    // Default: only files assigned to user, created by user, forwarded to them, or active assignment
     where.OR = [
       { assignedToId: user.userId },
       { createdById: user.userId },
@@ -235,6 +218,15 @@ export class RbacService {
           },
         },
       },
+      {
+        fileAssignments: {
+          some: {
+            toUserId: user.userId,
+            status: { in: ['PENDING', 'IN_PROGRESS'] },
+          },
+        },
+      },
+      ...(user.departmentId ? [{ originDepartmentId: user.departmentId }] : []),
     ];
 
     return {

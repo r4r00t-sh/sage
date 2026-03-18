@@ -200,13 +200,18 @@ class ShellScreen extends StatelessWidget {
           _NavGroup(title: 'Admin', items: [
             _NavItemData('Active Desk', '/admin/desk', Icons.monitor),
             _NavItemData('Desk Capacity', '/admin/desks', Icons.desktop_windows),
+            _NavItemData('Capacity Management', '/admin/capacity', Icons.tune),
+            _NavItemData('Features', '/admin/features', Icons.settings_suggest),
             _NavItemData('Documents', '/admin/documents', Icons.folder_special),
             _NavItemData('Recall Protocol', '/admin/recall', Icons.warning_amber),
             _NavItemData('Workflows', '/admin/workflows', Icons.account_tree),
             _NavItemData('Users', '/admin/users', Icons.people),
+            _NavItemData('Departments', '/admin/departments', Icons.apartment),
             _NavItemData('Analytics', '/admin/analytics', Icons.bar_chart),
           ]),
           _NavGroup(title: 'Other', items: [
+            _NavItemData('Documentation', '/docs', Icons.menu_book),
+            _NavItemData('My tickets', '/support', Icons.support_agent),
             _NavItemData('Chat', '/chat', Icons.chat_bubble_outline),
             _NavItemData('Settings', '/settings', Icons.settings),
           ]),
@@ -223,12 +228,16 @@ class ShellScreen extends StatelessWidget {
           _NavGroup(title: 'Admin', items: [
             _NavItemData('Active Desk', '/admin/desk', Icons.monitor),
             _NavItemData('Desk Capacity', '/admin/desks', Icons.desktop_windows),
+            _NavItemData('Capacity Management', '/admin/capacity', Icons.tune),
             _NavItemData('Documents', '/admin/documents', Icons.folder_special),
             _NavItemData('Workflows', '/admin/workflows', Icons.account_tree),
             _NavItemData('Users', '/admin/users', Icons.people),
+            _NavItemData('Departments', '/admin/departments', Icons.apartment),
             _NavItemData('Analytics', '/admin/analytics', Icons.bar_chart),
           ]),
           _NavGroup(title: 'Other', items: [
+            _NavItemData('Documentation', '/docs', Icons.menu_book),
+            _NavItemData('My tickets', '/support', Icons.support_agent),
             _NavItemData('Chat', '/chat', Icons.chat_bubble_outline),
             _NavItemData('Settings', '/settings', Icons.settings),
           ]),
@@ -246,6 +255,8 @@ class ShellScreen extends StatelessWidget {
             _NavItemData('Manage Groups', '/chat', Icons.group),
           ]),
           _NavGroup(title: 'Other', items: [
+            _NavItemData('Documentation', '/docs', Icons.menu_book),
+            _NavItemData('My tickets', '/support', Icons.support_agent),
             _NavItemData('Chat', '/chat', Icons.chat_bubble_outline),
             _NavItemData('Settings', '/settings', Icons.settings),
           ]),
@@ -261,6 +272,8 @@ class ShellScreen extends StatelessWidget {
             _NavItemData('Opinion Inbox', '/opinions/inbox', Icons.message),
           ]),
           _NavGroup(title: 'Other', items: [
+            _NavItemData('Documentation', '/docs', Icons.menu_book),
+            _NavItemData('My tickets', '/support', Icons.support_agent),
             _NavItemData('Chat', '/chat', Icons.chat_bubble_outline),
             _NavItemData('Settings', '/settings', Icons.settings),
           ]),
@@ -276,6 +289,8 @@ class ShellScreen extends StatelessWidget {
             _NavItemData('Opinion Inbox', '/opinions/inbox', Icons.message),
           ]),
           _NavGroup(title: 'Other', items: [
+            _NavItemData('Documentation', '/docs', Icons.menu_book),
+            _NavItemData('My tickets', '/support', Icons.support_agent),
             _NavItemData('Chat', '/chat', Icons.chat_bubble_outline),
             _NavItemData('Settings', '/settings', Icons.settings),
           ]),
@@ -289,6 +304,8 @@ class ShellScreen extends StatelessWidget {
             _NavItemData('Track File', '/files/track', Icons.pin_drop),
           ]),
           _NavGroup(title: 'Other', items: [
+            _NavItemData('Documentation', '/docs', Icons.menu_book),
+            _NavItemData('My tickets', '/support', Icons.support_agent),
             _NavItemData('Chat', '/chat', Icons.chat_bubble_outline),
             _NavItemData('Settings', '/settings', Icons.settings),
           ]),
@@ -303,6 +320,8 @@ class ShellScreen extends StatelessWidget {
             _NavItemData('Opinion Inbox', '/opinions/inbox', Icons.message),
           ]),
           _NavGroup(title: 'Other', items: [
+            _NavItemData('Documentation', '/docs', Icons.menu_book),
+            _NavItemData('My tickets', '/support', Icons.support_agent),
             _NavItemData('Chat', '/chat', Icons.chat_bubble_outline),
             _NavItemData('Settings', '/settings', Icons.settings),
           ]),

@@ -3,7 +3,6 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { PresenceService } from '../presence/presence.service';
 import * as bcrypt from 'bcrypt';
-import { GamificationService } from '../gamification/gamification.service';
 import { PresenceStatus } from '@prisma/client';
 
 @Injectable()
@@ -11,7 +10,6 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-    private gamification: GamificationService,
     private presence: PresenceService,
   ) {}
 
@@ -41,10 +39,9 @@ export class AuthService {
       throw new UnauthorizedException('Account is inactive. Please contact administrator.');
     }
 
-    if (user.profileApprovalStatus === 'PENDING_APPROVAL') {
-      console.warn(`Login attempt failed: Profile pending approval - ${trimmedUsername}`);
-      throw new UnauthorizedException('Profile pending Super Admin approval. Please contact administrator.');
-    }
+    // Allow login even if profile is pending Super Admin approval.
+    // Frontend will handle redirecting users with incomplete profiles to the
+    // profile completion flow based on `profileCompletedAt`.
 
     if (!user.passwordHash) {
       console.warn(`Login attempt failed: No password hash - ${trimmedUsername}`);
@@ -54,14 +51,6 @@ export class AuthService {
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
-    }
-
-    // Initialize user points if not exists (non-blocking; login still succeeds if this fails)
-    try {
-      await this.gamification.initializeUserPoints(user.id);
-    } catch (e) {
-      // Log but do not fail login (e.g. UserPoints/SystemSettings table missing)
-      console.warn('initializeUserPoints failed:', (e as Error)?.message);
     }
 
     const { passwordHash, ...result } = user;
@@ -180,8 +169,6 @@ export class AuthService {
         division: true,
       },
     });
-
-    await this.gamification.initializeUserPoints(user.id);
 
     const { passwordHash, ...result } = user;
     return result;

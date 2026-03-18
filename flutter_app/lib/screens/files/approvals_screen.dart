@@ -31,14 +31,15 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       _error = null;
     });
     try {
-      final res = await ApiClient().get<dynamic>('/files');
+      // Match web: pending approvals are "assignedToMe=true"
+      final res = await ApiClient().get<dynamic>('/files', queryParameters: {'assignedToMe': 'true'});
       final data = res.data;
       final raw = data is List ? data : (data is Map && data['data'] != null ? data['data'] as List : []);
       final list = raw is List ? raw : [];
       final all = list.map((e) => FileModel.fromJson(e is Map ? Map<String, dynamic>.from(e as Map) : <String, dynamic>{})).toList();
       if (mounted) {
         setState(() {
-          _files = all.where((f) => f.status == 'IN_PROGRESS' || f.status == 'PENDING').toList();
+          _files = all;
           _loading = false;
         });
       }

@@ -89,15 +89,7 @@ export const useAuthStore = create<AuthState>()(
   )
 );
 
-interface PointsState {
-  points: number;
-  setPoints: (points: number) => void;
-}
-
-export const usePointsStore = create<PointsState>((set) => ({
-  points: 1000,
-  setPoints: (points) => set({ points }),
-}));
+// Legacy points store removed – points system has been deprecated.
 
 // Notification Store
 interface Notification {

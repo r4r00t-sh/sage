@@ -13,7 +13,6 @@ interface SuccessCelebrationProps {
   title: string;
   message: string;
   type?: 'success' | 'achievement' | 'milestone';
-  points?: number;
 }
 
 export function SuccessCelebration({
@@ -22,7 +21,6 @@ export function SuccessCelebration({
   title,
   message,
   type = 'success',
-  points,
 }: SuccessCelebrationProps) {
   const [visible, setVisible] = useState(false);
 
@@ -140,14 +138,7 @@ export function SuccessCelebration({
           <h2 className="text-2xl font-bold mb-3">{title}</h2>
           <p className="text-muted-foreground mb-6">{message}</p>
 
-          {points && (
-            <div className="flex items-center justify-center gap-2 mb-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-              <Zap className="h-5 w-5 text-amber-500" />
-              <span className="text-lg font-bold text-amber-600">
-                +{points} points earned!
-              </span>
-            </div>
-          )}
+          {/* Legacy points display removed; celebration is now purely visual */}
 
           <Button onClick={handleClose} className="w-full">
             Awesome!
@@ -165,7 +156,6 @@ export function useCelebration() {
     title: string;
     message: string;
     type: 'success' | 'achievement' | 'milestone';
-    points?: number;
   }>({
     show: false,
     title: '',
@@ -177,9 +167,8 @@ export function useCelebration() {
     title: string,
     message: string,
     type: 'success' | 'achievement' | 'milestone' = 'success',
-    points?: number
   ) => {
-    setCelebration({ show: true, title, message, type, points });
+    setCelebration({ show: true, title, message, type });
   };
 
   const closeCelebration = () => {

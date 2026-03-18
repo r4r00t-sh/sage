@@ -40,6 +40,7 @@ services:
     image: docker.io/library/rabbitmq:3-management-alpine
     container_name: efiling-rabbitmq
     hostname: rabbitmq
+    command: ["sh", "-c", "rabbitmq-plugins enable rabbitmq_amqp1_0 && exec rabbitmq-server"]
     environment:
       RABBITMQ_DEFAULT_USER: efiling
       RABBITMQ_DEFAULT_PASS: efiling123

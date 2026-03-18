@@ -18,6 +18,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -96,6 +106,8 @@ export default function WorkflowsPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [confirmPublishId, setConfirmPublishId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -113,12 +125,23 @@ export default function WorkflowsPage() {
   const fetchWorkflows = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/workflows');
+      const response = await api.get('/workflows?includeInactive=true');
       setWorkflows(response.data);
     } catch (error: unknown) {
       toast.error('Failed to load workflows');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const setWorkflowActive = async (workflowId: string, isActive: boolean) => {
+    try {
+      await api.patch(`/workflows/${workflowId}`, { isActive });
+      toast.success(isActive ? 'Workflow activated' : 'Workflow deactivated');
+      fetchWorkflows();
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      toast.error(err.response?.data?.message || (isActive ? 'Failed to activate' : 'Failed to deactivate'));
     }
   };
 
@@ -179,11 +202,10 @@ export default function WorkflowsPage() {
   };
 
   const publishWorkflow = async (workflowId: string) => {
-    if (!confirm('Are you sure you want to publish this workflow? It will become active.')) return;
-
     try {
       await api.post(`/workflows/${workflowId}/publish`);
       toast.success('Workflow published successfully');
+      setConfirmPublishId(null);
       fetchWorkflows();
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } } };
@@ -210,11 +232,10 @@ export default function WorkflowsPage() {
   };
 
   const deleteWorkflow = async (workflowId: string) => {
-    if (!confirm('Are you sure you want to delete this workflow?')) return;
-
     try {
       await api.delete(`/workflows/${workflowId}`);
       toast.success('Workflow deleted successfully');
+      setConfirmDeleteId(null);
       fetchWorkflows();
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } } };
@@ -365,7 +386,7 @@ export default function WorkflowsPage() {
                     <span className="text-sm">{workflow._count.executions}</span>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {workflow.isActive ? (
                         <Badge variant="outline" className="bg-green-500/10 text-green-600">
                           <CheckCircle className="h-3 w-3 mr-1" />
@@ -381,6 +402,16 @@ export default function WorkflowsPage() {
                           <Pause className="h-3 w-3 mr-1" />
                           Inactive
                         </Badge>
+                      )}
+                      {workflow.isPublished && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => setWorkflowActive(workflow.id, !workflow.isActive)}
+                        >
+                          {workflow.isActive ? 'Deactivate' : 'Activate'}
+                        </Button>
                       )}
                     </div>
                   </TableCell>
@@ -400,7 +431,7 @@ export default function WorkflowsPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => publishWorkflow(workflow.id)}
+                          onClick={() => setConfirmPublishId(workflow.id)}
                         >
                           <Play className="h-4 w-4" />
                         </Button>
@@ -415,7 +446,7 @@ export default function WorkflowsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => deleteWorkflow(workflow.id)}
+                        onClick={() => setConfirmDeleteId(workflow.id)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -579,6 +610,40 @@ export default function WorkflowsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!confirmPublishId} onOpenChange={(open) => !open && setConfirmPublishId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Publish workflow?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This workflow will become active. Departments using it may be affected. You can unpublish later if needed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirmPublishId && publishWorkflow(confirmPublishId)}>
+              Publish
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!confirmDeleteId} onOpenChange={(open) => !open && setConfirmDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete workflow?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The workflow will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirmDeleteId && deleteWorkflow(confirmDeleteId)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

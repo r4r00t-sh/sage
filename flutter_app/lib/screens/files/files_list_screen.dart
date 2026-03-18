@@ -50,7 +50,33 @@ class _FilesListScreenState extends State<FilesListScreen> {
             child: ListTile(
               title: Text(f.subject),
               subtitle: Text('${f.fileNumber} • ${f.departmentName}'),
-              trailing: Chip(label: Text(f.status)),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Chip(label: Text(f.status)),
+                  PopupMenuButton<String>(
+                    tooltip: 'Actions',
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'view':
+                          context.push('/files/${f.id}');
+                          break;
+                        case 'forward':
+                          context.push('/files/${f.id}?action=forward');
+                          break;
+                        case 'track':
+                          context.push('/files/track/${f.id}');
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 'view', child: ListTile(leading: Icon(Icons.visibility_outlined), title: Text('View details'))),
+                      PopupMenuItem(value: 'forward', child: ListTile(leading: Icon(Icons.send_outlined), title: Text('Forward file'))),
+                      PopupMenuItem(value: 'track', child: ListTile(leading: Icon(Icons.location_on_outlined), title: Text('Track file'))),
+                    ],
+                  ),
+                ],
+              ),
               onTap: () => context.push('/files/${f.id}'),
             ),
           );

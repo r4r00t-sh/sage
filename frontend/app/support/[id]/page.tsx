@@ -15,8 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, MessageSquare, User, Headphones } from 'lucide-react';
+import { ArrowLeft, MessageSquare, User, Headphones, Shield, Key } from 'lucide-react';
 import api from '@/lib/api';
 import { hasAnyRole } from '@/lib/auth-utils';
 import { toast } from 'sonner';
@@ -41,6 +43,25 @@ export default function TicketDetailPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const isSupport = hasAnyRole(user, ['DEVELOPER', 'SUPPORT', 'SUPER_ADMIN']);
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [departments, setDepartments] = useState<
+    { id: string; name: string; code: string; divisions: { id: string; name: string }[] }[]
+  >([]);
+  const [userForm, setUserForm] = useState({
+    username: '',
+    password: '',
+    confirmPassword: '',
+    roles: ['USER'] as string[],
+    departmentId: '',
+    divisionId: '',
+  });
+
+  const isUserRequest =
+    ticket?.category === 'user_new' ||
+    ticket?.category === 'user_delete' ||
+    ticket?.category === 'user_transfer';
+
+  const selectedDepartment = departments.find((d) => d.id === userForm.departmentId);
 
   const loadTicket = async () => {
     try {
@@ -58,6 +79,14 @@ export default function TicketDetailPage() {
     if (!user || !id) return;
     loadTicket();
   }, [user, id]);
+
+  useEffect(() => {
+    if (!isSupport) return;
+    api
+      .get('/departments')
+      .then((res) => setDepartments(res.data))
+      .catch(() => setDepartments([]));
+  }, [isSupport]);
 
   const handleReply = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,6 +112,51 @@ export default function TicketDetailPage() {
       toast.success('Status updated');
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to update status');
+    }
+  };
+
+  const handleCreateUserFromTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userForm.username || !userForm.password || !userForm.confirmPassword) {
+      toast.error('Username and password are required');
+      return;
+    }
+    if (userForm.password !== userForm.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    if (!userForm.departmentId) {
+      toast.error('Department is required');
+      return;
+    }
+    setCreatingUser(true);
+    try {
+      await api.post('/users', {
+        username: userForm.username,
+        password: userForm.password,
+        name: userForm.username,
+        roles: userForm.roles,
+        departmentId: userForm.departmentId,
+        divisionId: userForm.divisionId || undefined,
+      });
+      // Auto-reply on ticket with created credentials (as per workflow)
+      await api.post(`/tickets/${id}/replies`, {
+        content: `User account created from this request.\n\nUsername: ${userForm.username}\nPassword: ${userForm.password}`,
+      });
+      toast.success('User created and reply posted to ticket.');
+      setUserForm({
+        username: '',
+        password: '',
+        confirmPassword: '',
+        roles: ['USER'],
+        departmentId: '',
+        divisionId: '',
+      });
+      await loadTicket();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to create user');
+    } finally {
+      setCreatingUser(false);
     }
   };
 
@@ -155,6 +229,132 @@ export default function TicketDetailPage() {
           <p className="whitespace-pre-wrap text-sm">{ticket.description}</p>
         </CardContent>
       </Card>
+
+      {isSupport && isUserRequest && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              User request tools
+            </CardTitle>
+            <CardDescription>
+              Create a user account in response to this ticket. Credentials will be posted back to
+              the ticket automatically.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleCreateUserFromTicket} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Username</Label>
+                <Input
+                  value={userForm.username}
+                  onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
+                  placeholder="Login username"
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Password</Label>
+                  <Input
+                    type="password"
+                    value={userForm.password}
+                    onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                    placeholder="Temporary password"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Confirm password</Label>
+                  <Input
+                    type="password"
+                    value={userForm.confirmPassword}
+                    onChange={(e) =>
+                      setUserForm({ ...userForm, confirmPassword: e.target.value })
+                    }
+                    placeholder="Confirm password"
+                  />
+                </div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Department</Label>
+                  <Select
+                    value={userForm.departmentId}
+                    onValueChange={(val) =>
+                      setUserForm({ ...userForm, departmentId: val, divisionId: '' })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departments.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Division</Label>
+                  <Select
+                    value={userForm.divisionId}
+                    onValueChange={(val) =>
+                      setUserForm({ ...userForm, divisionId: val })
+                    }
+                    disabled={!userForm.departmentId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select division" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {selectedDepartment?.divisions.map((div) => (
+                        <SelectItem key={div.id} value={div.id}>
+                          {div.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <Select
+                  value={userForm.roles[0]}
+                  onValueChange={(val) =>
+                    setUserForm({ ...userForm, roles: [val] })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DEPT_ADMIN">Department Admin</SelectItem>
+                    <SelectItem value="APPROVAL_AUTHORITY">Approval Authority</SelectItem>
+                    <SelectItem value="SECTION_OFFICER">Section Officer</SelectItem>
+                    <SelectItem value="INWARD_DESK">Inward Desk</SelectItem>
+                    <SelectItem value="DISPATCHER">Dispatcher</SelectItem>
+                    <SelectItem value="USER">User</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button type="submit" disabled={creatingUser}>
+                {creatingUser ? (
+                  <>
+                    <Key className="mr-2 h-4 w-4 animate-spin" />
+                    Creating user...
+                  </>
+                ) : (
+                  <>
+                    <Key className="mr-2 h-4 w-4" />
+                    Create user & reply
+                  </>
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="space-y-4">
         <h2 className="text-lg font-semibold flex items-center gap-2">

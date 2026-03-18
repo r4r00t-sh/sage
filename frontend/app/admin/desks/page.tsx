@@ -17,6 +17,16 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -98,6 +108,7 @@ export default function DesksPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [divisions, setDivisions] = useState<Department[]>([]);
   const [workloadSummary, setWorkloadSummary] = useState<WorkloadSummary | null>(null);
+  const [confirmDeleteDeskId, setConfirmDeleteDeskId] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -186,10 +197,10 @@ export default function DesksPage() {
   };
 
   const handleDeleteDesk = async (deskId: string) => {
-    if (!confirm('Are you sure you want to delete this desk?')) return;
     try {
       await api.delete(`/desks/${deskId}`);
       toast.success('Desk deleted successfully');
+      setConfirmDeleteDeskId(null);
       fetchDesks();
       fetchWorkloadSummary();
     } catch (error: unknown) {
@@ -606,7 +617,7 @@ export default function DesksPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDeleteDesk(desk.id)}
+                          onClick={() => setConfirmDeleteDeskId(desk.id)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -685,7 +696,24 @@ export default function DesksPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!confirmDeleteDeskId} onOpenChange={(open) => !open && setConfirmDeleteDeskId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete desk?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The desk will be permanently removed. Files assigned to it may need to be reassigned.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirmDeleteDeskId && handleDeleteDesk(confirmDeleteDeskId)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
-    );
+  );
 }
 

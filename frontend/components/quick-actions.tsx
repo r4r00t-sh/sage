@@ -41,7 +41,7 @@ interface QuickActionsProps {
   fileNumber: string;
   currentStatus: string;
   isOnHold: boolean;
-  userRole: string;
+  userRoles: string[];
   onActionComplete: () => void;
 }
 
@@ -50,7 +50,7 @@ export function QuickActions({
   fileNumber,
   currentStatus,
   isOnHold,
-  userRole,
+  userRoles,
   onActionComplete,
 }: QuickActionsProps) {
   const [loading, setLoading] = useState<string | null>(null);
@@ -122,14 +122,22 @@ export function QuickActions({
     }
   };
 
-  const canApprove = ['SECTION_OFFICER', 'APPROVAL_AUTHORITY', 'DEPT_ADMIN', 'SUPER_ADMIN', 'DEVELOPER'].includes(userRole);
-  const canReject = ['SECTION_OFFICER', 'APPROVAL_AUTHORITY', 'DEPT_ADMIN', 'SUPER_ADMIN', 'DEVELOPER'].includes(userRole);
-  const canHold = ['SECTION_OFFICER', 'DEPT_ADMIN', 'SUPER_ADMIN', 'DEVELOPER'].includes(userRole);
-  const canReturn = ['SECTION_OFFICER', 'APPROVAL_AUTHORITY', 'DEPT_ADMIN', 'SUPER_ADMIN', 'DEVELOPER'].includes(userRole);
+  const canApprove = ['SECTION_OFFICER', 'APPROVAL_AUTHORITY', 'DEPT_ADMIN', 'SUPER_ADMIN', 'DEVELOPER'].some((r) =>
+    userRoles.includes(r),
+  );
+  const canReject = ['SECTION_OFFICER', 'APPROVAL_AUTHORITY', 'DEPT_ADMIN', 'SUPER_ADMIN', 'DEVELOPER'].some((r) =>
+    userRoles.includes(r),
+  );
+  const canHold = ['SECTION_OFFICER', 'DEPT_ADMIN', 'SUPER_ADMIN', 'DEVELOPER'].some((r) =>
+    userRoles.includes(r),
+  );
+  const canReturn = ['SECTION_OFFICER', 'APPROVAL_AUTHORITY', 'DEPT_ADMIN', 'SUPER_ADMIN', 'DEVELOPER'].some((r) =>
+    userRoles.includes(r),
+  );
 
   // SAGE: Submit = upward (Section Officer → Dept Admin → Approving Authority); Approve = final sign-off only
-  const isApprovingAuthority = userRole === 'APPROVAL_AUTHORITY';
-  const isUpwardSubmit = ['SECTION_OFFICER', 'DEPT_ADMIN'].includes(userRole);
+  const isApprovingAuthority = userRoles.includes('APPROVAL_AUTHORITY');
+  const isUpwardSubmit = userRoles.includes('SECTION_OFFICER') || userRoles.includes('DEPT_ADMIN');
   const submitOrApproveLabel = isApprovingAuthority ? 'Approve' : isUpwardSubmit ? 'Submit' : 'Approve / Forward';
 
   return (
@@ -366,14 +374,14 @@ export function QuickActions({
               Approve & Forward
             </DialogTitle>
             <DialogDescription>
-              {['SECTION_OFFICER', 'APPROVAL_AUTHORITY'].includes(userRole) ? (
+              {userRoles.some((r) => ['SECTION_OFFICER', 'APPROVAL_AUTHORITY'].includes(r)) ? (
                 <>
                   Approve file {fileNumber} and automatically forward to the next stage:
                   <br />
-                  {userRole === 'SECTION_OFFICER' && (
+                  {userRoles.includes('SECTION_OFFICER') && (
                     <span className="font-medium">→ Approval Authority in your division</span>
                   )}
-                  {userRole === 'APPROVAL_AUTHORITY' && (
+                  {userRoles.includes('APPROVAL_AUTHORITY') && (
                     <span className="font-medium">→ Dispatch Officer in your division</span>
                   )}
                 </>
@@ -401,15 +409,25 @@ export function QuickActions({
             <Button
               className="bg-green-600 hover:bg-green-700 transition-all duration-200 hover:shadow-md"
               onClick={async () => {
-                if (['SECTION_OFFICER', 'DEPT_ADMIN', 'APPROVAL_AUTHORITY'].includes(userRole)) {
+                if (
+                  userRoles.includes('SECTION_OFFICER') ||
+                  userRoles.includes('DEPT_ADMIN') ||
+                  userRoles.includes('APPROVAL_AUTHORITY')
+                ) {
                   setLoading('approve-and-forward');
                   try {
                     const response = await api.post(`/files/${fileId}/approve-and-forward`, {
                       remarks: remarks || undefined,
                     });
-                    toast.success(isApprovingAuthority ? 'File approved and sent to Dispatch' : 'File submitted successfully', {
-                      description: `Forwarded to ${response.data.forwardedTo} (${response.data.forwardedToRole})`,
-                    });
+                    const noWorkflow = response.data?.forwardedToRole === 'no_workflow';
+                    toast.success(
+                      noWorkflow ? 'File approved' : (isApprovingAuthority ? 'File approved and sent to Dispatch' : 'File submitted successfully'),
+                      {
+                        description: noWorkflow
+                          ? (response.data?.message || 'Use the Forward button to send it to someone.')
+                          : `Forwarded to ${response.data?.forwardedTo} (${response.data?.forwardedToRole})`,
+                      }
+                    );
                     onActionComplete();
                     resetDialogs();
                   } catch (error: unknown) {

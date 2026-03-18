@@ -214,8 +214,8 @@ export class GamificationService {
   }
 
   private async getSetting(key: string, defaultValue: number): Promise<number> {
-    const setting = await this.prisma.systemSettings.findUnique({
-      where: { key },
+    const setting = await this.prisma.systemSettings.findFirst({
+      where: { key, departmentId: null },
     });
     return setting ? parseInt(setting.value) : defaultValue;
   }

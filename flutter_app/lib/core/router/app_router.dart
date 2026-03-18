@@ -23,6 +23,10 @@ import 'package:efiling_app/screens/admin/active_desk_screen.dart';
 import 'package:efiling_app/screens/admin/documents_screen.dart';
 import 'package:efiling_app/screens/admin/recall_screen.dart';
 import 'package:efiling_app/screens/admin/workflows_screen.dart';
+import 'package:efiling_app/screens/admin/capacity_management_screen.dart';
+import 'package:efiling_app/screens/admin/departments_screen.dart';
+import 'package:efiling_app/screens/admin/department_detail_screen.dart';
+import 'package:efiling_app/screens/admin/features_screen.dart';
 import 'package:efiling_app/screens/chat/chat_list_screen.dart';
 import 'package:efiling_app/screens/chat/chat_detail_screen.dart';
 import 'package:efiling_app/screens/chat/chat_user_picker_screen.dart';
@@ -32,6 +36,10 @@ import 'package:efiling_app/screens/profile_screen.dart';
 import 'package:efiling_app/screens/notifications_screen.dart';
 import 'package:efiling_app/screens/help_screen.dart';
 import 'package:efiling_app/screens/global_search_screen.dart';
+import 'package:efiling_app/screens/docs_screen.dart';
+import 'package:efiling_app/screens/support/tickets_list_screen.dart';
+import 'package:efiling_app/screens/support/new_ticket_screen.dart';
+import 'package:efiling_app/screens/support/ticket_detail_screen.dart';
 
 class AppRouter {
   static GoRouter router(AuthProvider auth) {
@@ -58,7 +66,14 @@ class AppRouter {
           routes: [
             GoRoute(path: '/dashboard', builder: (_, __) => const DashboardScreen()),
             GoRoute(path: '/files', builder: (_, __) => const FilesListScreen()),
-            GoRoute(path: '/files/inbox', builder: (_, __) => const InboxScreen()),
+            GoRoute(
+              path: '/files/inbox',
+              builder: (context, state) {
+                final status = state.uri.queryParameters['status'];
+                final redlisted = state.uri.queryParameters['redlisted'] == 'true';
+                return InboxScreen(initialStatus: status, initialRedlisted: redlisted);
+              },
+            ),
             GoRoute(path: '/files/new', builder: (_, __) => const NewFileScreen()),
             GoRoute(path: '/files/track', builder: (_, __) => const TrackFileScreen()),
             GoRoute(
@@ -73,7 +88,8 @@ class AppRouter {
               path: '/files/:id',
               builder: (context, state) {
                 final id = state.pathParameters['id']!;
-                return FileDetailScreen(fileId: id);
+                final action = state.uri.queryParameters['action'];
+                return FileDetailScreen(fileId: id, openForwardOnStart: action == 'forward');
               },
             ),
             GoRoute(path: '/opinions/inbox', builder: (_, __) => const OpinionsInboxScreen()),
@@ -95,6 +111,16 @@ class AppRouter {
             GoRoute(path: '/admin/analytics', builder: (_, __) => const AnalyticsScreen()),
             GoRoute(path: '/admin/desks', builder: (_, __) => const DesksScreen()),
             GoRoute(path: '/admin/desk', builder: (_, __) => const ActiveDeskScreen()),
+            GoRoute(path: '/admin/capacity', builder: (_, __) => const CapacityManagementScreen()),
+            GoRoute(path: '/admin/features', builder: (_, __) => const FeaturesScreen()),
+            GoRoute(path: '/admin/departments', builder: (_, __) => const DepartmentsScreen()),
+            GoRoute(
+              path: '/admin/departments/:id',
+              builder: (context, state) {
+                final id = state.pathParameters['id']!;
+                return DepartmentDetailScreen(departmentId: id);
+              },
+            ),
             GoRoute(path: '/admin/documents', builder: (_, __) => const DocumentsScreen()),
             GoRoute(path: '/admin/recall', builder: (_, __) => const RecallScreen()),
             GoRoute(path: '/admin/workflows', builder: (_, __) => const WorkflowsScreen()),
@@ -119,9 +145,19 @@ class AppRouter {
             ),
             GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
             GoRoute(path: '/help', builder: (_, __) => const HelpScreen()),
+            GoRoute(path: '/docs', builder: (_, __) => const DocsScreen()),
             GoRoute(path: '/search', builder: (_, __) => const GlobalSearchScreen()),
             GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
             GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
+            GoRoute(path: '/support', builder: (_, __) => const TicketsListScreen()),
+            GoRoute(path: '/support/new', builder: (_, __) => const NewTicketScreen()),
+            GoRoute(
+              path: '/support/:id',
+              builder: (context, state) {
+                final id = state.pathParameters['id']!;
+                return TicketDetailScreen(ticketId: id);
+              },
+            ),
           ],
         ),
       ],

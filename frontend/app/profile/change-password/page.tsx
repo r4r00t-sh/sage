@@ -17,17 +17,12 @@ export default function ChangePasswordPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
   const [passwordError, setPasswordError] = useState('');
 
   const validate = () => {
-    if (!passwordData.currentPassword) {
-      toast.error('Enter your current password (temporary password from support)');
-      return false;
-    }
     if (!passwordData.newPassword || passwordData.newPassword.length < 6) {
       setPasswordError('New password must be at least 6 characters');
       return false;
@@ -46,16 +41,12 @@ export default function ChangePasswordPage() {
     setSaving(true);
     try {
       await api.put(`/users/${user.id}/password`, {
-        currentPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword,
       });
-      const updated = await api.get(`/users/${user.id}`);
-      const u = updated.data;
       setAuth(
         {
           ...user,
-          mustChangePassword: u.mustChangePassword ?? false,
-          profileCompletedAt: u.profileCompletedAt ?? null,
+          mustChangePassword: false,
         },
         localStorage.getItem('token') || ''
       );
@@ -104,21 +95,6 @@ export default function ChangePasswordPage() {
                 <AlertDescription>{passwordError}</AlertDescription>
               </Alert>
             )}
-            <div className="space-y-2">
-              <Label htmlFor="currentPassword">Current password (temporary)</Label>
-              <Input
-                id="currentPassword"
-                type="password"
-                value={passwordData.currentPassword}
-                onChange={(e) => {
-                  setPasswordData({ ...passwordData, currentPassword: e.target.value });
-                  setPasswordError('');
-                }}
-                placeholder="Enter temporary password"
-                required
-                autoComplete="current-password"
-              />
-            </div>
             <div className="space-y-2">
               <Label htmlFor="newPassword">New password</Label>
               <Input

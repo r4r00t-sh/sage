@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { useAuthStore, usePointsStore } from '@/lib/store';
+import { useAuthStore } from '@/lib/store';
 import { useAvatarUrl } from '@/lib/avatar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,7 @@ import {
   AlertTriangle,
   Timer,
   FileStack,
+  Star,
 } from 'lucide-react';
 import { ActivityHeatmap } from '@/components/activity-heatmap';
 import {
@@ -71,8 +72,7 @@ interface UserStats {
   filesCreated: number;
   filesProcessed: number;
   filesApproved: number;
-  totalPoints: number;
-  currentStreak: number;
+  currentStreak?: number;
   achievements: Achievement[];
   recentActivity: Activity[];
 }
@@ -100,13 +100,10 @@ interface MyPerformance {
   avgProcessingTimeHours: number | null;
   totalFilesCreated: number;
   totalFilesAssigned: number;
-  currentPoints: number;
-  streakMonths: number;
 }
 
 export default function ProfilePage() {
   const { user, setAuth } = useAuthStore();
-  const { points } = usePointsStore();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -328,10 +325,28 @@ export default function ProfilePage() {
                     {profile.department.name}
                   </Badge>
                 )}
-                <Badge variant="secondary" className="px-3 py-1">
-                  <Trophy className="h-3 w-3 mr-1 text-amber-500" />
-                  {points} Points
-                </Badge>
+                {myPerformance && (
+                  <Badge variant="secondary" className="px-3 py-1">
+                    <Trophy className="h-3 w-3 mr-1 text-amber-500" />
+                    {Array.from({ length: 5 }).map((_, i) => {
+                      const normalized = Math.max(
+                        0,
+                        Math.min(1, (myPerformance.performanceScore || 0) / 100),
+                      );
+                      const stars = Math.round(normalized * 5);
+                      return (
+                        <Star
+                          key={i}
+                          className={cn(
+                            'h-3 w-3 inline-block',
+                            i < stars ? 'text-amber-500' : 'text-muted-foreground/30',
+                          )}
+                          fill={i < stars ? 'currentColor' : 'none'}
+                        />
+                      );
+                    })}
+                  </Badge>
+                )}
               </div>
             </div>
 
@@ -393,8 +408,33 @@ export default function ProfilePage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Total Points</p>
-                <p className="text-3xl font-bold text-amber-600">{points}</p>
+                <p className="text-sm font-medium text-muted-foreground mb-1">Rating</p>
+                {myPerformance && (
+                  <>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: 5 }).map((_, i) => {
+                        const normalized = Math.max(
+                          0,
+                          Math.min(1, (myPerformance.performanceScore || 0) / 100),
+                        );
+                        const stars = Math.round(normalized * 5);
+                        return (
+                          <Star
+                            key={i}
+                            className={cn(
+                              'h-5 w-5',
+                              i < stars ? 'text-amber-500' : 'text-muted-foreground/20',
+                            )}
+                            fill={i < stars ? 'currentColor' : 'none'}
+                          />
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {(myPerformance.performanceScore / 20).toFixed(1)} / 5
+                    </p>
+                  </>
+                )}
               </div>
               <div className="h-12 w-12 rounded-xl bg-amber-500/10 flex items-center justify-center">
                 <Trophy className="h-6 w-6 text-amber-500" />

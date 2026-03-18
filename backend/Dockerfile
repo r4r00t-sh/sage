@@ -6,7 +6,8 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci
+# Install dependencies from lockfile and then add pdf-lib for PDF export
+RUN npm ci && npm install pdf-lib
 
 # Rebuild the source code only when needed
 FROM base AS builder

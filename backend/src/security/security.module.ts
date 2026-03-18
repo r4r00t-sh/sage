@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { SecurityService } from './security.service';
 import { FileUploadGuard } from './file-upload.guard';
+import { SanitizeInterceptor } from './sanitize.interceptor';
+import { SsrfService } from './ssrf.service';
 
 @Module({
   imports: [
@@ -22,12 +24,17 @@ import { FileUploadGuard } from './file-upload.guard';
   ],
   providers: [
     SecurityService,
+    SsrfService,
     FileUploadGuard,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: SanitizeInterceptor,
+    },
   ],
-  exports: [SecurityService, FileUploadGuard],
+  exports: [SecurityService, SsrfService, FileUploadGuard],
 })
 export class SecurityModule {}

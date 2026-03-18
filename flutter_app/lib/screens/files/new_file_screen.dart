@@ -4,6 +4,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:dio/dio.dart' show FormData, MultipartFile;
 import 'package:efiling_app/core/api/api_client.dart';
 import 'package:efiling_app/core/utils/responsive.dart';
+import 'package:provider/provider.dart';
+import 'package:efiling_app/core/auth/auth_provider.dart';
+import 'package:efiling_app/models/user_model.dart';
 
 class NewFileScreen extends StatefulWidget {
   const NewFileScreen({super.key});
@@ -27,6 +30,36 @@ class _NewFileScreenState extends State<NewFileScreen> {
   bool _loading = false;
   bool _departmentsLoaded = false;
   bool _loadingDivisions = false;
+
+  bool _canCreateFiles(UserModel? user) {
+    if (user == null) return false;
+    // Match web: INWARD_DESK and DISPATCHER cannot create new files.
+    return !(user.hasRole('INWARD_DESK') || user.hasRole('DISPATCHER'));
+  }
+
+  static const int _maxFiles = 10;
+  static const int _maxFileBytes = 50 * 1024 * 1024;
+  static const Set<String> _allowedExtensions = {
+    'pdf',
+    'doc',
+    'docx',
+    'xls',
+    'xlsx',
+    'ppt',
+    'pptx',
+    'odt',
+    'ods',
+    'odp',
+    'txt',
+    'csv',
+    'html',
+    'htm',
+    'jpg',
+    'jpeg',
+    'png',
+    'gif',
+    'webp',
+  };
 
   @override
   void initState() {
@@ -99,9 +132,42 @@ class _NewFileScreenState extends State<NewFileScreen> {
   Future<void> _pickFiles() async {
     final result = await FilePicker.platform.pickFiles(allowMultiple: true, type: FileType.any);
     if (result == null || result.files.isEmpty) return;
-    setState(() {
-      _pickedFiles = List.from(_pickedFiles)..addAll(result.files.where((f) => f.name.isNotEmpty));
-    });
+    final existingCount = _pickedFiles.length;
+    final availableSlots = (_maxFiles - existingCount).clamp(0, _maxFiles);
+    if (availableSlots == 0) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Maximum 10 attachments allowed. Remove one to add more.')));
+      return;
+    }
+
+    final incoming = result.files.where((f) => f.name.isNotEmpty).toList();
+    final accepted = <PlatformFile>[];
+    int rejected = 0;
+
+    for (final f in incoming) {
+      if (accepted.length >= availableSlots) break;
+      final ext = (f.extension ?? '').toLowerCase();
+      if (ext.isEmpty || !_allowedExtensions.contains(ext)) {
+        rejected++;
+        continue;
+      }
+      if (f.size > _maxFileBytes) {
+        rejected++;
+        continue;
+      }
+      accepted.add(f);
+    }
+
+    if (accepted.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No valid files selected (type/size).')));
+      return;
+    }
+
+    setState(() => _pickedFiles = List.from(_pickedFiles)..addAll(accepted));
+    if (rejected > 0 && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$rejected file(s) skipped (invalid type/too large/limit).')));
+    }
   }
 
   void _removeFile(int index) {
@@ -126,6 +192,12 @@ class _NewFileScreenState extends State<NewFileScreen> {
   }
 
   Future<void> _submit() async {
+    final user = context.read<AuthProvider>().user;
+    if (!_canCreateFiles(user)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('You cannot create new files.')));
+      return;
+    }
     if (_subjectController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Subject is required')));
       return;
@@ -136,8 +208,9 @@ class _NewFileScreenState extends State<NewFileScreen> {
     }
     setState(() => _loading = true);
     try {
+      Map<String, dynamic>? created;
       if (_pickedFiles.isEmpty) {
-        await ApiClient().post<Map<String, dynamic>>('/files', data: {
+        final res = await ApiClient().post<Map<String, dynamic>>('/files', data: {
           'subject': _subjectController.text.trim(),
           'description': _descriptionController.text.trim().isEmpty ? null : _descriptionController.text.trim(),
           'priority': _priority,
@@ -145,6 +218,7 @@ class _NewFileScreenState extends State<NewFileScreen> {
           'divisionId': _divisionId,
           'dueDate': _dueDate != null ? _dueDate!.toIso8601String() : null,
         });
+        created = res.data;
       } else {
         final formData = FormData.fromMap({
           'subject': _subjectController.text.trim(),
@@ -161,11 +235,18 @@ class _NewFileScreenState extends State<NewFileScreen> {
             formData.files.add(MapEntry('files', await MultipartFile.fromFile(pf.path!, filename: pf.name)));
           }
         }
-        await ApiClient().dio.post<Map<String, dynamic>>('/files', data: formData);
+        final res = await ApiClient().dio.post<Map<String, dynamic>>('/files', data: formData);
+        created = res.data;
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File created successfully!')));
-        context.go('/files/inbox');
+        final createdId = created?['id']?.toString();
+        final createdNumber = created?['fileNumber']?.toString();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(createdNumber != null ? 'Created $createdNumber' : 'File created successfully!')));
+        if (createdId != null && createdId.isNotEmpty) {
+          context.go('/files/$createdId');
+        } else {
+          context.go('/files/inbox');
+        }
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
@@ -179,6 +260,39 @@ class _NewFileScreenState extends State<NewFileScreen> {
     final theme = Theme.of(context);
     final padding = Responsive.padding(context);
     final maxW = Responsive.contentMaxWidth(context);
+    final user = context.watch<AuthProvider>().user;
+    final canCreate = _canCreateFiles(user);
+
+    if (!canCreate) {
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(padding.left, 24, padding.right, 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.lock_outline, size: 48, color: theme.colorScheme.onSurfaceVariant),
+                const SizedBox(height: 12),
+                Text('Cannot create files', style: theme.textTheme.titleLarge),
+                const SizedBox(height: 6),
+                Text(
+                  'Your role can only view/forward files in the inbox.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () => context.go('/files/inbox'),
+                  icon: const Icon(Icons.inbox_outlined),
+                  label: const Text('Go to Inbox'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(padding.left, 16, padding.right, 24),
@@ -294,6 +408,11 @@ class _NewFileScreenState extends State<NewFileScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 6),
+              Text(
+                'Up to $_maxFiles files • Max 50MB each • PDF/Office/ODF/Images/Text/CSV/HTML',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
               if (_pickedFiles.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 ...List.generate(_pickedFiles.length, (i) {
@@ -302,6 +421,7 @@ class _NewFileScreenState extends State<NewFileScreen> {
                     dense: true,
                     leading: const Icon(Icons.insert_drive_file),
                     title: Text(f.name, overflow: TextOverflow.ellipsis),
+                    subtitle: Text('${(f.size / (1024 * 1024)).toStringAsFixed(1)} MB'),
                     trailing: IconButton(icon: const Icon(Icons.close), onPressed: () => _removeFile(i)),
                   );
                 }),

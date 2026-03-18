@@ -9,6 +9,33 @@ import { PrismaService } from '../prisma/prisma.service';
 export class WorkflowService {
   constructor(private prisma: PrismaService) {}
 
+  private isDeptAdminOnly(roles: string[]) {
+    return (
+      roles.includes('DEPT_ADMIN') &&
+      !roles.includes('SUPER_ADMIN') &&
+      !roles.includes('DEVELOPER')
+    );
+  }
+
+  private async assertDeptAdminCanAccessWorkflow(
+    workflowId: string,
+    userDepartmentId: string | null | undefined,
+    userRoles: string[],
+  ) {
+    if (!this.isDeptAdminOnly(userRoles)) return;
+    const workflow = await this.prisma.workflow.findUnique({
+      where: { id: workflowId },
+      select: { departmentId: true },
+    });
+    if (!workflow) return;
+    // Dept admin can manage workflows for their department; global (null) workflows are allowed
+    if (workflow.departmentId && workflow.departmentId !== userDepartmentId) {
+      throw new ForbiddenException(
+        'You can only edit workflows that belong to your department',
+      );
+    }
+  }
+
   // Create workflow
   async createWorkflow(
     userId: string,
@@ -21,11 +48,18 @@ export class WorkflowService {
       fileType?: string;
       priorityCategory?: string;
     },
+    userDepartmentId?: string | null,
   ) {
     // Check authorization
     if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can create workflows');
     }
+
+    // Dept Admin can only create workflows for their department
+    const departmentId =
+      this.isDeptAdminOnly(userRoles) && userDepartmentId
+        ? userDepartmentId
+        : data.departmentId;
 
     // Check if code exists
     const existing = await this.prisma.workflow.findUnique({
@@ -41,7 +75,7 @@ export class WorkflowService {
         name: data.name,
         code: data.code,
         description: data.description,
-        departmentId: data.departmentId,
+        departmentId,
         fileType: data.fileType,
         priorityCategory: data.priorityCategory,
         createdById: userId,
@@ -84,8 +118,11 @@ export class WorkflowService {
     });
   }
 
-  // Get workflow by ID
-  async getWorkflowById(workflowId: string) {
+  // Get workflow by ID (optional user context for DEPT_ADMIN scope)
+  async getWorkflowById(
+    workflowId: string,
+    user?: { departmentId?: string | null; roles?: string[] },
+  ) {
     const workflow = await this.prisma.workflow.findUnique({
       where: { id: workflowId },
       include: {
@@ -104,6 +141,15 @@ export class WorkflowService {
       throw new NotFoundException('Workflow not found');
     }
 
+    if (user && this.isDeptAdminOnly(user.roles ?? [])) {
+      // Dept admin can view workflows for their department; global (null) workflows are visible to all admins
+      if (workflow.departmentId && workflow.departmentId !== user.departmentId) {
+        throw new ForbiddenException(
+          'You can only view workflows that belong to your department',
+        );
+      }
+    }
+
     return workflow;
   }
 
@@ -119,10 +165,17 @@ export class WorkflowService {
       priorityCategory: string;
       isActive: boolean;
     }>,
+    userDepartmentId?: string | null,
   ) {
     if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can update workflows');
     }
+
+    await this.assertDeptAdminCanAccessWorkflow(
+      workflowId,
+      userDepartmentId,
+      userRoles,
+    );
 
     return this.prisma.workflow.update({
       where: { id: workflowId },
@@ -131,13 +184,27 @@ export class WorkflowService {
   }
 
   // Publish workflow (make it active)
-  async publishWorkflow(workflowId: string, userId: string, userRoles: string[]) {
+  async publishWorkflow(
+    workflowId: string,
+    userId: string,
+    userRoles: string[],
+    userDepartmentId?: string | null,
+  ) {
     if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can publish workflows');
     }
 
+    await this.assertDeptAdminCanAccessWorkflow(
+      workflowId,
+      userDepartmentId,
+      userRoles,
+    );
+
     // Validate workflow has required nodes
-    const workflow = await this.getWorkflowById(workflowId);
+    const workflow = await this.getWorkflowById(workflowId, {
+      departmentId: userDepartmentId ?? undefined,
+      roles: userRoles,
+    });
     const hasStart = workflow.nodes.some((n) => n.nodeType === 'start');
     const hasEnd = workflow.nodes.some((n) => n.nodeType === 'end');
 
@@ -164,10 +231,21 @@ export class WorkflowService {
   }
 
   // Delete workflow
-  async deleteWorkflow(workflowId: string, userId: string, userRoles: string[]) {
+  async deleteWorkflow(
+    workflowId: string,
+    userId: string,
+    userRoles: string[],
+    userDepartmentId?: string | null,
+  ) {
     if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can delete workflows');
     }
+
+    await this.assertDeptAdminCanAccessWorkflow(
+      workflowId,
+      userDepartmentId,
+      userRoles,
+    );
 
     // Check if workflow has active executions
     const activeExecutions = await this.prisma.workflowExecution.count({
@@ -209,10 +287,16 @@ export class WorkflowService {
       positionY?: number;
       config?: any;
     },
+    userDepartmentId?: string | null,
   ) {
     if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can modify workflows');
     }
+    await this.assertDeptAdminCanAccessWorkflow(
+      workflowId,
+      userDepartmentId,
+      userRoles,
+    );
 
     return this.prisma.workflowNode.create({
       data: {
@@ -251,9 +335,21 @@ export class WorkflowService {
       positionY: number;
       config: any;
     }>,
+    userDepartmentId?: string | null,
   ) {
     if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can modify workflows');
+    }
+    const node = await this.prisma.workflowNode.findUnique({
+      where: { id: nodeId },
+      select: { workflowId: true },
+    });
+    if (node) {
+      await this.assertDeptAdminCanAccessWorkflow(
+        node.workflowId,
+        userDepartmentId,
+        userRoles,
+      );
     }
 
     return this.prisma.workflowNode.update({
@@ -263,9 +359,25 @@ export class WorkflowService {
   }
 
   // Delete node
-  async deleteNode(nodeId: string, userId: string, userRoles: string[]) {
+  async deleteNode(
+    nodeId: string,
+    userId: string,
+    userRoles: string[],
+    userDepartmentId?: string | null,
+  ) {
     if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can modify workflows');
+    }
+    const node = await this.prisma.workflowNode.findUnique({
+      where: { id: nodeId },
+      select: { workflowId: true },
+    });
+    if (node) {
+      await this.assertDeptAdminCanAccessWorkflow(
+        node.workflowId,
+        userDepartmentId,
+        userRoles,
+      );
     }
 
     return this.prisma.workflowNode.delete({
@@ -290,10 +402,16 @@ export class WorkflowService {
       priority?: number;
       style?: any;
     },
+    userDepartmentId?: string | null,
   ) {
     if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can modify workflows');
     }
+    await this.assertDeptAdminCanAccessWorkflow(
+      workflowId,
+      userDepartmentId,
+      userRoles,
+    );
 
     return this.prisma.workflowEdge.create({
       data: {
@@ -319,9 +437,21 @@ export class WorkflowService {
       priority: number;
       style: any;
     }>,
+    userDepartmentId?: string | null,
   ) {
     if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can modify workflows');
+    }
+    const edge = await this.prisma.workflowEdge.findUnique({
+      where: { id: edgeId },
+      select: { workflowId: true },
+    });
+    if (edge) {
+      await this.assertDeptAdminCanAccessWorkflow(
+        edge.workflowId,
+        userDepartmentId,
+        userRoles,
+      );
     }
 
     return this.prisma.workflowEdge.update({
@@ -331,9 +461,25 @@ export class WorkflowService {
   }
 
   // Delete edge
-  async deleteEdge(edgeId: string, userId: string, userRoles: string[]) {
+  async deleteEdge(
+    edgeId: string,
+    userId: string,
+    userRoles: string[],
+    userDepartmentId?: string | null,
+  ) {
     if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can modify workflows');
+    }
+    const edge = await this.prisma.workflowEdge.findUnique({
+      where: { id: edgeId },
+      select: { workflowId: true },
+    });
+    if (edge) {
+      await this.assertDeptAdminCanAccessWorkflow(
+        edge.workflowId,
+        userDepartmentId,
+        userRoles,
+      );
     }
 
     return this.prisma.workflowEdge.delete({
@@ -598,12 +744,26 @@ export class WorkflowService {
     userRoles: string[],
     newCode: string,
     newName: string,
+    userDepartmentId?: string | null,
   ) {
     if (!userRoles.includes('DEVELOPER') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEPT_ADMIN')) {
       throw new ForbiddenException('Only administrators can clone workflows');
     }
+    await this.assertDeptAdminCanAccessWorkflow(
+      workflowId,
+      userDepartmentId,
+      userRoles,
+    );
 
-    const original = await this.getWorkflowById(workflowId);
+    const original = await this.getWorkflowById(workflowId, {
+      departmentId: userDepartmentId ?? undefined,
+      roles: userRoles,
+    });
+
+    // Dept Admin clones always belong to their department
+    const cloneDepartmentId = this.isDeptAdminOnly(userRoles) && userDepartmentId
+      ? userDepartmentId
+      : original.departmentId;
 
     // Create new workflow
     const newWorkflow = await this.prisma.workflow.create({
@@ -611,7 +771,7 @@ export class WorkflowService {
         name: newName,
         code: newCode,
         description: original.description,
-        departmentId: original.departmentId,
+        departmentId: cloneDepartmentId,
         fileType: original.fileType,
         priorityCategory: original.priorityCategory,
         createdById: userId,

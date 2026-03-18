@@ -1,6 +1,6 @@
 'use client';
 
-import { useAuthStore, usePointsStore } from '@/lib/store';
+import { useAuthStore } from '@/lib/store';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -10,24 +10,14 @@ import { HelpCenter } from '@/components/help-center';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import api from '@/lib/api';
-import { Trophy, Search, Ticket } from 'lucide-react';
+import { Trophy, Search, Ticket, Star } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export function Navbar() {
   const { user, logout } = useAuthStore();
-  const { points, setPoints } = usePointsStore();
   const router = useRouter();
-
-  useEffect(() => {
-    if (user) {
-      // Fetch user points
-      api.get(`/gamification/points/${user.id}`)
-        .then((res) => setPoints(res.data.currentPoints))
-        .catch(() => {});
-    }
-  }, [user, setPoints]);
 
   const handleLogout = () => {
     logout();
@@ -75,15 +65,7 @@ export function Navbar() {
       </Button>
       
       <div className="flex flex-1 items-center justify-end gap-2">
-        {/* Points Badge */}
-        <Badge 
-          variant="secondary" 
-          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium transition-all hover:scale-105"
-        >
-          <Trophy className="h-3.5 w-3.5 text-amber-500" />
-          <span className="font-semibold">{points}</span>
-          <span className="text-muted-foreground">pts</span>
-        </Badge>
+        {/* Rating badge removed (points system deprecated) */}
         
         {/* Role Badge */}
         <Badge 

@@ -22,7 +22,10 @@
     "prisma:migrate": "prisma migrate deploy",
     "prisma:push": "prisma db push",
     "prisma:seed": "tsx prisma/seed.ts",
-    "db:seed": "npx tsx prisma/seed.ts"
+    "db:seed": "npx tsx prisma/seed.ts",
+    "audit": "npm audit",
+    "audit:fix": "npm audit fix",
+    "audit:fix:force": "npm audit fix --force"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

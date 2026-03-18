@@ -25,7 +25,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
-import { hasAnyRole } from '@/lib/auth-utils';
+import { hasAnyRole, canCreateFiles } from '@/lib/auth-utils';
 import api from '@/lib/api';
 
 interface Command {
@@ -133,14 +133,17 @@ export function CommandPalette() {
       action: () => navigate('/settings'),
       keywords: ['preferences', 'configuration'],
     },
-    {
+  ];
+
+  if (canCreateFiles(user)) {
+    commands.push({
       id: 'action-new-file',
       label: 'Create New File',
       icon: Plus,
       action: () => navigate('/files/new'),
       keywords: ['add', 'create', 'new document'],
-    },
-  ];
+    });
+  }
 
   if (hasAnyRole(user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
     commands.push(

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -94,7 +94,9 @@ export class WorkflowEngineService {
     }
 
     if (execution.status !== 'running') {
-      throw new Error(`Workflow is ${execution.status}, cannot execute step`);
+      throw new BadRequestException(
+        `Workflow is ${execution.status}, cannot execute step. Use Forward to send the file to someone.`,
+      );
     }
 
     // Get current node
@@ -102,14 +104,27 @@ export class WorkflowEngineService {
       (n) => n.nodeId === execution.currentNodeId,
     );
     if (!currentNode) {
-      throw new Error('Current node not found in workflow');
+      throw new BadRequestException(
+        'Current workflow step is missing in the workflow definition. Please edit the workflow in Admin → Workflows or use Forward to send the file.',
+      );
     }
 
-    // Validate action is allowed at this node
+    // Validate action is allowed at this node. Treat "approve" as valid when node has
+    // "forward" or "submit" so the Submit button works for Section Officer / Dept Admin.
     const availableActions = (currentNode.availableActions as string[]) || [];
-    if (availableActions.length > 0 && !availableActions.includes(action)) {
-      throw new Error(
-        `Action "${action}" is not allowed at node "${currentNode.label}"`,
+    const actionLower = action?.toLowerCase?.() ?? '';
+    const allowApproveAsForward =
+      actionLower === 'approve' &&
+      availableActions.some(
+        (a) => (String(a).toLowerCase() === 'forward' || String(a).toLowerCase() === 'submit'),
+      );
+    if (
+      availableActions.length > 0 &&
+      !availableActions.map((a) => String(a).toLowerCase()).includes(actionLower) &&
+      !allowApproveAsForward
+    ) {
+      throw new BadRequestException(
+        `"${action}" is not allowed at this step (${currentNode.label}). Use Forward to send the file, or contact admin to update the workflow.`,
       );
     }
 
@@ -196,9 +211,16 @@ export class WorkflowEngineService {
       }
     }
 
-    // For task nodes, find edge matching the action
+    // For task nodes, find edge matching the action (treat Forward/Submit as approve for Submit button)
+    const actionLower = action.toLowerCase();
+    const approveAliases = ['approve', 'forward', 'submit'];
+    const actionMatches = (label: string | null) =>
+      !label ||
+      label.toLowerCase() === actionLower ||
+      (actionLower === 'approve' && approveAliases.includes(label.toLowerCase()));
+
     for (const edge of outgoingEdges) {
-      if (!edge.label || edge.label.toLowerCase() === action.toLowerCase()) {
+      if (actionMatches(edge.label)) {
         return workflow.nodes.find((n: any) => n.id === edge.targetNodeId);
       }
     }
@@ -258,46 +280,105 @@ export class WorkflowEngineService {
     }
   }
 
-  // Notify next assignee
-  private async notifyNextAssignee(node: any, file: any, fromUserId: string) {
+  /** Resolve assignee and division for a workflow node (used by files.service for routing). */
+  async resolveAssigneeForNode(
+    node: { assigneeType?: string; assigneeValue?: string },
+    file: { departmentId: string | null; assignedToId: string | null; createdById: string },
+  ): Promise<{ assigneeId: string | null; divisionId: string | null }> {
     let assigneeId: string | null = null;
 
-    // Determine assignee based on assigneeType
     switch (node.assigneeType) {
       case 'role':
-        // Find first user with this role in file's department
         const userByRole = await this.prisma.user.findFirst({
           where: {
-            roles: { has: node.assigneeValue },
+            roles: { has: node.assigneeValue as any },
             departmentId: file.departmentId,
             isActive: true,
           },
+          select: { id: true, divisionId: true },
         });
-        assigneeId = userByRole?.id || null;
-        break;
+        assigneeId = userByRole?.id ?? null;
+        if (userByRole) {
+          return { assigneeId: userByRole.id, divisionId: userByRole.divisionId };
+        }
+        return { assigneeId: null, divisionId: null };
 
       case 'user':
-        assigneeId = node.assigneeValue;
+        assigneeId = node.assigneeValue ?? null;
         break;
 
       case 'department':
-        // Find department admin
         const deptAdmin = await this.prisma.user.findFirst({
           where: {
             roles: { has: 'DEPT_ADMIN' },
             departmentId: node.assigneeValue,
             isActive: true,
           },
+          select: { id: true, divisionId: true },
         });
-        assigneeId = deptAdmin?.id || null;
-        break;
+        assigneeId = deptAdmin?.id ?? null;
+        if (deptAdmin) {
+          return { assigneeId: deptAdmin.id, divisionId: deptAdmin.divisionId };
+        }
+        return { assigneeId: null, divisionId: null };
 
       case 'dynamic':
-        // Use file's current assignee or creator
         assigneeId = file.assignedToId || file.createdById;
         break;
+
+      default:
+        return { assigneeId: null, divisionId: null };
     }
 
+    if (!assigneeId) return { assigneeId: null, divisionId: null };
+    const user = await this.prisma.user.findUnique({
+      where: { id: assigneeId },
+      select: { id: true, divisionId: true },
+    });
+    return {
+      assigneeId: user?.id ?? null,
+      divisionId: user?.divisionId ?? null,
+    };
+  }
+
+  /**
+   * Resolve through decision nodes to get the next task or end node (for assignment).
+   * When executeStep returns a decision node, use this to get the actual assignee target.
+   */
+  async resolveNextTaskOrEnd(
+    workflow: { nodes: any[]; edges: any[] },
+    fromNode: any,
+    action: string,
+    variables?: Record<string, any>,
+    maxDepth = 10,
+  ): Promise<any | null> {
+    if (maxDepth <= 0) return null;
+    const next = await this.determineNextNode(workflow, fromNode, action, undefined, variables);
+    if (!next) return null;
+    if (next.nodeType === 'task' || next.nodeType === 'end') return next;
+    if (next.nodeType === 'decision') {
+      return this.resolveNextTaskOrEnd(workflow, next, action, variables, maxDepth - 1);
+    }
+    return null;
+  }
+
+  /** Get the first task node after the start node (for initial file assignment). */
+  getFirstTaskNodeAfterStart(workflow: { nodes: any[]; edges: any[] }): any | null {
+    const startNode = workflow.nodes.find((n: any) => n.nodeType === 'start');
+    if (!startNode) return null;
+    const outgoing = workflow.edges.filter(
+      (e: any) => e.sourceNodeId === startNode.id,
+    );
+    if (outgoing.length === 0) return null;
+    const targetNode = workflow.nodes.find(
+      (n: any) => n.id === outgoing[0].targetNodeId,
+    );
+    return targetNode?.nodeType === 'task' ? targetNode : null;
+  }
+
+  // Notify next assignee
+  private async notifyNextAssignee(node: any, file: any, fromUserId: string) {
+    const { assigneeId } = await this.resolveAssigneeForNode(node, file);
     if (assigneeId) {
       await this.notifications.createNotification({
         userId: assigneeId,

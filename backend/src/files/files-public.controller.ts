@@ -16,22 +16,24 @@ import { FilesService } from './files.service';
 export class FilesPublicController {
   constructor(private filesService: FilesService) {}
 
-  // Proxy endpoint to serve files through backend (avoids MinIO signature issues)
+  // Proxy endpoint to serve files through backend (avoids MinIO signature issues).
+  // Sends buffer so preview gets correct PDF bytes (no stream conversion issues).
   @Get('attachments/:attachmentId/download')
   async downloadAttachment(
     @Param('attachmentId') attachmentId: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const { stream, filename, mimeType } =
-      await this.filesService.getAttachmentStream(attachmentId);
+    const { buffer, filename, mimeType } =
+      await this.filesService.getAttachmentBuffer(attachmentId);
 
     res.set({
       'Content-Type': mimeType,
       'Content-Disposition': `inline; filename="${encodeURIComponent(filename)}"`,
       'Cache-Control': 'public, max-age=3600',
+      'Content-Length': String(buffer.length),
     });
 
-    return new StreamableFile(Readable.from(stream as any));
+    return new StreamableFile(buffer);
   }
 
   // Legacy endpoint for files stored with s3Key directly on File model

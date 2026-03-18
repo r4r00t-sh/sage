@@ -47,8 +47,18 @@ export class DepartmentsController {
   @Put(':id')
   async updateDepartment(
     @Param('id') id: string,
-    @Body() body: { name?: string; code?: string },
+    @Request() req: { user?: { roles?: string[] } },
+    @Body() body: { name?: string; code?: string; defaultWorkflowId?: string | null },
   ) {
+    // Only Super Admin / Developer can set department default workflow
+    if (body.defaultWorkflowId !== undefined && !hasGodRole(req.user)) {
+      const roles = req.user?.roles ?? [];
+      if (!roles.includes('SUPER_ADMIN') && !roles.includes('DEVELOPER')) {
+        throw new ForbiddenException(
+          'Only Super Admin can assign a department default workflow',
+        );
+      }
+    }
     return this.departmentsService.updateDepartment(id, body);
   }
 

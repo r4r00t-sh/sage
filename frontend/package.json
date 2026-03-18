@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "audit": "npm audit",
+    "audit:fix": "npm audit fix",
+    "audit:fix:force": "npm audit fix --force"
   },
   "dependencies": {
     "@xyflow/react": "^12.3.0",

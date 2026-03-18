@@ -79,9 +79,6 @@ interface UserPerformance {
   role: string;
   department: string;
   division: string;
-  currentPoints: number;
-  basePoints: number;
-  streakMonths: number;
   totalFilesAssigned: number;
   completedFiles: number;
   redListedFiles: number;
@@ -98,7 +95,7 @@ interface DepartmentAnalytics {
   completedFiles: number;
   redListedFiles: number;
   avgProcessingTimeHours: number | null;
-  avgUserPoints: number;
+  rating: number;
   efficiency: number;
 }
 
@@ -112,6 +109,28 @@ interface BottleneckData {
     assignedTo: string;
     daysOverdue: number;
   }[];
+}
+
+// Render star rating for a numeric performance score (0–100).
+// We map 0–100 into 0–5 stars and show filled / empty stars accordingly.
+function renderUserStars(score: number) {
+  const normalized = Math.max(0, Math.min(100, score));
+  const stars = Math.round((normalized / 100) * 5);
+  return (
+    <>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <span
+          key={i}
+          className={cn(
+            'text-base',
+            i < stars ? 'text-yellow-400' : 'text-muted-foreground/30',
+          )}
+        >
+          ★
+        </span>
+      ))}
+    </>
+  );
 }
 
 export default function AnalyticsDashboardPage() {
@@ -575,7 +594,7 @@ export default function AnalyticsDashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle>User Performance Leaderboard</CardTitle>
-              <CardDescription>Top performers based on file processing and points</CardDescription>
+              <CardDescription>Top performers based on file processing (5-star rating)</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -584,7 +603,7 @@ export default function AnalyticsDashboardPage() {
                     <TableHead className="w-[50px]">Rank</TableHead>
                     <TableHead>User</TableHead>
                     <TableHead>Department</TableHead>
-                    <TableHead className="text-right">Points</TableHead>
+                    <TableHead className="text-right">Rating</TableHead>
                     <TableHead className="text-right">Completed</TableHead>
                     <TableHead className="text-right">Red Listed</TableHead>
                     <TableHead className="text-right">Score</TableHead>
@@ -618,8 +637,7 @@ export default function AnalyticsDashboardPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Award className="h-4 w-4 text-primary" />
-                          <span className="font-medium">{user.currentPoints}</span>
+                          {renderUserStars(user.performanceScore)}
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
@@ -639,12 +657,8 @@ export default function AnalyticsDashboardPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Progress 
-                            value={user.performanceScore} 
-                            className="w-16 h-2"
-                          />
-                          <span className="font-medium w-8">{user.performanceScore}</span>
+                        <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
+                          <span>{(user.performanceScore / 20).toFixed(1)}/5</span>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -706,8 +720,24 @@ export default function AnalyticsDashboardPage() {
                         <p className="text-xs text-muted-foreground">Users</p>
                       </div>
                       <div className="text-center p-3 rounded-lg bg-purple-500/10">
-                        <p className="text-2xl font-bold text-purple-600">{dept.avgUserPoints}</p>
-                        <p className="text-xs text-muted-foreground">Avg Points</p>
+                        <div className="flex items-center justify-center gap-1">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <span
+                              key={i}
+                              className={cn(
+                                'text-base',
+                                i < Math.round(dept.rating)
+                                  ? 'text-yellow-400'
+                                  : 'text-muted-foreground/30',
+                              )}
+                            >
+                              ★
+                            </span>
+                          ))}
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {dept.rating.toFixed(1)} / 5 rating
+                        </p>
                       </div>
                     </div>
                   </CardContent>

@@ -106,20 +106,42 @@ export class AdminController {
   async getSettings(@Request() req) {
     this.checkAdminAccess(req.user);
     const departmentId =
-      hasRole(req.user, 'DEPT_ADMIN') ? req.user.departmentId : undefined;
+      hasRole(req.user, 'DEPT_ADMIN') && !hasRole(req.user, 'SUPER_ADMIN') && !hasRole(req.user, 'DEVELOPER')
+        ? req.user.departmentId
+        : undefined;
     return this.adminService.getSettings(departmentId);
   }
 
-  // Update system setting
+  // Get recent system setting activity (for Features page)
+  @Get('settings/activity')
+  async getSettingsActivity(@Request() req) {
+    if (!hasRole(req.user, 'SUPER_ADMIN') && !hasRole(req.user, 'DEVELOPER') && !hasRole(req.user, 'DEPT_ADMIN')) {
+      throw new ForbiddenException('Admin access required');
+    }
+    const departmentId =
+      hasRole(req.user, 'DEPT_ADMIN') && !hasRole(req.user, 'SUPER_ADMIN') && !hasRole(req.user, 'DEVELOPER')
+        ? req.user.departmentId
+        : undefined;
+    return this.adminService.getSettingsActivity(departmentId);
+  }
+
+  // Update system setting (Super Admin may pass body.departmentId for global null or specific dept; Dept Admin uses own department)
   @Put('settings/:key')
   async updateSetting(
     @Request() req,
     @Param('key') key: string,
-    @Body() body: { value: string },
+    @Body() body: { value: string; departmentId?: string | null },
   ) {
     this.checkAdminAccess(req.user);
-    const departmentId =
-      hasRole(req.user, 'DEPT_ADMIN') ? req.user.departmentId : undefined;
+    const isDeptAdminOnly =
+      hasRole(req.user, 'DEPT_ADMIN') &&
+      !hasRole(req.user, 'SUPER_ADMIN') &&
+      !hasRole(req.user, 'DEVELOPER');
+    const departmentId = isDeptAdminOnly
+      ? req.user.departmentId
+      : body.departmentId !== undefined
+        ? body.departmentId ?? null
+        : undefined;
     return this.adminService.updateSetting(
       key,
       body.value,

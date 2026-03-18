@@ -66,6 +66,56 @@ import {
   LifeBuoy,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLocaleStore } from '@/lib/store';
+import { getTranslation } from '@/lib/i18n';
+
+// Map nav item names to i18n keys (for Malayalam etc.)
+const navLabelKey: Record<string, string> = {
+  'Dashboard': 'dashboard',
+  'Files': 'files',
+  'Inbox': 'inbox',
+  'Track File': 'trackFile',
+  'Documentation': 'documentation',
+  'My tickets': 'myTickets',
+  'Settings': 'settings',
+  'Platform': 'platform',
+  'Other': 'other',
+  'My Files': 'myFiles',
+  'Opinion Inbox': 'opinionInbox',
+  'Pending Approvals': 'pendingApprovals',
+  'Dispatch': 'dispatch',
+  'Ready for Dispatch': 'readyForDispatch',
+  'Dispatch History': 'dispatchHistory',
+  'Admin': 'admin',
+  'Desk Management': 'deskManagement',
+  'Active Desk': 'activeDesk',
+  'Desk Capacity': 'deskCapacity',
+  'Capacity Management': 'capacityManagement',
+  'Workflows': 'workflows',
+  'Users': 'users',
+  'Departments': 'departments',
+  'Documents': 'documents',
+  'Recall Protocol': 'recallProtocol',
+  'Support Panel': 'supportPanel',
+  'Features': 'features',
+  'Profile': 'profile',
+  'Chat Admin': 'chatAdmin',
+  'Manage Groups': 'manageGroups',
+  'Analytics': 'analytics',
+  'Overview': 'overview',
+  'Desk Performance': 'deskPerformance',
+  'Desk Profile': 'deskProfile',
+  'New File': 'newFile',
+};
+
+function navLabel(locale: string, name: string): string {
+  const key = navLabelKey[name];
+  if (key) {
+    const t = getTranslation(locale as 'en' | 'ml', key);
+    if (t !== key) return t;
+  }
+  return name;
+}
 
 // Navigation structure with nested items
 const navigation = {
@@ -78,7 +128,6 @@ const navigation = {
           name: 'Files',
           icon: FolderOpen,
           children: [
-            { name: 'New File', href: '/files/new', icon: FilePlus },
             { name: 'Inbox', href: '/files/inbox', icon: Inbox },
             { name: 'Track File', href: '/files/track', icon: MapPin },
           ],
@@ -151,6 +200,7 @@ const navigation = {
       title: 'Platform',
       items: [
         { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        { name: 'Inbox', href: '/files/inbox', icon: Inbox },
         {
           name: 'Dispatch',
           icon: Send,
@@ -309,6 +359,7 @@ const navigation = {
             { name: 'Desk Capacity', href: '/admin/desks', icon: Building2 },
           ],
         },
+        { name: 'Features', href: '/admin/features', icon: Settings },
         { name: 'Workflows', href: '/admin/workflows', icon: GitBranch },
         { name: 'Users', href: '/admin/users', icon: Users },
         { name: 'Departments', href: '/admin/departments', icon: Building2 },
@@ -362,6 +413,7 @@ const navigation = {
             { name: 'Desk Capacity', href: '/admin/desks', icon: Building2 },
           ],
         },
+        { name: 'Features', href: '/admin/features', icon: Settings },
         { name: 'Workflows', href: '/admin/workflows', icon: GitBranch },
         { name: 'Users', href: '/admin/users', icon: Users },
         { name: 'Departments', href: '/admin/departments', icon: Building2 },
@@ -388,6 +440,12 @@ const navigation = {
       ],
     },
     {
+      title: 'Admin',
+      items: [
+        { name: 'Users', href: '/admin/users', icon: Users },
+      ],
+    },
+    {
       title: 'Other',
       items: [
         { name: 'Documentation', href: '/docs', icon: BookOpen },
@@ -402,6 +460,7 @@ type NavItem = { name: string; href?: string; icon: React.ComponentType<{ classN
 
 export function AppSidebar() {
   const { user, logout } = useAuthStore();
+  const locale = useLocaleStore((s) => s.locale);
   const router = useRouter();
   const pathname = usePathname();
   const [openItems, setOpenItems] = useState<Record<string, boolean>>({
@@ -455,7 +514,7 @@ export function AppSidebar() {
         {userNav.map((group) => (
           <SidebarGroup key={group.title} className="py-2">
             <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground/70 font-semibold px-2 mb-1">
-              {group.title}
+              {navLabel(locale, group.title)}
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
@@ -484,7 +543,7 @@ export function AppSidebar() {
                             >
                               <div className="flex items-center gap-2 group-data-[collapsible=icon]:gap-0">
                                 <Icon className="h-4 w-4 shrink-0" />
-                                <span>{item.name}</span>
+                                <span>{navLabel(locale, item.name)}</span>
                               </div>
                               <ChevronRight className={cn(
                                 "h-4 w-4 shrink-0 transition-transform duration-200 group-data-[collapsible=icon]:hidden",
@@ -509,7 +568,7 @@ export function AppSidebar() {
                                     >
                                       <a href={child.href} className="flex items-center gap-2">
                                         <ChildIcon className="h-3.5 w-3.5" />
-                                        <span className="text-[13px]">{child.name}</span>
+                                        <span className="text-[13px]">{navLabel(locale, child.name)}</span>
                                       </a>
                                     </SidebarMenuSubButton>
                                   </SidebarMenuSubItem>
@@ -538,7 +597,7 @@ export function AppSidebar() {
                           {...(item.href === '/docs' ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
                         >
                           <Icon className="h-4 w-4" />
-                          <span>{item.name}</span>
+                          <span>{navLabel(locale, item.name)}</span>
                         </a>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

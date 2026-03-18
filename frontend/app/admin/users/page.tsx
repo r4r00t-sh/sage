@@ -146,13 +146,23 @@ export default function UsersPage() {
   });
 
   useEffect(() => {
-    if (!hasAnyRole(currentUser, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
+    if (!hasAnyRole(currentUser, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN', 'SUPPORT'])) {
       router.push('/dashboard');
       return;
     }
     fetchUsers();
     fetchDepartments();
   }, [currentUser]);
+
+  // Refetch users when search query changes (debounced)
+  useEffect(() => {
+    if (!hasAnyRole(currentUser, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN', 'SUPPORT'])) return;
+    const t = setTimeout(() => {
+      setLoading(true);
+      fetchUsers();
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   const fetchUsers = async () => {
     try {
@@ -390,6 +400,9 @@ export default function UsersPage() {
   };
 
   const selectedDepartment = departments.find(d => d.id === formData.departmentId);
+  const canCreateDirectly = hasAnyRole(currentUser, ['DEVELOPER', 'SUPER_ADMIN', 'SUPPORT']);
+  const isDeptAdminOnly =
+    hasAnyRole(currentUser, ['DEPT_ADMIN']) && !hasAnyRole(currentUser, ['DEVELOPER', 'SUPER_ADMIN', 'SUPPORT']);
 
   if (loading) {
     return (
@@ -416,10 +429,19 @@ export default function UsersPage() {
             Manage system users and their permissions
           </p>
         </div>
-        <Button onClick={() => setIsCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add User
-        </Button>
+        {canCreateDirectly ? (
+          <Button onClick={() => setIsCreateOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add User
+          </Button>
+        ) : isDeptAdminOnly ? (
+          <Button asChild>
+            <Link href="/support/new?category=user_new">
+              <Plus className="mr-2 h-4 w-4" />
+              Request User
+            </Link>
+          </Button>
+        ) : null}
       </div>
 
       {/* Search */}
@@ -454,7 +476,7 @@ export default function UsersPage() {
                 <TableHead>Role</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Points</TableHead>
+                <TableHead>Rating</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -526,7 +548,9 @@ export default function UsersPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {user.points?.currentPoints ?? 1000}
+                      <span className="inline-flex items-center gap-1 text-xs">
+                        ★★★★☆
+                      </span>
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -616,7 +640,7 @@ export default function UsersPage() {
             >
               <UserMinus className="h-4 w-4" />
             </Button>
-            {hasGodRole(currentUser) && (
+            {hasAnyRole(currentUser, ['DEVELOPER', 'SUPER_ADMIN', 'SUPPORT']) && (
               <Button
                 variant="destructive"
                 size="icon"
@@ -661,14 +685,14 @@ export default function UsersPage() {
 
       {/* Create User Dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Create New User</DialogTitle>
             <DialogDescription>
               Add a new user to the system
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 overflow-y-auto flex-1 min-h-0 pr-1">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Username *</Label>

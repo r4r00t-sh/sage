@@ -37,6 +37,7 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: efiling-rabbitmq
     hostname: rabbitmq
+    command: ["sh", "-c", "rabbitmq-plugins enable rabbitmq_amqp1_0 && exec rabbitmq-server"]
     environment:
       RABBITMQ_DEFAULT_USER: efiling
       RABBITMQ_DEFAULT_PASS: efiling123
@@ -141,6 +142,8 @@ services:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: "https://sage.santhigiri.cloud/api"
+      # Server-side fetch for attachment preview (bypasses public proxy)
+      BACKEND_INTERNAL_URL: "http://backend:3001"
     depends_on:
       - backend
     networks:

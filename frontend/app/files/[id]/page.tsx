@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +16,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
@@ -23,6 +33,7 @@ import api from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { hasRole, hasGodRole, getRoles } from '@/lib/auth-utils';
 import { ForwardFileModal } from '@/components/forward-file-modal';
+import { RequestOpinionModal } from '@/components/request-opinion-modal';
 import { FileNotes } from '@/components/file-notes';
 import { FileHistory } from '@/components/file-history';
 import { QuickActions } from '@/components/quick-actions';
@@ -53,6 +64,9 @@ import {
   Upload,
   Timer,
   Loader2,
+  MessageSquare,
+  CheckCircle,
+  Trash2,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -71,6 +85,223 @@ function resolveAttachmentUrl(url: string): string {
     return `${API_BASE_URL}${url}`;
   }
   return url;
+}
+
+// Path for authenticated fetch: relative to api baseURL (no double /api)
+function attachmentPathFromUrl(fullUrl: string): string {
+  if (!fullUrl) return '';
+  try {
+    const u = new URL(fullUrl);
+    let path = u.pathname + u.search;
+    // If API_BASE_URL has a path (e.g. /api), strip it so api.get(path) doesn't duplicate it
+    const basePath = new URL(API_BASE_URL).pathname.replace(/\/$/, '');
+    if (basePath && path.startsWith(basePath + '/')) {
+      path = path.slice(basePath.length) || '/';
+    }
+    return path;
+  } catch {
+    return fullUrl.startsWith(API_BASE_URL) ? fullUrl.slice(API_BASE_URL.length) : fullUrl;
+  }
+}
+
+function TextAttachmentPreview({ url, filename }: { url: string; filename: string }) {
+  const [text, setText] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const path = attachmentPathFromUrl(url);
+    if (!path) {
+      setError('Invalid URL');
+      setLoading(false);
+      return;
+    }
+    api
+      .get(path, { responseType: 'text' })
+      .then((res) => {
+        setText(typeof res.data === 'string' ? res.data : '');
+      })
+      .catch(() => setError('Failed to load file'))
+      .finally(() => setLoading(false));
+  }, [url]);
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full p-4">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  if (error || text === null) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
+        <FileText className="h-12 w-12 mb-2 opacity-50" />
+        <p className="text-sm">{error || 'Preview not available'}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="h-full overflow-auto p-4 text-left">
+      <pre className="text-sm whitespace-pre-wrap font-mono break-words">{text}</pre>
+    </div>
+  );
+}
+
+/** Fetch PDF from backend and show in iframe via blob URL. */
+function PdfAttachmentPreview({
+  url,
+  filename,
+}: {
+  url: string;
+  filename: string;
+  attachmentId?: string;
+}) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const path = attachmentPathFromUrl(url);
+    if (!path) {
+      setError('Invalid URL');
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    let loadingHandled = false;
+    const done = () => {
+      if (!loadingHandled) {
+        loadingHandled = true;
+        setLoading(false);
+      }
+    };
+
+    const processBlob = (
+      status: number,
+      contentType: string,
+      blob: Blob,
+    ) => {
+      if (status < 200 || status >= 300) {
+        const tryMessage = () => {
+          if (contentType.includes('application/json')) {
+            blob.text().then((text) => {
+              try {
+                const j = JSON.parse(text);
+                if (j && typeof j.message === 'string') {
+                  setError(j.message);
+                  return;
+                }
+              } catch {
+                /* ignore */
+              }
+              setError(status === 401 ? 'Please log in again' : status === 404 ? 'Attachment not found' : 'Failed to load PDF');
+            });
+          } else {
+            setError(status === 401 ? 'Please log in again' : status === 404 ? 'Attachment not found' : `Failed to load PDF (${status})`);
+          }
+        };
+        tryMessage();
+        done();
+        return;
+      }
+      if (blob.size === 0) {
+        setError('Empty document');
+        done();
+        return;
+      }
+      if (contentType.includes('application/json')) {
+        blob.text().then((text) => {
+          let msg = 'Failed to load PDF';
+          try {
+            const j = JSON.parse(text);
+            if (j && typeof j.message === 'string') msg = j.message;
+          } catch {
+            /* ignore */
+          }
+          setError(msg);
+        });
+        done();
+        return;
+      }
+      if (!contentType.includes('pdf')) {
+        setError('Server did not return a PDF. Try downloading the file instead.');
+        done();
+        return;
+      }
+      const objectUrl = window.URL.createObjectURL(blob);
+      blobUrlRef.current = objectUrl;
+      setBlobUrl(objectUrl);
+      done();
+    };
+
+    api
+      .get(path, { responseType: 'blob' })
+      .then((res) => {
+        const contentType = (res.headers && res.headers['content-type']) || '';
+        const blob = res.data instanceof Blob ? res.data : new Blob([res.data], { type: contentType || 'application/pdf' });
+        processBlob(res.status, contentType, blob);
+      })
+      .catch((err) => {
+        const status = err?.response?.status;
+        const data = err?.response?.data;
+        let msg = 'Failed to load PDF';
+        if (data instanceof Blob && data.type?.includes('json')) {
+          data.text().then((text: string) => {
+            try {
+              const j = JSON.parse(text);
+              if (j?.message) setError(j.message);
+              else setError(msg);
+            } catch {
+              setError(status === 401 ? 'Please log in again' : msg);
+            }
+          });
+        } else {
+          setError(status === 401 ? 'Please log in again' : status === 404 ? 'Attachment not found' : msg);
+        }
+        done();
+      })
+      .finally(() => done());
+
+    return () => {
+      if (blobUrlRef.current) {
+        window.URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+    };
+  }, [url]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full p-4">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  if (error || !blobUrl) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4 gap-3">
+        <FileText className="h-12 w-12 opacity-50" />
+        <p className="text-sm text-center">{error || 'Preview not available'}</p>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+        >
+          <Download className="h-4 w-4" />
+          Open / download file
+        </a>
+      </div>
+    );
+  }
+  return (
+    <iframe
+      src={blobUrl}
+      className="w-full h-full border-0"
+      title={filename}
+      allow="fullscreen"
+    />
+  );
 }
 
 interface Attachment {
@@ -137,6 +368,12 @@ interface FileDetails {
   s3Key?: string;
   createdBy: { id: string; name: string; email?: string };
   assignedTo?: { id: string; name: string; email?: string };
+  /** Active (PENDING/IN_PROGRESS) assignments when file is with multiple departments */
+  fileAssignments?: Array<{
+    id: string;
+    toUserId: string;
+    toUser: { id: string; name: string; department?: { id: string; name: string } };
+  }>;
   department: { id: string; name: string; code: string };
   currentDivision?: { id: string; name: string };
   intendedDivision?: { id: string; name: string; code?: string } | null;
@@ -148,7 +385,18 @@ interface FileDetails {
     department?: { name: string; code: string };
     division?: { name: string };
   } | null;
+  originDepartmentId?: string | null;
   notes: FileNote[];
+  noteLogGrouped?: Array<{
+    processCycleId: string | null;
+    cycleNumber: number;
+    closedAt: string | null;
+    notesByDepartment: Array<{
+      departmentId: string | null;
+      departmentName: string;
+      notes: FileNote[];
+    }>;
+  }>;
   routingHistory: RoutingEntry[];
   attachments?: Attachment[];
 }
@@ -189,6 +437,8 @@ function AttachmentsSection({
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
 
@@ -240,6 +490,30 @@ function AttachmentsSection({
     } finally {
       setUploading(false);
       e.target.value = '';
+    }
+  };
+
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    if (attachmentId === 'legacy') return;
+    setDeletingId(attachmentId);
+    try {
+      await api.delete(`/files/attachments/${attachmentId}`);
+      toast.success('Attachment removed');
+      setConfirmDeleteId(null);
+      setShowDetailModal(false);
+      setSelectedAttachment(null);
+      const newIndex = displayItems.findIndex((a) => a.id === attachmentId);
+      if (newIndex >= 0 && activeIndex >= displayItems.length - 1) {
+        setActiveIndex(Math.max(0, displayItems.length - 2));
+      }
+      onUpdate();
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      toast.error('Failed to remove attachment', {
+        description: err.response?.data?.message,
+      });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -360,7 +634,15 @@ function AttachmentsSection({
               );
             }
 
-            if (previewConfig.type === 'pdf' || previewConfig.type === 'office') {
+            if (previewConfig.type === 'pdf') {
+              return (
+                <PdfAttachmentPreview
+                  url={fileUrl}
+                  filename={activeItem.filename}
+                />
+              );
+            }
+            if (previewConfig.type === 'office') {
               return (
                 <iframe
                   src={previewConfig.url}
@@ -380,6 +662,12 @@ function AttachmentsSection({
                   title={activeItem.filename}
                   allow="fullscreen"
                 />
+              );
+            }
+
+            if (previewConfig.type === 'text') {
+              return (
+                <TextAttachmentPreview url={previewConfig.url} filename={activeItem.filename} />
               );
             }
 
@@ -475,6 +763,20 @@ function AttachmentsSection({
                             <Download className="h-4 w-4" />
                           </a>
                         </Button>
+                        {canEdit && item.id !== 'legacy' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmDeleteId(item.id);
+                            }}
+                            title="Remove attachment"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   );
@@ -484,6 +786,35 @@ function AttachmentsSection({
           ))}
         </div>
       </CardContent>
+
+      {/* Delete attachment confirmation */}
+      <AlertDialog open={!!confirmDeleteId} onOpenChange={(open) => !open && setConfirmDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove attachment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the attachment from the file. You can upload a new file if needed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!deletingId}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => confirmDeleteId && handleDeleteAttachment(confirmDeleteId)}
+              disabled={!!deletingId}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingId ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Removing...
+                </>
+              ) : (
+                'Remove'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Attachment Detail Modal */}
       <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
@@ -584,6 +915,19 @@ function AttachmentsSection({
                     Download
                   </a>
                 </Button>
+                {canEdit && selectedAttachment.id !== 'legacy' && (
+                  <Button
+                    variant="outline"
+                    className="text-destructive border-destructive/50 hover:bg-destructive/10"
+                    onClick={() => {
+                      setShowDetailModal(false);
+                      setConfirmDeleteId(selectedAttachment.id);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Remove
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -601,12 +945,85 @@ function FileDetailContent() {
   const [file, setFile] = useState<FileDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [forwardModalOpen, setForwardModalOpen] = useState(false);
+  const [submitToSectionOfficerLoading, setSubmitToSectionOfficerLoading] = useState(false);
+  const [opinionModalOpen, setOpinionModalOpen] = useState(false);
   const [recallModalOpen, setRecallModalOpen] = useState(false);
   const [showSetDueTimeDialog, setShowSetDueTimeDialog] = useState(false);
   const [dueTimeHours, setDueTimeHours] = useState<string>('24');
+  const [defaultDueTimeHours, setDefaultDueTimeHours] = useState<string | null>(null);
   const [settingDueTime, setSettingDueTime] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const fileId = params.id as string;
+
+  // Load global default due time (Super Admin / Dept Admin / Developer only – matches /admin/settings ACL)
+  useEffect(() => {
+    const roles = getRoles(user);
+    const canAccessAdminSettings =
+      roles.includes('SUPER_ADMIN') || roles.includes('DEPT_ADMIN') || roles.includes('DEVELOPER');
+
+    if (!user || !canAccessAdminSettings) return;
+
+    const fetchDefaultDueTime = async () => {
+      try {
+        const response = await api.get('/admin/settings');
+        const settings = Array.isArray(response.data) ? response.data : [];
+        const defaultSla = settings.find((s: any) => s?.key === 'defaultSlaNormHours');
+        if (defaultSla && defaultSla.value) {
+          setDefaultDueTimeHours(String(defaultSla.value));
+        }
+      } catch {
+        // Non-blocking; fall back to 24h in the dialog if this fails
+      }
+    };
+
+    fetchDefaultDueTime();
+  }, [user]);
+
+  const handleDownloadPdf = async () => {
+    if (!file) return;
+    setDownloadingPdf(true);
+    try {
+      const response = await api.get(`/files/${file.id}/export/pdf`, {
+        responseType: 'blob',
+        timeout: 120000, // 2 min for large PDFs
+      });
+      const disposition = response.headers['content-disposition'];
+      let filename = (file.fileNumber || file.id || 'file').replace(/[^a-zA-Z0-9-_]/g, '_') + '.pdf';
+      if (disposition && /filename\*?=(?:UTF-8'')?"?([^";\n]+)"?/i.test(disposition)) {
+        const match = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";\n]+)"?/i);
+        if (match?.[1]) filename = decodeURIComponent(match[1].trim());
+      }
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.setAttribute('download', filename);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('PDF downloaded', { description: filename });
+    } catch (error: unknown) {
+      const err = error as { response?: { status?: number; data?: Blob | { message?: string } } };
+      let message = 'Download failed';
+      if (err.response?.data) {
+        if (err.response.data instanceof Blob) {
+          try {
+            const text = await (err.response.data as Blob).text();
+            const json = text ? JSON.parse(text) : {};
+            message = json.message || (err.response.status === 502 ? 'Server or gateway error (timeout?). Try again.' : message);
+          } catch {
+            message = err.response.status === 502 ? 'Server or gateway error. Try again.' : message;
+          }
+        } else {
+          message = (err.response.data as { message?: string }).message || message;
+        }
+      }
+      toast.error('Failed to download PDF', { description: message });
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
 
   useEffect(() => {
     fetchFile();
@@ -614,6 +1031,28 @@ function FileDetailContent() {
       setForwardModalOpen(true);
     }
   }, [fileId]);
+
+  const handleSubmitToSectionOfficer = async () => {
+    if (!file?.id) return;
+    setSubmitToSectionOfficerLoading(true);
+    try {
+      await api.post(`/files/${file.id}/forward`, {
+        submitToSectionOfficer: true,
+        remarks: '',
+      });
+      toast.success('File submitted', {
+        description: 'Sent to Section Officer as per workflow.',
+      });
+      await fetchFile();
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      toast.error('Submit failed', {
+        description: err.response?.data?.message || 'An error occurred',
+      });
+    } finally {
+      setSubmitToSectionOfficerLoading(false);
+    }
+  };
 
   const fetchFile = async () => {
     try {
@@ -667,11 +1106,12 @@ function FileDetailContent() {
   const statusConfig = getStatusConfig(file.status);
   const canRecall = hasGodRole(user);
   
-  // Permission check: Only the assigned user OR creator (if unassigned) can edit/perform actions
-  // Super Admin can always edit
-  const isAssignee = file.assignedTo?.id === user?.id;
+  // Permission check: Assigned = single assignee OR one of the active multi-forward assignments
+  const hasActiveAssignment = file.fileAssignments?.some((a) => a.toUserId === user?.id);
+  const isAssignee = (file.assignedTo?.id === user?.id) || hasActiveAssignment;
   const isCreator = file.createdBy?.id === user?.id;
   const isUnassigned = !file.assignedTo;
+  const isMultiAssignment = (file.fileAssignments?.length ?? 0) > 1;
   const isSuperAdmin = hasGodRole(user);
   const isDeptAdmin = hasRole(user, 'DEPT_ADMIN');
   const canSetDueTime = isSuperAdmin || isDeptAdmin;
@@ -681,18 +1121,34 @@ function FileDetailContent() {
   const isDispatcher = hasRole(user, 'DISPATCHER') && !isDeptAdmin && !isSuperAdmin;
   const isSectionOfficer = hasRole(user, 'SECTION_OFFICER') && !isDeptAdmin && !isSuperAdmin;
   const isApprovalAuthority = hasRole(user, 'APPROVAL_AUTHORITY') && !isDeptAdmin && !isSuperAdmin;
-  
-    // Permission: Can add notes (INWARD_DESK and DISPATCHER cannot)
-  const canAddNotes = !isInwardDesk && !isDispatcher && (isAssignee || (isCreator && isUnassigned) || isSuperAdmin || isDeptAdmin);
-  
-  // Permission: Can add attachments (INWARD_DESK cannot add to incoming files)
-  const canAddAttachments = !isInwardDesk && (isAssignee || (isCreator && isUnassigned) || isSuperAdmin || isDeptAdmin);
-  
-  // User can edit if:
-  // 1. They are the current assignee (file is with them), OR
-  // 2. They are the creator AND file is unassigned (hasn't been forwarded yet), OR
-  // 3. They are Super Admin
-  const canEdit = isAssignee || (isCreator && isUnassigned) || isSuperAdmin;
+
+  // Host department: originating dept can always access, edit, forward, add notes/attachments (anytime, even after forwarding)
+  const isHostDepartment = !!(
+    file.originDepartmentId &&
+    user?.departmentId &&
+    file.originDepartmentId === user.departmentId
+  );
+
+  // Permission: Can add notes (INWARD_DESK and DISPATCHER cannot, unless host dept)
+  const canAddNotes =
+    isHostDepartment ||
+    (!isInwardDesk &&
+      !isDispatcher &&
+      (isAssignee || (isCreator && isUnassigned) || isSuperAdmin || isDeptAdmin));
+
+  // Permission: Can add attachments (same as notes; host dept can always add)
+  const canAddAttachments =
+    isHostDepartment ||
+    (!isInwardDesk &&
+      !isDispatcher &&
+      (isAssignee || (isCreator && isUnassigned) || isSuperAdmin || isDeptAdmin));
+
+  // User can edit if: assignee, creator (when unassigned), Super Admin, or host department (anytime)
+  const canEdit =
+    isAssignee || (isCreator && isUnassigned) || isSuperAdmin || isHostDepartment;
+
+  // Show manual Forward button for anyone who can edit the file.
+  const canUseManualForward = canEdit;
 
   return (
     <div className="space-y-8">
@@ -755,11 +1211,39 @@ function FileDetailContent() {
             variant="clock"
           />
           <div className="flex gap-2">
-            {canEdit && (
-              <Button variant="outline" onClick={() => setForwardModalOpen(true)} className="transition-all duration-200 hover:shadow-md">
-                <Send className="mr-2 h-4 w-4" />
-                Forward
-              </Button>
+            {canUseManualForward && (
+              <>
+                {isInwardDesk && (
+                  <Button
+                    onClick={handleSubmitToSectionOfficer}
+                    disabled={submitToSectionOfficerLoading}
+                    className="transition-all duration-200 hover:shadow-md bg-green-600 hover:bg-green-700"
+                  >
+                    {submitToSectionOfficerLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                    )}
+                    Submit
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={() => setForwardModalOpen(true)}
+                  className="transition-all duration-200 hover:shadow-md"
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  Forward
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setOpinionModalOpen(true)}
+                  className="transition-all duration-200 hover:shadow-md"
+                >
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  Send for opinion
+                </Button>
+              </>
             )}
             {canSetDueTime && (
               <Button 
@@ -770,8 +1254,12 @@ function FileDetailContent() {
                   if (file.allottedTime) {
                     setDueTimeHours((file.allottedTime / 3600).toString());
                   } else {
-                    // Default to 24 hours if not set
-                    setDueTimeHours('24');
+                    // Use global default due time from settings when available, otherwise 24 hours
+                    if (defaultDueTimeHours) {
+                      setDueTimeHours(defaultDueTimeHours);
+                    } else {
+                      setDueTimeHours('24');
+                    }
                   }
                   setShowSetDueTimeDialog(true);
                 }}
@@ -780,14 +1268,18 @@ function FileDetailContent() {
                 {(!file.deskArrivalTime || !file.allottedTime) ? 'Set Due Time' : 'Update Due Time'}
               </Button>
             )}
-            {file.s3Key && (
-              <Button variant="outline" asChild>
-                <a href={resolveAttachmentUrl(file.fileUrl || '')} target="_blank" rel="noopener noreferrer">
-                  <Download className="mr-2 h-4 w-4" />
-                  Download
-                </a>
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              onClick={handleDownloadPdf}
+              disabled={downloadingPdf}
+            >
+              {downloadingPdf ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              Download
+            </Button>
             {canRecall && (
               <Button 
                 variant="outline" 
@@ -811,13 +1303,13 @@ function FileDetailContent() {
               <div>
                 <p className="font-medium text-blue-800 dark:text-blue-200">View Only Mode</p>
                 <p className="text-sm text-blue-700 dark:text-blue-300">
-                  This file is currently assigned to{' '}
                   {file.assignedTo ? (
-                    <UserProfileLink userId={file.assignedTo.id} name={file.assignedTo.name} />
+                    <>This file is currently assigned to <UserProfileLink userId={file.assignedTo.id} name={file.assignedTo.name} />. Only they can perform actions on it.</>
+                  ) : (file.fileAssignments && file.fileAssignments.length > 0) ? (
+                    <>This file is with multiple departments. Only assigned users in those departments can perform actions.</>
                   ) : (
-                    'another user'
+                    <>This file is assigned to another user. Only they can perform actions on it.</>
                   )}
-                  . Only they can perform actions on it.
                 </p>
               </div>
             </div>
@@ -847,7 +1339,7 @@ function FileDetailContent() {
           fileNumber={file.fileNumber}
           currentStatus={file.status}
           isOnHold={file.isOnHold}
-          userRole={getRoles(user)[0] || ''}
+          userRoles={getRoles(user)}
           onActionComplete={fetchFile}
         />
       )}
@@ -864,8 +1356,8 @@ function FileDetailContent() {
           {file.description && (
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-2">File Matter</h4>
-              <div 
-                className="prose dark:prose-invert max-w-none text-sm"
+              <div
+                className="prose dark:prose-invert max-w-none text-sm file-rich-text"
                 dangerouslySetInnerHTML={{ __html: file.description }}
               />
             </div>
@@ -896,6 +1388,8 @@ function FileDetailContent() {
                 <MapPin className="h-4 w-4 text-muted-foreground" />
                 {file.currentDivision ? (
                   <DivisionProfileLink departmentId={file.department.id} divisionId={file.currentDivision.id} name={file.currentDivision.name} />
+                ) : (file.fileAssignments && file.fileAssignments.length > 0) ? (
+                  <span className="font-medium">Multiple departments</span>
                 ) : (
                   <span className="font-medium">General</span>
                 )}
@@ -914,6 +1408,23 @@ function FileDetailContent() {
                 <User className="h-4 w-4 text-muted-foreground" />
                 {file.assignedTo ? (
                   <UserProfileLink userId={file.assignedTo.id} name={file.assignedTo.name} />
+                ) : file.fileAssignments && file.fileAssignments.length > 0 ? (
+                  <span className="text-sm">
+                    {hasActiveAssignment && file.fileAssignments.length > 1 ? (
+                      <>You <span className="text-muted-foreground">(and {file.fileAssignments.length - 1} other department(s))</span></>
+                    ) : hasActiveAssignment ? (
+                      'You'
+                    ) : (
+                      <>
+                        {file.fileAssignments.map((a) => (
+                          <span key={a.id} className="inline-flex items-center gap-1 mr-1.5">
+                            <UserProfileLink userId={a.toUser.id} name={a.toUser.name} />
+                            {a.toUser.department?.name && <span className="text-muted-foreground">({a.toUser.department.name})</span>}
+                          </span>
+                        ))}
+                      </>
+                    )}
+                  </span>
                 ) : (
                   <span className="font-medium">Unassigned</span>
                 )}
@@ -998,6 +1509,7 @@ function FileDetailContent() {
                   <FileNotes
                     fileId={file.id}
                     notes={file.notes}
+                    noteLogGrouped={file.noteLogGrouped}
                     onNoteAdded={fetchFile}
                     canEdit={canAddNotes}
                   />
@@ -1033,6 +1545,16 @@ function FileDetailContent() {
         onSuccess={fetchFile}
       />
 
+      {/* Request Opinion Modal */}
+      <RequestOpinionModal
+        open={opinionModalOpen}
+        onOpenChange={setOpinionModalOpen}
+        fileId={file.id}
+        fileNumber={file.fileNumber}
+        departmentId={file.department.id}
+        onSuccess={fetchFile}
+      />
+
       {/* Recall Modal */}
       {canRecall && (
         <RecallModal
@@ -1044,7 +1566,7 @@ function FileDetailContent() {
             subject: file.subject,
             status: file.status,
             currentLocation: file.currentDivision?.name || file.department.name,
-            currentOfficer: file.assignedTo?.name,
+            currentOfficer: file.assignedTo?.name ?? (file.fileAssignments && file.fileAssignments.length > 1 ? 'Multiple departments' : file.fileAssignments?.[0]?.toUser?.name),
             createdBy: file.createdBy,
             department: file.department,
           }}

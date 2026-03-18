@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/lib/store';
-import { hasAnyRole } from '@/lib/auth-utils';
+import { hasAnyRole, canCreateFiles } from '@/lib/auth-utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -142,13 +142,20 @@ export default function DashboardPage() {
           <p className="text-muted-foreground text-lg">
             Here&apos;s an overview of your file activity for today, {format(new Date(), 'EEEE, MMMM d')}
           </p>
+          {/* Clear goal setting: task clarity (Psychology: Motivation & Engagement) */}
+          {!loading && stats && (stats.pendingFiles > 0 || stats.inProgressFiles > 0) && (
+            <p className="text-sm font-medium text-primary/90 mt-2 flex items-center gap-2">
+              <Inbox className="h-4 w-4" />
+              {stats.pendingFiles + stats.inProgressFiles} file{(stats.pendingFiles + stats.inProgressFiles) !== 1 ? 's' : ''} need your action today
+            </p>
+          )}
         </div>
         <div className="flex gap-3">
           <Button variant="outline" size="lg" onClick={() => router.push('/files/track')}>
             <Search className="mr-2 h-5 w-5" />
             Track File
           </Button>
-          {hasAnyRole(user, ['INWARD_DESK', 'SECTION_OFFICER', 'DEPT_ADMIN', 'SUPER_ADMIN']) && (
+          {canCreateFiles(user) && (
             <Button size="lg" onClick={() => router.push('/files/new')}>
               <Plus className="mr-2 h-5 w-5" />
               Create New File
@@ -251,7 +258,7 @@ export default function DashboardPage() {
                 <p className="text-muted-foreground mb-6">
                   Create your first file to get started
                 </p>
-                {hasAnyRole(user, ['INWARD_DESK', 'DEPT_ADMIN', 'SUPER_ADMIN']) && (
+                {canCreateFiles(user) && (
                   <Button onClick={() => router.push('/files/new')}>
                     <Plus className="mr-2 h-4 w-4" />
                     Create File
@@ -338,7 +345,7 @@ export default function DashboardPage() {
                 ) : null}
               </Button>
               
-              {hasAnyRole(user, ['INWARD_DESK', 'SECTION_OFFICER', 'DEPT_ADMIN', 'SUPER_ADMIN']) && (
+              {canCreateFiles(user) && (
                 <Button
                   variant="outline"
                   className="w-full justify-start h-12 text-base"

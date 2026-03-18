@@ -14,7 +14,7 @@
     ├───Communications Department
     │   ├───Office Administration - Communications
     │   ├───Santhigiri NN Communications
-    │   └───Santhigiri Publications Division
+    │   └───Santhigiri Publications Divisiong
     ├───Education Department
     │   ├───Office Administration - Education
     │   ├───Santhigiri Vidyabhavan Higher Secondary School

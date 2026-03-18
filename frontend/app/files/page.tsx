@@ -2,6 +2,8 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useAuthStore } from '@/lib/store';
+import { canCreateFiles } from '@/lib/auth-utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,11 +29,15 @@ interface FileListItem {
   subject?: string;
   timeRemaining?: number | null;
   isRedListed?: boolean;
+  currentDivision?: { id: string; name: string } | null;
+  assignedTo?: { id: string; name: string; username?: string } | null;
+  department?: { id: string; name: string; code?: string } | null;
 }
 
 function FilesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuthStore();
   const statusFilter = searchParams.get('status');
   const [files, setFiles] = useState<FileListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,12 +47,18 @@ function FilesContent() {
     fetchFiles();
   }, [statusFilter]);
 
+  // Debounced search: refetch when searchQuery changes (including when cleared)
+  useEffect(() => {
+    const t = setTimeout(() => fetchFiles(), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
   const fetchFiles = async () => {
     setLoading(true);
     try {
       const params: Record<string, string> = {};
       if (statusFilter) params.status = statusFilter;
-      if (searchQuery) params.search = searchQuery;
+      if (searchQuery.trim()) params.search = searchQuery.trim();
       
       const response = await api.get('/files', { params });
       // Handle both array response and paginated response
@@ -94,10 +106,12 @@ function FilesContent() {
             Manage and track your assigned files
           </p>
         </div>
-        <Button onClick={() => router.push('/files/new')} className="gap-2">
-          <Plus className="h-4 w-4" />
-          New File
-        </Button>
+        {canCreateFiles(user) && (
+          <Button onClick={() => router.push('/files/new')} className="gap-2">
+            <Plus className="h-4 w-4" />
+            New File
+          </Button>
+        )}
       </div>
 
       {/* Search and Filters */}
@@ -132,10 +146,12 @@ function FilesContent() {
                 ? `You don't have any ${statusFilter.toLowerCase()} files.`
                 : "You don't have any files assigned yet."}
             </p>
-            <Button onClick={() => router.push('/files/new')} variant="outline">
-              <Plus className="mr-2 h-4 w-4" />
-              Create Your First File
-            </Button>
+            {canCreateFiles(user) && (
+              <Button onClick={() => router.push('/files/new')} variant="outline">
+                <Plus className="mr-2 h-4 w-4" />
+                Create Your First File
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -163,6 +179,20 @@ function FilesContent() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2 text-sm">
+                    {file.currentDivision && (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <span className="font-medium text-foreground">Stage:</span>
+                        <span>{file.currentDivision.name}</span>
+                      </div>
+                    )}
+                    {(file.assignedTo || file.department) && (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <span className="font-medium text-foreground">With:</span>
+                        <span>
+                          {file.assignedTo?.name || file.department?.name || '—'}
+                        </span>
+                      </div>
+                    )}
                     {file.timeRemaining != null && (
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <Clock className="h-3 w-3" />

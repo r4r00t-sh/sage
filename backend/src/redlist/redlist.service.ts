@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { GamificationService } from '../gamification/gamification.service';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { FileRedListService, RedListReason } from './file-redlist.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -9,7 +8,6 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 export class RedListService {
   constructor(
     private prisma: PrismaService,
-    private gamification: GamificationService,
     private rabbitmq: RabbitMQService,
     private fileRedListService: FileRedListService,
   ) {}
@@ -79,15 +77,8 @@ export class RedListService {
         'System',
       );
 
-      // Deduct points if file is assigned
+      // Notify the assigned user (no points deduction)
       if (file.assignedToId) {
-        await this.gamification.deductForRedList(
-          file.assignedToId,
-          file.id,
-          file.fileNumber,
-        );
-
-        // Notify the assigned user
         await this.rabbitmq.publishToast({
           userId: file.assignedToId,
           type: 'file_redlisted',

@@ -48,6 +48,7 @@ export class WorkflowController {
       req.user.id,
       req.user.roles ?? [],
       body,
+      req.user.departmentId,
     );
   }
 
@@ -57,7 +58,9 @@ export class WorkflowController {
     @Query('includeInactive') includeInactive?: string,
   ) {
     const departmentId =
-      (req.user.roles ?? []).includes('DEPT_ADMIN') ? req.user.departmentId : undefined;
+      (req.user.roles ?? []).includes('DEPT_ADMIN') && !(req.user.roles ?? []).includes('SUPER_ADMIN') && !(req.user.roles ?? []).includes('DEVELOPER')
+        ? req.user.departmentId
+        : undefined;
     return this.workflowService.getWorkflows(
       departmentId,
       includeInactive === 'true',
@@ -65,8 +68,11 @@ export class WorkflowController {
   }
 
   @Get(':id')
-  async getWorkflow(@Param('id') id: string) {
-    return this.workflowService.getWorkflowById(id);
+  async getWorkflow(@Param('id') id: string, @Request() req) {
+    return this.workflowService.getWorkflowById(id, {
+      departmentId: req.user?.departmentId,
+      roles: req.user?.roles ?? [],
+    });
   }
 
   @Patch(':id')
@@ -89,6 +95,7 @@ export class WorkflowController {
       req.user.id,
       req.user.roles ?? [],
       body,
+      req.user.departmentId,
     );
   }
 
@@ -96,14 +103,24 @@ export class WorkflowController {
   @UseGuards(RolesGuard)
   @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
   async publishWorkflow(@Param('id') id: string, @Request() req) {
-    return this.workflowService.publishWorkflow(id, req.user.id, req.user.roles ?? []);
+    return this.workflowService.publishWorkflow(
+      id,
+      req.user.id,
+      req.user.roles ?? [],
+      req.user.departmentId,
+    );
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
   async deleteWorkflow(@Param('id') id: string, @Request() req) {
-    return this.workflowService.deleteWorkflow(id, req.user.id, req.user.roles ?? []);
+    return this.workflowService.deleteWorkflow(
+      id,
+      req.user.id,
+      req.user.roles ?? [],
+      req.user.departmentId,
+    );
   }
 
   @Post(':id/clone')
@@ -120,6 +137,7 @@ export class WorkflowController {
       req.user.roles ?? [],
       body.code,
       body.name,
+      req.user.departmentId,
     );
   }
 
@@ -160,6 +178,7 @@ export class WorkflowController {
       req.user.id,
       req.user.roles ?? [],
       body,
+      req.user.departmentId,
     );
   }
 
@@ -176,6 +195,7 @@ export class WorkflowController {
       req.user.id,
       req.user.roles ?? [],
       body,
+      req.user.departmentId,
     );
   }
 
@@ -183,7 +203,12 @@ export class WorkflowController {
   @UseGuards(RolesGuard)
   @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
   async deleteNode(@Param('nodeId') nodeId: string, @Request() req) {
-    return this.workflowService.deleteNode(nodeId, req.user.id, req.user.roles ?? []);
+    return this.workflowService.deleteNode(
+      nodeId,
+      req.user.id,
+      req.user.roles ?? [],
+      req.user.departmentId,
+    );
   }
 
   // ============================================
@@ -211,6 +236,7 @@ export class WorkflowController {
       req.user.id,
       req.user.roles ?? [],
       body,
+      req.user.departmentId,
     );
   }
 
@@ -227,6 +253,7 @@ export class WorkflowController {
       req.user.id,
       req.user.roles ?? [],
       body,
+      req.user.departmentId,
     );
   }
 
@@ -234,7 +261,12 @@ export class WorkflowController {
   @UseGuards(RolesGuard)
   @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
   async deleteEdge(@Param('edgeId') edgeId: string, @Request() req) {
-    return this.workflowService.deleteEdge(edgeId, req.user.id, req.user.roles ?? []);
+    return this.workflowService.deleteEdge(
+      edgeId,
+      req.user.id,
+      req.user.roles ?? [],
+      req.user.departmentId,
+    );
   }
 
   // ============================================

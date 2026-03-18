@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 
@@ -32,6 +37,7 @@ export class DepartmentsService {
       include: {
         organisation: { select: { id: true, name: true } },
         divisions: { select: { id: true, name: true } },
+        defaultWorkflow: { select: { id: true, name: true, code: true, isActive: true } },
         _count: { select: { users: true, files: true } },
       },
       orderBy: { name: 'asc' },
@@ -43,6 +49,7 @@ export class DepartmentsService {
       where: { id },
       include: {
         organisation: true,
+        defaultWorkflow: { select: { id: true, name: true, code: true, isActive: true } },
         _count: { select: { users: true, files: true } },
         divisions: {
           include: {
@@ -87,10 +94,49 @@ export class DepartmentsService {
     return dept;
   }
 
-  async updateDepartment(id: string, data: { name?: string; code?: string }) {
+  async updateDepartment(
+    id: string,
+    data: { name?: string; code?: string; defaultWorkflowId?: string | null },
+  ) {
+    if (data.defaultWorkflowId !== undefined) {
+      if (data.defaultWorkflowId === null || data.defaultWorkflowId === '') {
+        data.defaultWorkflowId = null;
+      } else {
+        const workflow = await this.prisma.workflow.findUnique({
+          where: { id: data.defaultWorkflowId },
+          select: { id: true, isActive: true, departmentId: true },
+        });
+        if (!workflow) {
+          throw new NotFoundException('Workflow not found');
+        }
+        if (!workflow.isActive) {
+          throw new BadRequestException(
+            'Only active workflows can be set as department default',
+          );
+        }
+        const dept = await this.prisma.department.findUnique({
+          where: { id },
+          select: { id: true },
+        });
+        if (!dept) {
+          throw new NotFoundException('Department not found');
+        }
+        if (workflow.departmentId !== null && workflow.departmentId !== id) {
+          throw new BadRequestException(
+            'Workflow must be global or belong to this department',
+          );
+        }
+      }
+    }
     const dept = await this.prisma.department.update({
       where: { id },
-      data,
+      data: {
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.code !== undefined && { code: data.code }),
+        ...(data.defaultWorkflowId !== undefined && {
+          defaultWorkflowId: data.defaultWorkflowId || null,
+        }),
+      },
     });
     await this.redis.del(CACHE_KEY_DEPARTMENTS);
     await this.redis.del(CACHE_KEY_DIVISIONS(id));

@@ -54,6 +54,7 @@ import api from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import WorkflowNodeComponent from './WorkflowNodeComponent';
+import WorkflowEdgeComponent from './WorkflowEdgeComponent';
 
 interface WorkflowNode {
   id: string;
@@ -92,6 +93,20 @@ interface WorkflowValidation {
   warnings?: string[];
 }
 
+/** Roles that can be used as workflow assignees (matches backend UserRole) */
+const WORKFLOW_ROLES = [
+  { value: 'USER', label: 'User' },
+  { value: 'INWARD_DESK', label: 'Inward Desk' },
+  { value: 'SECTION_OFFICER', label: 'Section Officer' },
+  { value: 'APPROVAL_AUTHORITY', label: 'Approval Authority' },
+  { value: 'DISPATCHER', label: 'Dispatcher' },
+  { value: 'DEPT_ADMIN', label: 'Department Admin' },
+  { value: 'SUPPORT', label: 'Support' },
+  { value: 'CHAT_MANAGER', label: 'Chat Manager' },
+  { value: 'SUPER_ADMIN', label: 'Super Admin' },
+  { value: 'DEVELOPER', label: 'Developer' },
+] as const;
+
 export default function WorkflowBuilderPage() {
   const params = useParams();
   const router = useRouter();
@@ -101,12 +116,24 @@ export default function WorkflowBuilderPage() {
   const [loading, setLoading] = useState(true);
   const [showAddNodeDialog, setShowAddNodeDialog] = useState(false);
   const [showAddEdgeDialog, setShowAddEdgeDialog] = useState(false);
-  const [selectedNode, setSelectedNode] = useState<WorkflowNode | null>(null);
+  const [showEditNodeDialog, setShowEditNodeDialog] = useState(false);
+  const [editingNode, setEditingNode] = useState<WorkflowNode | null>(null);
   const [validation, setValidation] = useState<WorkflowValidation | null>(null);
+  const [usersList, setUsersList] = useState<{ id: string; name: string }[]>([]);
+  const [departmentsList, setDepartmentsList] = useState<{ id: string; name: string }[]>([]);
 
   const [nodeForm, setNodeForm] = useState({
     nodeId: '',
     nodeType: 'task',
+    label: '',
+    description: '',
+    assigneeType: 'role',
+    assigneeValue: '',
+    timeLimit: 86400,
+    availableActions: [] as string[],
+  });
+
+  const [editNodeForm, setEditNodeForm] = useState({
     label: '',
     description: '',
     assigneeType: 'role',
@@ -125,6 +152,20 @@ export default function WorkflowBuilderPage() {
   useEffect(() => {
     fetchWorkflow();
   }, [workflowId]);
+
+  useEffect(() => {
+    const needLists = (showAddNodeDialog && nodeForm.nodeType === 'task') || (showEditNodeDialog && editingNode?.nodeType === 'task');
+    if (needLists) {
+      api.get('/users', { params: { search: '' } }).then((r) => {
+        const list = Array.isArray(r.data) ? r.data : [];
+        setUsersList(list.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name || u.id })));
+      }).catch(() => setUsersList([]));
+      api.get('/departments').then((r) => {
+        const list = Array.isArray(r.data) ? r.data : [];
+        setDepartmentsList(list.map((d: { id: string; name: string }) => ({ id: d.id, name: d.name || d.id })));
+      }).catch(() => setDepartmentsList([]));
+    }
+  }, [showAddNodeDialog, nodeForm.nodeType, showEditNodeDialog, editingNode?.nodeType]);
 
   const fetchWorkflow = async () => {
     setLoading(true);
@@ -172,7 +213,7 @@ export default function WorkflowBuilderPage() {
 
   const defaultNewNodePosition = useMemo(() => {
     const count = workflow?.nodes?.length ?? 0;
-    return { positionX: 200, positionY: 150 + count * 110 };
+    return { positionX: 200 + count * 220, positionY: 150 };
   }, [workflow?.nodes?.length]);
 
   const addNode = async () => {
@@ -188,6 +229,44 @@ export default function WorkflowBuilderPage() {
       resetNodeForm();
     } catch (error: unknown) {
       toast.error('Failed to add node');
+    }
+  };
+
+  const openEditNodeDialog = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      const wfNode = workflow?.nodes?.find((n) => n.id === node.id) as WorkflowNode | undefined;
+      if (!wfNode) return;
+      setEditingNode(wfNode);
+      setEditNodeForm({
+        label: (wfNode.label as string) ?? '',
+        description: (wfNode.description as string) ?? '',
+        assigneeType: (wfNode.assigneeType as string) ?? 'role',
+        assigneeValue: (wfNode.assigneeValue as string) ?? '',
+        timeLimit: typeof wfNode.timeLimit === 'number' ? wfNode.timeLimit : 86400,
+        availableActions: Array.isArray(wfNode.availableActions) ? wfNode.availableActions : [],
+      });
+      setShowEditNodeDialog(true);
+    },
+    [workflow?.nodes]
+  );
+
+  const saveEditNode = async () => {
+    if (!editingNode) return;
+    try {
+      await api.patch(`/workflows/nodes/${editingNode.id}`, {
+        label: editNodeForm.label,
+        description: editNodeForm.description || undefined,
+        assigneeType: editNodeForm.assigneeType,
+        assigneeValue: editNodeForm.assigneeValue || undefined,
+        timeLimit: editNodeForm.timeLimit,
+        availableActions: editNodeForm.availableActions,
+      });
+      toast.success('Node updated');
+      setShowEditNodeDialog(false);
+      setEditingNode(null);
+      fetchWorkflow();
+    } catch (error: unknown) {
+      toast.error('Failed to update node');
     }
   };
 
@@ -291,6 +370,7 @@ export default function WorkflowBuilderPage() {
   );
 
   const nodeTypes = useMemo(() => ({ workflow: WorkflowNodeComponent }), []);
+  const edgeTypes = useMemo(() => ({ workflow: WorkflowEdgeComponent }), []);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -313,6 +393,8 @@ export default function WorkflowBuilderPage() {
       source: e.sourceNodeId,
       target: e.targetNodeId,
       label: e.label,
+      type: 'workflow',
+      data: { onDelete: (edgeId: string) => deleteEdge(edgeId) },
     }));
     setNodes(flowNodes);
     setEdges(flowEdges);
@@ -441,7 +523,7 @@ export default function WorkflowBuilderPage() {
 
         <TabsContent value="canvas" className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Drag nodes to move. Drag from a node&apos;s bottom handle to another&apos;s top to connect. Delete with the node trash icon or select and press Backspace.
+            Drag nodes to move. Double-click a node to view or edit its details. Drag from a node&apos;s right handle to another&apos;s left to connect. Click a connection and use the trash icon to remove it, or select it and press Backspace/Delete.
           </p>
           <div className="rounded-lg border bg-muted/30 h-[600px]">
             <ReactFlowProvider>
@@ -451,15 +533,18 @@ export default function WorkflowBuilderPage() {
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onNodeDragStop={handleNodeDragStop}
+                onNodeDoubleClick={openEditNodeDialog}
                 onConnect={handleConnect}
                 onNodesDelete={handleNodesDelete}
                 onEdgesDelete={handleEdgesDelete}
                 nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
+                deleteKeyCode={['Backspace', 'Delete']}
                 fitView
                 className="bg-background"
               >
                 <Background />
-                <Controls />
+                <Controls className="!bg-card !border !border-border rounded-lg shadow-md [&>button]:!bg-card [&>button]:!border [&>button]:!border-border [&>button]:!text-foreground [&>button_svg]:!fill-foreground [&>button:hover]:!bg-muted" />
                 <Panel position="top-left" className="m-2">
                   <Button size="sm" onClick={() => setShowAddNodeDialog(true)}>
                     <Plus className="mr-2 h-4 w-4" />
@@ -557,7 +642,7 @@ export default function WorkflowBuilderPage() {
                     <Label>Assignee Type</Label>
                     <Select
                       value={nodeForm.assigneeType}
-                      onValueChange={(v) => setNodeForm({ ...nodeForm, assigneeType: v })}
+                      onValueChange={(v) => setNodeForm({ ...nodeForm, assigneeType: v, assigneeValue: '' })}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -572,11 +657,62 @@ export default function WorkflowBuilderPage() {
                   </div>
                   <div>
                     <Label>Assignee Value</Label>
-                    <Input
-                      placeholder="e.g., APPROVAL_AUTHORITY"
-                      value={nodeForm.assigneeValue}
-                      onChange={(e) => setNodeForm({ ...nodeForm, assigneeValue: e.target.value })}
-                    />
+                    {nodeForm.assigneeType === 'role' && (
+                      <Select
+                        value={nodeForm.assigneeValue || undefined}
+                        onValueChange={(v) => setNodeForm({ ...nodeForm, assigneeValue: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {WORKFLOW_ROLES.map((r) => (
+                            <SelectItem key={r.value} value={r.value}>
+                              {r.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {nodeForm.assigneeType === 'user' && (
+                      <Select
+                        value={nodeForm.assigneeValue || undefined}
+                        onValueChange={(v) => setNodeForm({ ...nodeForm, assigneeValue: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select user" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {usersList.map((u) => (
+                            <SelectItem key={u.id} value={u.id}>
+                              {u.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {nodeForm.assigneeType === 'department' && (
+                      <Select
+                        value={nodeForm.assigneeValue || undefined}
+                        onValueChange={(v) => setNodeForm({ ...nodeForm, assigneeValue: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select department" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {departmentsList.map((d) => (
+                            <SelectItem key={d.id} value={d.id}>
+                              {d.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {nodeForm.assigneeType === 'dynamic' && (
+                      <p className="text-sm text-muted-foreground py-2">
+                        Assignee is taken from the file (current assignee or creator).
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -597,6 +733,150 @@ export default function WorkflowBuilderPage() {
               Cancel
             </Button>
             <Button onClick={addNode}>Add Node</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Node Dialog */}
+      <Dialog open={showEditNodeDialog} onOpenChange={(open) => { setShowEditNodeDialog(open); if (!open) setEditingNode(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Node details</DialogTitle>
+            <DialogDescription>View and edit this step. Double-click a node on the canvas to open this.</DialogDescription>
+          </DialogHeader>
+
+          {editingNode && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Node ID</Label>
+                  <Input value={(editingNode.nodeId as string) ?? ''} disabled className="bg-muted" />
+                </div>
+                <div>
+                  <Label>Node Type</Label>
+                  <Input value={String(editingNode.nodeType ?? '').toLowerCase()} disabled className="bg-muted capitalize" />
+                </div>
+              </div>
+
+              <div>
+                <Label>Label *</Label>
+                <Input
+                  placeholder="e.g., Approval Authority"
+                  value={editNodeForm.label}
+                  onChange={(e) => setEditNodeForm({ ...editNodeForm, label: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <Label>Description</Label>
+                <Input
+                  placeholder="Optional description"
+                  value={editNodeForm.description}
+                  onChange={(e) => setEditNodeForm({ ...editNodeForm, description: e.target.value })}
+                />
+              </div>
+
+              {editingNode.nodeType === 'task' && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Assignee Type</Label>
+                      <Select
+                        value={editNodeForm.assigneeType}
+                        onValueChange={(v) => setEditNodeForm({ ...editNodeForm, assigneeType: v, assigneeValue: '' })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="role">Role</SelectItem>
+                          <SelectItem value="user">User</SelectItem>
+                          <SelectItem value="department">Department</SelectItem>
+                          <SelectItem value="dynamic">Dynamic</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Assignee Value</Label>
+                      {editNodeForm.assigneeType === 'role' && (
+                        <Select
+                          value={editNodeForm.assigneeValue || undefined}
+                          onValueChange={(v) => setEditNodeForm({ ...editNodeForm, assigneeValue: v })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select role" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {WORKFLOW_ROLES.map((r) => (
+                              <SelectItem key={r.value} value={r.value}>
+                                {r.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {editNodeForm.assigneeType === 'user' && (
+                        <Select
+                          value={editNodeForm.assigneeValue || undefined}
+                          onValueChange={(v) => setEditNodeForm({ ...editNodeForm, assigneeValue: v })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select user" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {usersList.map((u) => (
+                              <SelectItem key={u.id} value={u.id}>
+                                {u.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {editNodeForm.assigneeType === 'department' && (
+                        <Select
+                          value={editNodeForm.assigneeValue || undefined}
+                          onValueChange={(v) => setEditNodeForm({ ...editNodeForm, assigneeValue: v })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select department" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {departmentsList.map((d) => (
+                              <SelectItem key={d.id} value={d.id}>
+                                {d.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {editNodeForm.assigneeType === 'dynamic' && (
+                        <p className="text-sm text-muted-foreground py-2">
+                          Assignee is taken from the file (current assignee or creator).
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label>Time Limit (hours)</Label>
+                    <Input
+                      type="number"
+                      value={Math.floor(editNodeForm.timeLimit / 3600)}
+                      onChange={(e) => setEditNodeForm({ ...editNodeForm, timeLimit: parseInt(e.target.value || '0') * 3600 })}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowEditNodeDialog(false); setEditingNode(null); }}>
+              Cancel
+            </Button>
+            <Button onClick={saveEditNode} disabled={!editNodeForm.label?.trim()}>
+              Save changes
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

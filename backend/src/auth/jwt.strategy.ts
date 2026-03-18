@@ -33,10 +33,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException();
     }
 
-    if (user.profileApprovalStatus === 'PENDING_APPROVAL') {
-      throw new UnauthorizedException('Profile pending Super Admin approval');
-    }
-
     return user;
   }
 }

@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,7 +42,6 @@ import {
   AlertTriangle,
   MoreVertical,
   Eye,
-  Send,
   Search,
   Plus,
   RefreshCw,
@@ -52,10 +52,13 @@ import {
   Download,
   ListOrdered,
   LogIn,
+  Send,
+  FolderInput,
+  MapPin,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store';
-import { hasAnyRole } from '@/lib/auth-utils';
+import { hasAnyRole, canCreateFiles } from '@/lib/auth-utils';
 import { formatDistanceToNow, format } from 'date-fns';
 import { QuickFilters, type Filter as QuickFilterItem } from '@/components/quick-filters';
 import { BulkActions } from '@/components/bulk-actions';
@@ -92,27 +95,44 @@ function InboxContent() {
   const [allFiles, setAllFiles] = useState<InboxFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') || 'all');
+  const redlistedParam = searchParams.get('redlisted') === 'true';
+  const [statusFilter, setStatusFilter] = useState<string>(
+    redlistedParam ? 'redlisted' : (searchParams.get('status') || 'all')
+  );
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [queueEntries, setQueueEntries] = useState<QueueEntry[]>([]);
   const [queueLoading, setQueueLoading] = useState(false);
   const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'inbox' | 'sent' | 'originated'>('inbox');
+  const [sentFiles, setSentFiles] = useState<InboxFile[]>([]);
+  const [sentFilesLoading, setSentFilesLoading] = useState(false);
+  const [originatedFiles, setOriginatedFiles] = useState<InboxFile[]>([]);
+  const [originatedFilesLoading, setOriginatedFilesLoading] = useState(false);
 
   useEffect(() => {
-    fetchFiles();
+    fetchFiles(redlistedParam);
     fetchQueue();
-  }, []);
+  }, [redlistedParam]);
+
+  useEffect(() => {
+    if (activeTab === 'sent') {
+      fetchSentFiles();
+    } else if (activeTab === 'originated') {
+      fetchOriginatedFiles();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     filterFiles();
   }, [searchQuery, statusFilter, priorityFilter, allFiles]);
 
-  const fetchFiles = async () => {
+  const fetchFiles = async (redlistedOnly?: boolean) => {
     setLoading(true);
     try {
-      const response = await api.get('/files');
+      const params = redlistedOnly ? { redlisted: 'true' } : {};
+      const response = await api.get('/files', { params });
       let fetchedFiles = response.data?.data || response.data || [];
       if (!Array.isArray(fetchedFiles)) {
         fetchedFiles = [];
@@ -123,6 +143,34 @@ function InboxContent() {
       toast.error('Failed to load files');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSentFiles = async () => {
+    setSentFilesLoading(true);
+    try {
+      const response = await api.get('/files/sent');
+      const data = response.data?.data || response.data || [];
+      setSentFiles(Array.isArray(data) ? data : []);
+    } catch {
+      toast.error('Failed to load sent files');
+      setSentFiles([]);
+    } finally {
+      setSentFilesLoading(false);
+    }
+  };
+
+  const fetchOriginatedFiles = async () => {
+    setOriginatedFilesLoading(true);
+    try {
+      const response = await api.get('/files', { params: { originated: 'true' } });
+      const data = response.data?.data || response.data || [];
+      setOriginatedFiles(Array.isArray(data) ? data : []);
+    } catch {
+      toast.error('Failed to load originated files');
+      setOriginatedFiles([]);
+    } finally {
+      setOriginatedFilesLoading(false);
     }
   };
 
@@ -157,7 +205,9 @@ function InboxContent() {
   const filterFiles = () => {
     let filtered = [...allFiles];
 
-    if (statusFilter !== 'all') {
+    if (statusFilter === 'redlisted') {
+      filtered = filtered.filter((file) => file.isRedListed);
+    } else if (statusFilter !== 'all') {
       filtered = filtered.filter((file) => file.status === statusFilter);
     }
 
@@ -266,11 +316,11 @@ function InboxContent() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" size="lg" onClick={() => { fetchFiles(); fetchQueue(); }}>
+          <Button variant="outline" size="lg" onClick={() => { fetchFiles(); fetchQueue(); if (activeTab === 'sent') fetchSentFiles(); if (activeTab === 'originated') fetchOriginatedFiles(); }}>
             <RefreshCw className="mr-2 h-5 w-5" />
             Refresh
           </Button>
-          {hasAnyRole(user, ['INWARD_DESK', 'SECTION_OFFICER', 'DEPT_ADMIN', 'SUPER_ADMIN']) && (
+          {canCreateFiles(user) && (
             <Button size="lg" onClick={() => router.push('/files/new')}>
               <Plus className="mr-2 h-5 w-5" />
               New File
@@ -279,6 +329,23 @@ function InboxContent() {
         </div>
       </div>
 
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'inbox' | 'sent' | 'originated')}>
+        <TabsList className="grid w-full max-w-2xl grid-cols-3 mb-6">
+          <TabsTrigger value="inbox" className="flex items-center gap-2">
+            <Inbox className="h-4 w-4" />
+            Inbox ({allFiles.length})
+          </TabsTrigger>
+          <TabsTrigger value="sent" className="flex items-center gap-2">
+            <Send className="h-4 w-4" />
+            Sent Files
+          </TabsTrigger>
+          <TabsTrigger value="originated" className="flex items-center gap-2">
+            <FolderInput className="h-4 w-4" />
+            Originated
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="inbox" className="mt-0 space-y-8">
       {/* Forward Queue */}
       <Card>
         <CardHeader className="pb-3">
@@ -500,7 +567,7 @@ function InboxContent() {
                   : 'Create your first file to get started with the e-filing system'
               }
               action={
-                hasAnyRole(user, ['INWARD_DESK', 'DEPT_ADMIN', 'SUPER_ADMIN']) && !searchQuery && statusFilter === 'all'
+                canCreateFiles(user) && !searchQuery && statusFilter === 'all'
                   ? {
                       label: 'Create New File',
                       onClick: () => router.push('/files/new'),
@@ -540,6 +607,7 @@ function InboxContent() {
                         "cursor-pointer group h-20 transition-all duration-200",
                         isSelected && "bg-primary/5"
                       )}
+                      onClick={() => router.push(`/files/${file.id}`)}
                     >
                       <TableCell className="pl-6" onClick={(e) => e.stopPropagation()}>
                         <Checkbox
@@ -547,7 +615,13 @@ function InboxContent() {
                           onCheckedChange={() => toggleFileSelection(file.id)}
                         />
                       </TableCell>
-                      <TableCell onClick={() => router.push(`/files/${file.id}`)}>
+                      <TableCell onClick={(e) => {
+                        e.stopPropagation();
+                        const num = file.fileNumber ?? '';
+                        if (num && navigator.clipboard?.writeText) {
+                          navigator.clipboard.writeText(num).then(() => toast.success('File number copied'));
+                        }
+                      }}>
                         <div className="flex items-center gap-3">
                           {Boolean(file.isRedListed) && (
                             <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
@@ -563,7 +637,9 @@ function InboxContent() {
                           <p className="text-sm text-muted-foreground truncate mt-1 flex items-center gap-1 flex-wrap">
                             {file.department && (
                               file.department.id ? (
-                                <DepartmentProfileLink departmentId={file.department.id} name={file.department.name} />
+                                <span onClick={(e) => e.stopPropagation()}>
+                                  <DepartmentProfileLink departmentId={file.department.id} name={file.department.name} />
+                                </span>
                               ) : (
                                 <span>{file.department.name}</span>
                               )
@@ -571,7 +647,9 @@ function InboxContent() {
                             {file.department?.name && file.currentDivision?.name && ' • '}
                             {file.currentDivision && (
                               file.department?.id && file.currentDivision.id ? (
-                                <DivisionProfileLink departmentId={file.department.id} divisionId={file.currentDivision.id} name={file.currentDivision.name} />
+                                <span onClick={(e) => e.stopPropagation()}>
+                                  <DivisionProfileLink departmentId={file.department.id} divisionId={file.currentDivision.id} name={file.currentDivision.name} />
+                                </span>
                               ) : (
                                 <span>{file.currentDivision.name}</span>
                               )
@@ -618,6 +696,10 @@ function InboxContent() {
                               <Eye className="mr-2 h-4 w-4" />
                               View Details
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/files/track/${file.id}`); }}>
+                              <MapPin className="mr-2 h-4 w-4" />
+                              Track File
+                            </DropdownMenuItem>
                             {hasAnyRole(user, ['SECTION_OFFICER', 'DEPT_ADMIN', 'SUPER_ADMIN']) && (
                               <DropdownMenuItem onClick={(e) => e.stopPropagation()}>
                                 <Send className="mr-2 h-4 w-4" />
@@ -642,6 +724,242 @@ function InboxContent() {
           Showing {files.length} of {allFiles.length} files
         </p>
       )}
+        </TabsContent>
+
+        <TabsContent value="sent" className="mt-0 space-y-6">
+          <Card>
+            <CardContent className="p-0">
+              {sentFilesLoading ? (
+                <div className="p-8">
+                  <Skeleton className="h-[400px] w-full" />
+                </div>
+              ) : sentFiles.length === 0 ? (
+                <EmptyState
+                  icon={Send}
+                  title="No sent files"
+                  description="Files you forward will appear here, similar to Sent Mail in email"
+                />
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="w-[180px]">File Number</TableHead>
+                      <TableHead>Subject</TableHead>
+                      <TableHead className="w-[120px]">Priority</TableHead>
+                      <TableHead className="w-[140px]">Status</TableHead>
+                      <TableHead className="w-[140px]">Created</TableHead>
+                      <TableHead className="w-[80px] pr-6"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sentFiles.map((file) => {
+                      const statusConfig = getStatusConfig(file.status);
+                      const priorityConfig = getPriorityConfig(file.priority ?? 'NORMAL');
+                      const StatusIcon = statusConfig.icon;
+                      return (
+                        <TableRow
+                          key={file.id}
+                          data-sage-row
+                          className="cursor-pointer group h-20 transition-all duration-200 hover:bg-muted/50"
+                          onClick={() => router.push(`/files/${file.id}`)}
+                        >
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              {Boolean(file.isRedListed) && (
+                                <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+                              )}
+                              <code className="text-sm font-mono font-medium">{file.fileNumber ?? ''}</code>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="max-w-[400px]">
+                              <p className="font-medium truncate group-hover:text-primary transition-colors">
+                                {file.subject}
+                              </p>
+                              <p className="text-sm text-muted-foreground truncate mt-1 flex items-center gap-1 flex-wrap">
+                                {file.department && (
+                                  file.department.id ? (
+                                    <span onClick={(e) => e.stopPropagation()}>
+                                      <DepartmentProfileLink departmentId={file.department.id} name={file.department.name} />
+                                    </span>
+                                  ) : (
+                                    <span>{file.department.name}</span>
+                                  )
+                                )}
+                                {file.department?.name && file.currentDivision?.name && ' • '}
+                                {file.currentDivision && (
+                                  file.department?.id && file.currentDivision.id ? (
+                                    <span onClick={(e) => e.stopPropagation()}>
+                                      <DivisionProfileLink departmentId={file.department.id} divisionId={file.currentDivision.id} name={file.currentDivision.name} />
+                                    </span>
+                                  ) : (
+                                    <span>{file.currentDivision.name}</span>
+                                  )
+                                )}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span className={cn('h-2.5 w-2.5 rounded-full', priorityConfig.bgColor)} />
+                              <span className={cn('text-sm font-medium', priorityConfig.color)}>
+                                {priorityConfig.label}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cn('gap-1.5 font-medium', statusConfig.color, statusConfig.bgColor, 'border-0')}>
+                              <StatusIcon className="h-3.5 w-3.5" />
+                              {statusConfig.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <p className="font-medium">
+                                {file.createdAt ? format(new Date(file.createdAt), 'MMM d, yyyy') : '-'}
+                              </p>
+                              <p className="text-muted-foreground text-xs">
+                                {file.createdAt ? formatDistanceToNow(new Date(file.createdAt), { addSuffix: true }) : ''}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="pr-6">
+                            <Button variant="ghost" size="icon" className="h-10 w-10" onClick={(e) => { e.stopPropagation(); router.push(`/files/${file.id}`); }}>
+                              <Eye className="h-5 w-5" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+          {sentFiles.length > 0 && (
+            <p className="text-sm text-muted-foreground text-center">
+              Showing {sentFiles.length} file{sentFiles.length !== 1 ? 's' : ''} you forwarded
+            </p>
+          )}
+        </TabsContent>
+
+        <TabsContent value="originated" className="mt-0 space-y-6">
+          <Card>
+            <CardContent className="p-0">
+              {originatedFilesLoading ? (
+                <div className="p-8">
+                  <Skeleton className="h-[400px] w-full" />
+                </div>
+              ) : originatedFiles.length === 0 ? (
+                <EmptyState
+                  icon={FolderInput}
+                  title="No originated files"
+                  description="Files created by your department will appear here. Host department can track all files it initiated (Rule 9)."
+                />
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="w-[180px]">File Number</TableHead>
+                      <TableHead>Subject</TableHead>
+                      <TableHead className="w-[120px]">Priority</TableHead>
+                      <TableHead className="w-[140px]">Status</TableHead>
+                      <TableHead className="w-[140px]">Created</TableHead>
+                      <TableHead className="w-[80px] pr-6"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {originatedFiles.map((file) => {
+                      const statusConfig = getStatusConfig(file.status);
+                      const priorityConfig = getPriorityConfig(file.priority ?? 'NORMAL');
+                      const StatusIcon = statusConfig.icon;
+                      return (
+                        <TableRow
+                          key={file.id}
+                          data-sage-row
+                          className="cursor-pointer group h-20 transition-all duration-200 hover:bg-muted/50"
+                          onClick={() => router.push(`/files/${file.id}`)}
+                        >
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              {Boolean(file.isRedListed) && (
+                                <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+                              )}
+                              <code className="text-sm font-mono font-medium">{file.fileNumber ?? ''}</code>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="max-w-[400px]">
+                              <p className="font-medium truncate group-hover:text-primary transition-colors">
+                                {file.subject}
+                              </p>
+                              <p className="text-sm text-muted-foreground truncate mt-1 flex items-center gap-1 flex-wrap">
+                                {file.department && (
+                                  file.department.id ? (
+                                    <span onClick={(e) => e.stopPropagation()}>
+                                      <DepartmentProfileLink departmentId={file.department.id} name={file.department.name} />
+                                    </span>
+                                  ) : (
+                                    <span>{file.department.name}</span>
+                                  )
+                                )}
+                                {file.department?.name && file.currentDivision?.name && ' • '}
+                                {file.currentDivision && (
+                                  file.department?.id && file.currentDivision.id ? (
+                                    <span onClick={(e) => e.stopPropagation()}>
+                                      <DivisionProfileLink departmentId={file.department.id} divisionId={file.currentDivision.id} name={file.currentDivision.name} />
+                                    </span>
+                                  ) : (
+                                    <span>{file.currentDivision.name}</span>
+                                  )
+                                )}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span className={cn('h-2.5 w-2.5 rounded-full', priorityConfig.bgColor)} />
+                              <span className={cn('text-sm font-medium', priorityConfig.color)}>
+                                {priorityConfig.label}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cn('gap-1.5 font-medium', statusConfig.color, statusConfig.bgColor, 'border-0')}>
+                              <StatusIcon className="h-3.5 w-3.5" />
+                              {statusConfig.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <p className="font-medium">
+                                {file.createdAt ? format(new Date(file.createdAt), 'MMM d, yyyy') : '-'}
+                              </p>
+                              <p className="text-muted-foreground text-xs">
+                                {file.createdAt ? formatDistanceToNow(new Date(file.createdAt), { addSuffix: true }) : ''}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="pr-6">
+                            <Button variant="ghost" size="icon" className="h-10 w-10" onClick={(e) => { e.stopPropagation(); router.push(`/files/${file.id}`); }}>
+                              <Eye className="h-5 w-5" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+          {originatedFiles.length > 0 && (
+            <p className="text-sm text-muted-foreground text-center">
+              Showing {originatedFiles.length} file{originatedFiles.length !== 1 ? 's' : ''} originated by your department
+            </p>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

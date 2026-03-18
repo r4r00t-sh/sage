@@ -222,7 +222,8 @@ export class UsersService {
 
     const passwordHash = await bcrypt.hash(data.password, 10);
     const roles = (data.roles?.length ? data.roles : ['USER']) as any[];
-    const profileApprovalStatus = data.createdBySuperAdmin ? 'APPROVED' : 'PENDING_APPROVAL';
+    // All users are auto-approved; no manual Super Admin approval step required.
+    const profileApprovalStatus = 'APPROVED';
 
     const user = await this.prisma.user.create({
       data: {
@@ -482,7 +483,10 @@ export class UsersService {
 
     await this.prisma.user.update({
       where: { id },
-      data: { passwordHash },
+      data: {
+        passwordHash,
+        mustChangePassword: false,
+      },
     });
 
     return { message: 'Password reset successfully' };
