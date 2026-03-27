@@ -28,9 +28,8 @@ class _ShellScreenState extends State<ShellScreen> {
   int _bottomNavIndex(String path) {
     if (path == '/dashboard') return 0;
     if (path.startsWith('/files/inbox') || path == '/files') return 1;
-    if (path.startsWith('/chat')) return 2;
-    if (path.startsWith('/files/track')) return 3;
-    if (path == '/search') return 4;
+    if (path.startsWith('/files/track')) return 2;
+    if (path == '/search') return 3;
     return -1;
   }
 
@@ -155,12 +154,9 @@ class _ShellScreenState extends State<ShellScreen> {
             context.go('/files/inbox');
             break;
           case 2:
-            context.go('/chat');
-            break;
-          case 3:
             context.go('/files/track');
             break;
-          case 4:
+          case 3:
             context.push('/search');
             break;
         }
@@ -173,10 +169,6 @@ class _ShellScreenState extends State<ShellScreen> {
         FBottomNavigationBarItem(
           icon: Icon(FIcons.inbox),
           label: Text('Inbox'),
-        ),
-        FBottomNavigationBarItem(
-          icon: Icon(FIcons.messageCircle),
-          label: Text('Chat'),
         ),
         FBottomNavigationBarItem(
           icon: Icon(FIcons.mapPin),
@@ -288,7 +280,6 @@ class _ShellScreenState extends State<ShellScreen> {
           _NavGroup(title: 'Other', items: [
             _NavItemData('Documentation', '/docs', Icons.menu_book_outlined),
             _NavItemData('My tickets', '/support', Icons.support_agent_outlined),
-            _NavItemData('Chat', '/chat', Icons.chat_bubble_outline),
             _NavItemData('Settings', '/settings', Icons.settings_outlined),
           ]),
         ];
@@ -314,7 +305,6 @@ class _ShellScreenState extends State<ShellScreen> {
           _NavGroup(title: 'Other', items: [
             _NavItemData('Documentation', '/docs', Icons.menu_book_outlined),
             _NavItemData('My tickets', '/support', Icons.support_agent_outlined),
-            _NavItemData('Chat', '/chat', Icons.chat_bubble_outline),
             _NavItemData('Settings', '/settings', Icons.settings_outlined),
           ]),
         ];
@@ -327,13 +317,9 @@ class _ShellScreenState extends State<ShellScreen> {
             _NavItemData('Track File', '/files/track', Icons.pin_drop_outlined),
             _NavItemData('Opinion Inbox', '/opinions/inbox', Icons.message_outlined),
           ]),
-          _NavGroup(title: 'Chat Admin', items: [
-            _NavItemData('Manage Groups', '/chat', Icons.group_outlined),
-          ]),
           _NavGroup(title: 'Other', items: [
             _NavItemData('Documentation', '/docs', Icons.menu_book_outlined),
             _NavItemData('My tickets', '/support', Icons.support_agent_outlined),
-            _NavItemData('Chat', '/chat', Icons.chat_bubble_outline),
             _NavItemData('Settings', '/settings', Icons.settings_outlined),
           ]),
         ];
@@ -350,7 +336,6 @@ class _ShellScreenState extends State<ShellScreen> {
           _NavGroup(title: 'Other', items: [
             _NavItemData('Documentation', '/docs', Icons.menu_book_outlined),
             _NavItemData('My tickets', '/support', Icons.support_agent_outlined),
-            _NavItemData('Chat', '/chat', Icons.chat_bubble_outline),
             _NavItemData('Settings', '/settings', Icons.settings_outlined),
           ]),
         ];
@@ -367,7 +352,6 @@ class _ShellScreenState extends State<ShellScreen> {
           _NavGroup(title: 'Other', items: [
             _NavItemData('Documentation', '/docs', Icons.menu_book_outlined),
             _NavItemData('My tickets', '/support', Icons.support_agent_outlined),
-            _NavItemData('Chat', '/chat', Icons.chat_bubble_outline),
             _NavItemData('Settings', '/settings', Icons.settings_outlined),
           ]),
         ];
@@ -382,7 +366,6 @@ class _ShellScreenState extends State<ShellScreen> {
           _NavGroup(title: 'Other', items: [
             _NavItemData('Documentation', '/docs', Icons.menu_book_outlined),
             _NavItemData('My tickets', '/support', Icons.support_agent_outlined),
-            _NavItemData('Chat', '/chat', Icons.chat_bubble_outline),
             _NavItemData('Settings', '/settings', Icons.settings_outlined),
           ]),
         ];
@@ -398,7 +381,6 @@ class _ShellScreenState extends State<ShellScreen> {
           _NavGroup(title: 'Other', items: [
             _NavItemData('Documentation', '/docs', Icons.menu_book_outlined),
             _NavItemData('My tickets', '/support', Icons.support_agent_outlined),
-            _NavItemData('Chat', '/chat', Icons.chat_bubble_outline),
             _NavItemData('Settings', '/settings', Icons.settings_outlined),
           ]),
         ];

@@ -11,6 +11,7 @@ import { PresenceClient } from '@/components/presence-client';
 import { ToastConsumer } from '@/components/toast-consumer';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthUserThemeSync } from '@/components/auth-user-theme-sync';
+import { CHAT_ENABLED } from '@/lib/feature-flags';
 import { ChatFab } from '@/components/chat-fab';
 import { ChatSidebar } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
@@ -102,8 +103,9 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
     router,
   ]);
 
-  // Floating chat FAB + sidebar: render in portal so they're always on top and visible
+  // Floating chat FAB + sidebar (disabled via CHAT_ENABLED)
   const chatWidget =
+    CHAT_ENABLED &&
     mounted &&
     typeof document !== 'undefined' &&
     isAuthenticated &&

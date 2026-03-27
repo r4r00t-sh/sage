@@ -17,6 +17,7 @@ import {
 import { formatDistanceToNow, format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useChatStore } from '@/lib/store';
+import { CHAT_ENABLED } from '@/lib/feature-flags';
 import { UserProfileLink } from '@/components/profile-links';
 
 interface RoutingEntry {
@@ -65,7 +66,7 @@ const actionConfig: Record<string, { icon: React.ComponentType<{ className?: str
 function UserNameLink({ userId, name }: { userId: string; name: string }) {
   const { user } = useAuthStore();
   const openChatWith = useChatStore((s) => s.openChatWith);
-  if (!user || user.id === userId) {
+  if (!user || user.id === userId || !CHAT_ENABLED) {
     return <span className="font-medium text-foreground">{name}</span>;
   }
   return (

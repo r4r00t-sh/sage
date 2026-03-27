@@ -40,6 +40,7 @@ import 'package:efiling_app/screens/docs_screen.dart';
 import 'package:efiling_app/screens/support/tickets_list_screen.dart';
 import 'package:efiling_app/screens/support/new_ticket_screen.dart';
 import 'package:efiling_app/screens/support/ticket_detail_screen.dart';
+import 'package:efiling_app/core/feature_flags.dart';
 
 class AppRouter {
   static GoRouter router(AuthProvider auth) {
@@ -47,8 +48,12 @@ class AppRouter {
       initialLocation: '/login',
       refreshListenable: auth,
       redirect: (context, state) {
+        final loc = state.matchedLocation;
+        if (!kChatEnabled && loc.startsWith('/chat')) {
+          return '/dashboard';
+        }
         final isLoggedIn = auth.isAuthenticated;
-        final isLoginRoute = state.matchedLocation == '/login';
+        final isLoginRoute = loc == '/login';
         if (!isLoggedIn && !isLoginRoute) return '/login';
         if (isLoggedIn && isLoginRoute) return '/dashboard';
         return null;

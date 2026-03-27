@@ -68,6 +68,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useLocaleStore } from '@/lib/store';
 import { getTranslation } from '@/lib/i18n';
+import { CHAT_ENABLED } from '@/lib/feature-flags';
 
 // Map nav item names to i18n keys (for Malayalam etc.)
 const navLabelKey: Record<string, string> = {
@@ -499,7 +500,16 @@ export function AppSidebar() {
   if (!user) return null;
 
   const primaryRole = (user as { roles?: string[]; role?: string }).roles?.[0] ?? (user as { role?: string }).role ?? 'SECTION_OFFICER';
-  const userNav = navigation[primaryRole as keyof typeof navigation] || navigation.SECTION_OFFICER;
+  let userNav = navigation[primaryRole as keyof typeof navigation] || navigation.SECTION_OFFICER;
+  if (!CHAT_ENABLED) {
+    userNav = userNav
+      .filter((group) => group.title !== 'Chat Admin')
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => item.href !== '/chat'),
+      }))
+      .filter((group) => group.items.length > 0);
+  }
   const userNavWithGlobalOverview = userNav.map((group) => {
     if (group.title !== 'Platform') return group;
     const hasGlobalOverview = group.items.some((item) => item.href === '/admin/analytics');

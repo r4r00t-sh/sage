@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore, useChatStore } from '@/lib/store';
 import { hasAnyRole } from '@/lib/auth-utils';
+import { CHAT_ENABLED } from '@/lib/feature-flags';
 import { cn } from '@/lib/utils';
 import {
   ContextMenu,
@@ -53,7 +54,7 @@ export function UserProfileLink({
           <User className="size-4" />
           View profile
         </ContextMenuItem>
-        {!isSelf && (
+        {!isSelf && CHAT_ENABLED && (
           <ContextMenuItem
             onSelect={() => openChatWith(userId)}
           >

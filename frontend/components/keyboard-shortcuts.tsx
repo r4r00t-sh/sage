@@ -11,6 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Keyboard } from 'lucide-react';
+import { CHAT_ENABLED } from '@/lib/feature-flags';
 
 interface Shortcut {
   keys: string[];
@@ -18,13 +19,12 @@ interface Shortcut {
   category: string;
 }
 
-const shortcuts: Shortcut[] = [
+const shortcutsBase: Shortcut[] = [
   // Navigation
   { keys: ['Ctrl', 'K'], description: 'Open command palette', category: 'Navigation' },
   { keys: ['G', 'D'], description: 'Go to Dashboard', category: 'Navigation' },
   { keys: ['G', 'I'], description: 'Go to Inbox', category: 'Navigation' },
   { keys: ['G', 'F'], description: 'Go to Files', category: 'Navigation' },
-  { keys: ['G', 'C'], description: 'Go to Chat', category: 'Navigation' },
   { keys: ['G', 'S'], description: 'Go to Settings', category: 'Navigation' },
   
   // Actions
@@ -37,6 +37,20 @@ const shortcuts: Shortcut[] = [
   { keys: ['?'], description: 'Show keyboard shortcuts', category: 'General' },
   { keys: ['Ctrl', 'B'], description: 'Toggle sidebar', category: 'General' },
 ];
+
+const chatShortcut: Shortcut = {
+  keys: ['G', 'C'],
+  description: 'Go to Chat',
+  category: 'Navigation',
+};
+
+const shortcuts: Shortcut[] = CHAT_ENABLED
+  ? [
+      ...shortcutsBase.slice(0, 4),
+      chatShortcut,
+      ...shortcutsBase.slice(4),
+    ]
+  : shortcutsBase;
 
 export function KeyboardShortcuts() {
   const [open, setOpen] = useState(false);

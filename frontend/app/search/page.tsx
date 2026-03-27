@@ -24,6 +24,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { CHAT_ENABLED } from '@/lib/feature-flags';
 
 type PageItem = { label: string; path: string; icon: React.ElementType; keywords: string[] };
 
@@ -34,7 +35,11 @@ function getPagesForUser(user: Record<string, unknown> | null): PageItem[] {
     { label: 'File Inbox', path: '/files/inbox', icon: Inbox, keywords: ['inbox', 'files', 'pending'] },
     { label: 'Track File', path: '/files/track', icon: MapPin, keywords: ['track', 'find', 'locate', 'status'] },
     { label: 'My Files', path: '/files', icon: FileText, keywords: ['files', 'my files', 'documents'] },
-    { label: 'Chat', path: '/chat', icon: MessageSquare, keywords: ['chat', 'messages'] },
+    ...(CHAT_ENABLED
+      ? ([
+          { label: 'Chat', path: '/chat', icon: MessageSquare, keywords: ['chat', 'messages'] },
+        ] as PageItem[])
+      : []),
     { label: 'Profile', path: '/profile', icon: User, keywords: ['profile', 'account', 'me'] },
     { label: 'Settings', path: '/settings', icon: Settings, keywords: ['settings', 'preferences'] },
   ];

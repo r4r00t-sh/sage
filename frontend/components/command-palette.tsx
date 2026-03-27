@@ -16,7 +16,6 @@ import {
   Home,
   Settings,
   Users,
-  MessageSquare,
   Plus,
   MapPin,
   BarChart,
@@ -111,13 +110,6 @@ export function CommandPalette() {
       icon: MapPin,
       action: () => navigate('/files/track'),
       keywords: ['find', 'locate', 'status'],
-    },
-    {
-      id: 'nav-chat',
-      label: 'Chat',
-      icon: MessageSquare,
-      action: () => navigate('/chat'),
-      keywords: ['messages', 'conversation'],
     },
     {
       id: 'nav-profile',
