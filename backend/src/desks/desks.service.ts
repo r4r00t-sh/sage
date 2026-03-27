@@ -29,9 +29,9 @@ export class DesksService {
       slaNorm?: number; // SLA norm in hours
     },
   ) {
-    // Only admins can create desks
-    if (!userRoles.includes(UserRole.SUPER_ADMIN) && !userRoles.includes(UserRole.DEPT_ADMIN)) {
-      throw new ForbiddenException('Only administrators can create desks');
+    // Tech Panel only
+    if (!userRoles.includes(UserRole.DEVELOPER)) {
+      throw new ForbiddenException('Only Tech Panel can create desks');
     }
 
     // Check if code already exists
@@ -528,8 +528,8 @@ export class DesksService {
       slaNorm?: number; // SLA norm in hours
     },
   ) {
-    if (!userRoles.includes(UserRole.SUPER_ADMIN) && !userRoles.includes(UserRole.DEPT_ADMIN)) {
-      throw new ForbiddenException('Only administrators can update desks');
+    if (!userRoles.includes(UserRole.DEVELOPER)) {
+      throw new ForbiddenException('Only Tech Panel can update desks');
     }
 
     return this.prisma.desk.update({
@@ -540,8 +540,8 @@ export class DesksService {
 
   // Delete desk (soft delete)
   async deleteDesk(deskId: string, userId: string, userRoles: string[]) {
-    if (!userRoles.includes(UserRole.SUPER_ADMIN) && !userRoles.includes(UserRole.DEPT_ADMIN)) {
-      throw new ForbiddenException('Only administrators can delete desks');
+    if (!userRoles.includes(UserRole.DEVELOPER)) {
+      throw new ForbiddenException('Only Tech Panel can delete desks');
     }
 
     // Check if desk has files

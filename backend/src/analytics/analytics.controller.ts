@@ -63,14 +63,25 @@ export class AnalyticsController {
   }
 
   @Get('dashboard')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.DEPT_ADMIN)
+  @Roles(
+    UserRole.DEVELOPER,
+    UserRole.SUPER_ADMIN,
+    UserRole.DEPT_ADMIN,
+    UserRole.CHAT_MANAGER,
+    UserRole.APPROVAL_AUTHORITY,
+    UserRole.SECTION_OFFICER,
+    UserRole.INWARD_DESK,
+    UserRole.DISPATCHER,
+    UserRole.USER,
+    UserRole.SUPPORT,
+  )
   async getDashboardAnalytics(
     @Request() req,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
   ) {
-    const departmentId =
-      (req.user.roles ?? []).includes(UserRole.DEPT_ADMIN) ? req.user.departmentId : undefined;
+    // Global overview for all users (read-only transparency view).
+    const departmentId = undefined;
     return this.analyticsService.getDashboardAnalytics(
       departmentId,
       dateFrom ? new Date(dateFrom) : undefined,

@@ -6,6 +6,17 @@ import Link from 'next/link';
 import { useAuthStore } from '@/lib/store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -33,9 +44,11 @@ import {
   ChevronRight,
   FolderTree,
   GitBranch,
+  Plus,
+  Loader2,
 } from 'lucide-react';
 import api from '@/lib/api';
-import { hasAnyRole, getRoles } from '@/lib/auth-utils';
+import { hasAnyRole, getRoles, hasGodRole } from '@/lib/auth-utils';
 import { toast } from 'sonner';
 
 interface DepartmentProfile {
@@ -86,9 +99,13 @@ export default function DepartmentProfilePage() {
   const isSuperAdmin = hasAnyRole(currentUser, ['SUPER_ADMIN', 'DEVELOPER']);
   const [analytics, setAnalytics] = useState<DepartmentAnalyticsSummary | null>(null);
   const [analyticsPeriod, setAnalyticsPeriod] = useState<'1d' | '7d' | '30d' | '90d' | '180d' | '365d'>('30d');
+  const [divisionDialogOpen, setDivisionDialogOpen] = useState(false);
+  const [newDivisionName, setNewDivisionName] = useState('');
+  const [creatingDivision, setCreatingDivision] = useState(false);
+  const canManageStructure = hasGodRole(currentUser);
 
   useEffect(() => {
-    if (!hasAnyRole(currentUser, ['SUPER_ADMIN', 'DEPT_ADMIN'])) {
+    if (!hasAnyRole(currentUser, ['SUPER_ADMIN', 'DEPT_ADMIN', 'DEVELOPER'])) {
       router.replace('/dashboard');
       return;
     }
@@ -97,7 +114,10 @@ export default function DepartmentProfilePage() {
 
   useEffect(() => {
     if (!department || !currentUser) return;
-    if (hasAnyRole(currentUser, ['DEPT_ADMIN']) && !hasAnyRole(currentUser, ['SUPER_ADMIN'])) {
+    if (
+      hasAnyRole(currentUser, ['DEPT_ADMIN']) &&
+      !hasAnyRole(currentUser, ['SUPER_ADMIN', 'DEVELOPER'])
+    ) {
       if (department.id !== (currentUser as { departmentId?: string }).departmentId) {
         router.replace('/admin/departments');
       }
@@ -188,6 +208,32 @@ export default function DepartmentProfilePage() {
       toast.error(err.response?.data?.message || 'Failed to update default workflow');
     } finally {
       setSavingWorkflow(false);
+    }
+  };
+
+  const handleCreateDivision = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDivisionName.trim()) {
+      toast.error('Division name is required');
+      return;
+    }
+    setCreatingDivision(true);
+    try {
+      await api.post(`/departments/${departmentId}/divisions`, {
+        name: newDivisionName.trim(),
+      });
+      toast.success('Division added');
+      setDivisionDialogOpen(false);
+      setNewDivisionName('');
+      await fetchDepartment();
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast.error(typeof msg === 'string' ? msg : 'Could not add division');
+    } finally {
+      setCreatingDivision(false);
     }
   };
 
@@ -466,12 +512,65 @@ export default function DepartmentProfilePage() {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Divisions */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MapPin className="h-5 w-5" />
-              Divisions
-            </CardTitle>
-            <CardDescription>Divisions in this department</CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+            <div className="space-y-1.5">
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Divisions
+              </CardTitle>
+              <CardDescription>Divisions in this department</CardDescription>
+            </div>
+            {canManageStructure && (
+              <Dialog open={divisionDialogOpen} onOpenChange={setDivisionDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button type="button" size="sm" variant="secondary" className="shrink-0">
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Add division
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <form onSubmit={handleCreateDivision}>
+                    <DialogHeader>
+                      <DialogTitle>New division</DialogTitle>
+                      <DialogDescription>
+                        Add a division under {department.name}. A short code is generated from the name.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="div-name">Name</Label>
+                        <Input
+                          id="div-name"
+                          value={newDivisionName}
+                          onChange={(e) => setNewDivisionName(e.target.value)}
+                          placeholder="Division name"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setDivisionDialogOpen(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={creatingDivision}>
+                        {creatingDivision ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Adding…
+                          </>
+                        ) : (
+                          'Add division'
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            )}
           </CardHeader>
           <CardContent>
             {department.divisions?.length ? (

@@ -29,7 +29,7 @@ import {
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
-import { hasGodRole } from '@/lib/auth-utils';
+import { hasRole } from '@/lib/auth-utils';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -61,7 +61,7 @@ interface ActivityEntry {
 
 export default function FeaturesPage() {
   const { user } = useAuthStore();
-  const isSuperAdmin = hasGodRole(user);
+  const isTechPanel = hasRole(user, 'DEVELOPER');
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -89,7 +89,7 @@ export default function FeaturesPage() {
         setSettings(rawSettings);
         setActivity(Array.isArray(activityRes.data) ? activityRes.data : []);
 
-        if (isSuperAdmin) {
+        if (isTechPanel) {
           const deptRes = await api.get<Department[]>('/departments').catch(() => ({ data: [] }));
           setDepartments(Array.isArray(deptRes.data) ? deptRes.data : []);
         }
@@ -97,7 +97,7 @@ export default function FeaturesPage() {
         const slaKey = 'defaultSlaNormHours';
         const enableKey = 'ENABLE_DEFAULT_DUE_TIME';
 
-        if (isSuperAdmin) {
+        if (isTechPanel) {
           const globalSla = rawSettings.find((s) => s.key === slaKey && s.departmentId == null);
           const globalEnable = rawSettings.find((s) => s.key === enableKey && s.departmentId == null);
           if (globalSla?.value) setDefaultDueHours(globalSla.value);
@@ -134,7 +134,7 @@ export default function FeaturesPage() {
     };
 
     fetchData();
-  }, [isSuperAdmin, myDepartmentId]);
+  }, [isTechPanel, myDepartmentId]);
 
   const handleSave = async (options?: { skipToast?: boolean }) => {
     const hours = parseFloat(defaultDueHours);
@@ -147,23 +147,23 @@ export default function FeaturesPage() {
     try {
       const enablePayload = {
         value: enableDefaultDueTime ? 'true' : 'false',
-        ...(isSuperAdmin && applyScope === 'all' ? { departmentId: null } : {}),
-        ...(isSuperAdmin && applyScope === 'selected' ? {} : {}),
-        ...(!isSuperAdmin && myDepartmentId ? { departmentId: myDepartmentId } : {}),
+        ...(isTechPanel && applyScope === 'all' ? { departmentId: null } : {}),
+        ...(isTechPanel && applyScope === 'selected' ? {} : {}),
+        ...(!isTechPanel && myDepartmentId ? { departmentId: myDepartmentId } : {}),
       };
-      if (isSuperAdmin && applyScope === 'all') {
+      if (isTechPanel && applyScope === 'all') {
         await Promise.all([
           api.put('/admin/settings/ENABLE_DEFAULT_DUE_TIME', { value: enablePayload.value, departmentId: null }),
           api.put('/admin/settings/defaultSlaNormHours', { value: String(hours), departmentId: null }),
         ]);
-      } else if (isSuperAdmin && applyScope === 'selected' && selectedDepartmentIds.length > 0) {
+      } else if (isTechPanel && applyScope === 'selected' && selectedDepartmentIds.length > 0) {
         await api.put('/admin/settings/ENABLE_DEFAULT_DUE_TIME', { value: enablePayload.value, departmentId: null });
         await Promise.all(
           selectedDepartmentIds.map((deptId) =>
             api.put('/admin/settings/defaultSlaNormHours', { value: String(hours), departmentId: deptId }),
           ),
         );
-      } else if (!isSuperAdmin && myDepartmentId) {
+      } else if (!isTechPanel && myDepartmentId) {
         await Promise.all([
           api.put('/admin/settings/ENABLE_DEFAULT_DUE_TIME', {
             value: enablePayload.value,
@@ -175,7 +175,7 @@ export default function FeaturesPage() {
           }),
         ]);
       } else {
-        if (isSuperAdmin && applyScope === 'selected' && selectedDepartmentIds.length === 0) {
+        if (isTechPanel && applyScope === 'selected' && selectedDepartmentIds.length === 0) {
           toast.error('Select at least one department');
           return;
         }
@@ -255,9 +255,9 @@ export default function FeaturesPage() {
             Features & Default Due Time
           </h1>
           <p className="text-muted-foreground mt-2">
-            {isSuperAdmin
+            {isTechPanel
               ? 'Set default due time for all departments or selected ones. Department admins can set their own; you see all here.'
-              : 'Set your department’s default due time for files. Changes are visible to Super Admin and logged in activity.'}
+              : 'View-only. Global parameter updates are restricted to Tech Panel.'}
           </p>
         </div>
       </div>
@@ -269,9 +269,9 @@ export default function FeaturesPage() {
             Default file due time
           </CardTitle>
           <CardDescription>
-            {isSuperAdmin
+            {isTechPanel
               ? 'Choose to apply to all departments or only selected ones. Department-specific values override the global default.'
-              : 'This value is used when desks or files in your department do not have an explicit SLA configured.'}
+              : 'This value is view-only unless you are in Tech Panel.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -285,7 +285,7 @@ export default function FeaturesPage() {
             </div>
             <Toggle
               pressed={enableDefaultDueTime}
-              onPressedChange={setEnableDefaultDueTime}
+              onPressedChange={isTechPanel ? setEnableDefaultDueTime : undefined}
               variant="outline"
               className="min-w-[130px] justify-between px-3"
               aria-label="Toggle automatic default due time"
@@ -301,12 +301,12 @@ export default function FeaturesPage() {
             </Toggle>
           </div>
 
-          {isSuperAdmin && (
+          {isTechPanel && (
             <div className="space-y-3">
               <Label className="text-sm font-medium">Apply to</Label>
               <RadioGroup
                 value={applyScope}
-                onValueChange={(v) => setApplyScope(v as 'all' | 'selected')}
+                onValueChange={isTechPanel ? (v) => setApplyScope(v as 'all' | 'selected') : undefined}
                 className="flex flex-col gap-2"
               >
                 <div className="flex items-center space-x-2">
@@ -352,7 +352,7 @@ export default function FeaturesPage() {
                 step="0.5"
                 value={defaultDueHours}
                 onChange={(e) => setDefaultDueHours(e.target.value)}
-                disabled={loading}
+                disabled={loading || !isTechPanel}
                 placeholder="e.g., 24, 48, 72"
               />
               <span className="text-sm text-muted-foreground whitespace-nowrap">hours</span>
@@ -368,7 +368,8 @@ export default function FeaturesPage() {
               disabled={
                 loading ||
                 saving ||
-                (isSuperAdmin && applyScope === 'selected' && selectedDepartmentIds.length === 0)
+                !isTechPanel ||
+                (isTechPanel && applyScope === 'selected' && selectedDepartmentIds.length === 0)
               }
               className="min-w-[140px]"
             >
@@ -381,7 +382,7 @@ export default function FeaturesPage() {
                 'Save changes'
               )}
             </Button>
-            {isSuperAdmin && (
+            {isTechPanel && (
               <Button
                 variant="outline"
                 onClick={handleBackfill}
@@ -399,7 +400,7 @@ export default function FeaturesPage() {
               </Button>
             )}
           </div>
-          {isSuperAdmin && (
+          {isTechPanel && (
             <p className="text-xs text-muted-foreground pt-1">
               Use &quot;Apply to existing files&quot; to set the default due time on all files that
               currently have no timer. Each file gets the default hours from now.
@@ -415,7 +416,7 @@ export default function FeaturesPage() {
             Current settings
           </CardTitle>
           <CardDescription>
-            {isSuperAdmin
+            {isTechPanel
               ? 'Global and per-department default due time. Department admin changes appear here.'
               : 'Your department’s setting and the global default (for reference).'}
           </CardDescription>

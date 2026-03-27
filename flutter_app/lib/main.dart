@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:forui/forui.dart';
 import 'package:provider/provider.dart';
 import 'package:efiling_app/core/api/api_config.dart';
 import 'package:efiling_app/core/auth/auth_provider.dart';
 import 'package:efiling_app/core/router/app_router.dart';
-import 'package:efiling_app/core/theme/app_theme.dart';
+import 'package:efiling_app/core/theme/forui_efmp_theme.dart';
 import 'package:efiling_app/core/theme/theme_provider.dart';
 
 void main() async {
@@ -37,9 +38,23 @@ class EfilingApp extends StatelessWidget {
           return MaterialApp.router(
             title: 'EFMP',
             debugShowCheckedModeBanner: false,
-            theme: AppTheme.light,
-            darkTheme: AppTheme.dark,
+            theme: efmpLightMaterialTheme(),
+            darkTheme: efmpDarkMaterialTheme(),
             themeMode: theme.themeMode,
+            themeAnimationDuration: const Duration(milliseconds: 320),
+            themeAnimationCurve: Curves.easeInOutCubic,
+            supportedLocales: FLocalizations.supportedLocales,
+            localizationsDelegates: [...FLocalizations.localizationsDelegates],
+            builder: (context, child) {
+              final brightness = Theme.of(context).brightness;
+              final fdata = resolveEfmpForuiTheme(context, brightness);
+              return FTheme(
+                data: fdata,
+                child: FToaster(
+                  child: FTooltipGroup(child: child!),
+                ),
+              );
+            },
             routerConfig: AppRouter.router(auth),
           );
         },

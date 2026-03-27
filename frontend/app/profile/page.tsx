@@ -48,6 +48,7 @@ import { DepartmentProfileLink, DivisionProfileLink } from '@/components/profile
 import { toast } from 'sonner';
 import { formatDistanceToNow, format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { AppearancePreferences } from '@/components/appearance-preferences';
 
 interface UserProfile {
   id: string;
@@ -122,12 +123,12 @@ export default function ProfilePage() {
   const [staffFormData, setStaffFormData] = useState<StaffProfileFormData | null>(null);
 
   useEffect(() => {
-    if (user) {
-      fetchProfile();
-      fetchStats();
-      fetchPerformance();
-    }
-  }, [user]);
+    if (!user?.id) return;
+    fetchProfile();
+    fetchStats();
+    fetchPerformance();
+    // Only re-fetch when the logged-in user changes — not when theme/profile patches refresh `user` object
+  }, [user?.id]);
 
   const fetchPerformance = async () => {
     if (!user?.id) return;
@@ -153,6 +154,21 @@ export default function ProfilePage() {
       const response = await api.get(`/users/${user?.id}`);
       setProfile(response.data);
       setStaffFormData(staffProfileFromUser(response.data));
+      if (user) {
+        const token = localStorage.getItem('token') || '';
+        setAuth(
+          {
+            ...user,
+            ...(response.data.uiAppearanceTheme !== undefined && {
+              uiAppearanceTheme: response.data.uiAppearanceTheme,
+            }),
+            ...(response.data.uiColorTheme !== undefined && {
+              uiColorTheme: response.data.uiColorTheme,
+            }),
+          },
+          token
+        );
+      }
     } catch (error) {
       toast.error('Failed to load profile');
     } finally {
@@ -466,6 +482,7 @@ export default function ProfilePage() {
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
+          <TabsTrigger value="preferences">Preferences</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -811,6 +828,21 @@ export default function ProfilePage() {
                   </p>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="preferences" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Appearance</CardTitle>
+              <CardDescription>
+                Choose light or dark mode and a color theme. Your choices are saved to your account
+                and apply on any device you use.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AppearancePreferences variant="plain" />
             </CardContent>
           </Card>
         </TabsContent>

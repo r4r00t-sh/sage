@@ -31,7 +31,7 @@ export class WorkflowController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
+  @Roles('DEVELOPER' as any, 'TECH_PANEL' as any)
   async createWorkflow(
     @Request() req,
     @Body()
@@ -77,7 +77,7 @@ export class WorkflowController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
+  @Roles('DEVELOPER' as any, 'TECH_PANEL' as any)
   async updateWorkflow(
     @Param('id') id: string,
     @Request() req,
@@ -101,7 +101,7 @@ export class WorkflowController {
 
   @Post(':id/publish')
   @UseGuards(RolesGuard)
-  @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
+  @Roles('DEVELOPER' as any, 'TECH_PANEL' as any)
   async publishWorkflow(@Param('id') id: string, @Request() req) {
     return this.workflowService.publishWorkflow(
       id,
@@ -113,7 +113,7 @@ export class WorkflowController {
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
+  @Roles('DEVELOPER' as any, 'TECH_PANEL' as any)
   async deleteWorkflow(@Param('id') id: string, @Request() req) {
     return this.workflowService.deleteWorkflow(
       id,
@@ -125,7 +125,7 @@ export class WorkflowController {
 
   @Post(':id/clone')
   @UseGuards(RolesGuard)
-  @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
+  @Roles('DEVELOPER' as any, 'TECH_PANEL' as any)
   async cloneWorkflow(
     @Param('id') id: string,
     @Request() req,
@@ -152,7 +152,7 @@ export class WorkflowController {
 
   @Post(':id/nodes')
   @UseGuards(RolesGuard)
-  @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
+  @Roles('DEVELOPER' as any, 'TECH_PANEL' as any)
   async addNode(
     @Param('id') workflowId: string,
     @Request() req,
@@ -184,7 +184,7 @@ export class WorkflowController {
 
   @Patch('nodes/:nodeId')
   @UseGuards(RolesGuard)
-  @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
+  @Roles('DEVELOPER' as any, 'TECH_PANEL' as any)
   async updateNode(
     @Param('nodeId') nodeId: string,
     @Request() req,
@@ -201,7 +201,7 @@ export class WorkflowController {
 
   @Delete('nodes/:nodeId')
   @UseGuards(RolesGuard)
-  @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
+  @Roles('DEVELOPER' as any, 'TECH_PANEL' as any)
   async deleteNode(@Param('nodeId') nodeId: string, @Request() req) {
     return this.workflowService.deleteNode(
       nodeId,
@@ -217,7 +217,7 @@ export class WorkflowController {
 
   @Post(':id/edges')
   @UseGuards(RolesGuard)
-  @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
+  @Roles('DEVELOPER' as any, 'TECH_PANEL' as any)
   async addEdge(
     @Param('id') workflowId: string,
     @Request() req,
@@ -242,7 +242,7 @@ export class WorkflowController {
 
   @Patch('edges/:edgeId')
   @UseGuards(RolesGuard)
-  @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
+  @Roles('DEVELOPER' as any, 'TECH_PANEL' as any)
   async updateEdge(
     @Param('edgeId') edgeId: string,
     @Request() req,
@@ -259,7 +259,7 @@ export class WorkflowController {
 
   @Delete('edges/:edgeId')
   @UseGuards(RolesGuard)
-  @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
+  @Roles('DEVELOPER' as any, 'TECH_PANEL' as any)
   async deleteEdge(@Param('edgeId') edgeId: string, @Request() req) {
     return this.workflowService.deleteEdge(
       edgeId,
@@ -321,14 +321,14 @@ export class WorkflowController {
 
   @Post('executions/:id/pause')
   @UseGuards(RolesGuard)
-  @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
+  @Roles('DEVELOPER' as any, 'TECH_PANEL' as any)
   async pauseWorkflow(@Param('id') executionId: string, @Request() req) {
     return this.workflowEngine.pauseWorkflow(executionId, req.user.id);
   }
 
   @Post('executions/:id/resume')
   @UseGuards(RolesGuard)
-  @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
+  @Roles('DEVELOPER' as any, 'TECH_PANEL' as any)
   async resumeWorkflow(@Param('id') executionId: string, @Request() req) {
     return this.workflowEngine.resumeWorkflow(executionId, req.user.id);
   }
@@ -344,7 +344,7 @@ export class WorkflowController {
 
   @Post('templates/:id/use')
   @UseGuards(RolesGuard)
-  @Roles('SUPER_ADMIN' as any, 'DEPT_ADMIN' as any)
+  @Roles('DEVELOPER' as any, 'TECH_PANEL' as any)
   async createFromTemplate(
     @Param('id') templateId: string,
     @Request() req,
@@ -360,7 +360,7 @@ export class WorkflowController {
 
   @Post(':id/export-template')
   @UseGuards(RolesGuard)
-  @Roles('SUPER_ADMIN' as any)
+  @Roles('DEVELOPER' as any, 'TECH_PANEL' as any)
   async exportAsTemplate(
     @Param('id') workflowId: string,
     @Request() req,

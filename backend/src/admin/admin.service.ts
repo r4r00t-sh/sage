@@ -442,4 +442,11 @@ export class AdminService {
       orderBy: { redListedAt: 'desc' },
     });
   }
+
+  async listOrganisations() {
+    return this.prisma.organisation.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+  }
 }

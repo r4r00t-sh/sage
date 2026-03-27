@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store';
 import { getRoles } from '@/lib/auth-utils';
-import { useTheme } from '@/components/theme-provider';
+import { AppearancePreferences } from '@/components/appearance-preferences';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,12 +17,8 @@ import {
   Settings, 
   User, 
   Lock, 
-  Palette, 
   Loader2, 
   ArrowLeft,
-  Sun,
-  Moon,
-  Monitor,
   Shield,
   Building2,
   MapPin,
@@ -38,7 +34,6 @@ import { useAvatarUrl } from '@/lib/avatar';
 export default function SettingsPage() {
   const router = useRouter();
   const { user, setAuth } = useAuthStore();
-  const { theme, setTheme } = useTheme();
   const { locale, setLocale } = useLocaleStore();
   const t = (key: string) => getTranslation(locale, key);
   const [loading, setLoading] = useState(false);
@@ -67,8 +62,23 @@ export default function SettingsPage() {
     try {
       const response = await api.get(`/users/${user?.id}`);
       setEmail(response.data.email || '');
-      if (user && response.data.avatarKey !== undefined) {
-        setAuth({ ...user, avatarKey: response.data.avatarKey }, localStorage.getItem('token') || '');
+      if (user) {
+        const token = localStorage.getItem('token') || '';
+        setAuth(
+          {
+            ...user,
+            ...(response.data.avatarKey !== undefined && {
+              avatarKey: response.data.avatarKey,
+            }),
+            ...(response.data.uiAppearanceTheme !== undefined && {
+              uiAppearanceTheme: response.data.uiAppearanceTheme,
+            }),
+            ...(response.data.uiColorTheme !== undefined && {
+              uiColorTheme: response.data.uiColorTheme,
+            }),
+          },
+          token
+        );
       }
     } catch (error) {
       console.error('Failed to fetch user details');
@@ -413,67 +423,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          {/* Appearance - full width, more spacious */}
-          <Card className="overflow-hidden">
-            <CardHeader className="pb-6">
-              <CardTitle className="text-xl flex items-center gap-3">
-                <Palette className="h-6 w-6" />
-                {t('appearance')}
-              </CardTitle>
-              <CardDescription className="text-base">
-                Customize how the application looks on your device
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="space-y-6">
-                <Label className="text-base font-medium">{t('colorTheme')}</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                  <div
-                    className={`flex flex-row items-center gap-5 p-6 rounded-xl border-2 cursor-pointer transition-all ${
-                      theme === 'light' ? 'border-primary bg-primary/5' : 'border-transparent hover:border-muted-foreground/20'
-                    }`}
-                    onClick={() => setTheme('light')}
-                  >
-                    <div className="h-14 w-14 shrink-0 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                      <Sun className="h-7 w-7 text-amber-600" />
-                    </div>
-                    <div>
-                      <span className="font-semibold text-base block">{t('light')}</span>
-                      <span className="text-sm text-muted-foreground">Bright, clean interface</span>
-                    </div>
-                  </div>
-                  <div
-                    className={`flex flex-row items-center gap-5 p-6 rounded-xl border-2 cursor-pointer transition-all ${
-                      theme === 'dark' ? 'border-primary bg-primary/5' : 'border-transparent hover:border-muted-foreground/20'
-                    }`}
-                    onClick={() => setTheme('dark')}
-                  >
-                    <div className="h-14 w-14 shrink-0 rounded-xl bg-slate-800 flex items-center justify-center">
-                      <Moon className="h-7 w-7 text-slate-200" />
-                    </div>
-                    <div>
-                      <span className="font-semibold text-base block">{t('dark')}</span>
-                      <span className="text-sm text-muted-foreground">Easy on the eyes</span>
-                    </div>
-                  </div>
-                  <div
-                    className={`flex flex-row items-center gap-5 p-6 rounded-xl border-2 cursor-pointer transition-all ${
-                      theme === 'system' ? 'border-primary bg-primary/5' : 'border-transparent hover:border-muted-foreground/20'
-                    }`}
-                    onClick={() => setTheme('system')}
-                  >
-                    <div className="h-14 w-14 shrink-0 rounded-xl bg-gradient-to-br from-amber-100 to-slate-800 flex items-center justify-center">
-                      <Monitor className="h-7 w-7 text-slate-600" />
-                    </div>
-                    <div>
-                      <span className="font-semibold text-base block">{t('system')}</span>
-                      <span className="text-sm text-muted-foreground">Match your device</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <AppearancePreferences />
         </div>
 
         {/* Sidebar - Account info + Help */}

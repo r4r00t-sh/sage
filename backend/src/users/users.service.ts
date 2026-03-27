@@ -8,6 +8,61 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MinIOService } from '../minio/minio.service';
 import * as bcrypt from 'bcrypt';
 
+const UI_APPEARANCE_THEMES = ['light', 'dark', 'system'] as const;
+const UI_COLOR_THEMES = [
+  'neutral',
+  'blue',
+  'green',
+  'orange',
+  'red',
+  'rose',
+  'violet',
+  'yellow',
+] as const;
+
+function normalizeUiThemePayload(data: {
+  uiAppearanceTheme?: string | null;
+  uiColorTheme?: string | null;
+}): { uiAppearanceTheme?: string | null; uiColorTheme?: string | null } | null {
+  const hasApp = data.uiAppearanceTheme !== undefined;
+  const hasCol = data.uiColorTheme !== undefined;
+  if (!hasApp && !hasCol) return null;
+
+  const out: { uiAppearanceTheme?: string | null; uiColorTheme?: string | null } = {};
+
+  if (hasApp) {
+    const v = data.uiAppearanceTheme;
+    if (v === null || v === '') {
+      out.uiAppearanceTheme = null;
+    } else if (
+      typeof v === 'string' &&
+      (UI_APPEARANCE_THEMES as readonly string[]).includes(v)
+    ) {
+      out.uiAppearanceTheme = v;
+    } else {
+      throw new BadRequestException(
+        'uiAppearanceTheme must be light, dark, or system',
+      );
+    }
+  }
+
+  if (hasCol) {
+    const v = data.uiColorTheme;
+    if (v === null || v === '') {
+      out.uiColorTheme = null;
+    } else if (
+      typeof v === 'string' &&
+      (UI_COLOR_THEMES as readonly string[]).includes(v)
+    ) {
+      out.uiColorTheme = v === 'neutral' ? null : v;
+    } else {
+      throw new BadRequestException('Invalid uiColorTheme');
+    }
+  }
+
+  return out;
+}
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -114,6 +169,8 @@ export class UsersService {
         approvedAt: true,
         createdAt: true,
         updatedAt: true,
+        uiAppearanceTheme: true,
+        uiColorTheme: true,
         department: { select: { id: true, name: true, code: true } },
         division: { select: { id: true, name: true } },
         points: true,
@@ -313,8 +370,12 @@ export class UsersService {
       emergencyContactPhoneAlt?: string;
       emergencyContactEmail?: string;
       adminNotes?: string;
+      uiAppearanceTheme?: string | null;
+      uiColorTheme?: string | null;
     },
   ) {
+    const uiThemes = normalizeUiThemePayload(data);
+
     const parts = [data.firstName, data.middleName, data.lastName].filter(Boolean) as string[];
     const derivedName = parts.length > 0 ? parts.join(' ') : undefined;
     const skillsStr =
@@ -377,6 +438,12 @@ export class UsersService {
         ...(data.emergencyContactPhoneAlt !== undefined && { emergencyContactPhoneAlt: data.emergencyContactPhoneAlt }),
         ...(data.emergencyContactEmail !== undefined && { emergencyContactEmail: data.emergencyContactEmail }),
         ...(data.adminNotes !== undefined && { adminNotes: data.adminNotes }),
+        ...(uiThemes?.uiAppearanceTheme !== undefined && {
+          uiAppearanceTheme: uiThemes.uiAppearanceTheme,
+        }),
+        ...(uiThemes?.uiColorTheme !== undefined && {
+          uiColorTheme: uiThemes.uiColorTheme,
+        }),
       },
       select: {
         id: true,
@@ -423,6 +490,8 @@ export class UsersService {
         roles: true,
         isActive: true,
         profileApprovalStatus: true,
+        uiAppearanceTheme: true,
+        uiColorTheme: true,
         department: { select: { id: true, name: true } },
         division: { select: { id: true, name: true } },
       },

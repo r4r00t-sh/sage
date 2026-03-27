@@ -13,6 +13,7 @@ import { TimingService } from '../timing/timing.service';
 import { CapacityService } from '../capacity/capacity.service';
 import { RbacService } from '../auth/rbac.service';
 import { WorkflowEngineService } from '../workflow/workflow-engine.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { FileStatus, FilePriority, FileAction, UserRole, FileAssignmentStatus } from '@prisma/client';
 
 @Injectable()
@@ -25,6 +26,7 @@ export class FilesService {
     private capacityService: CapacityService,
     private rbac: RbacService,
     private workflowEngine: WorkflowEngineService,
+    private notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -1594,6 +1596,17 @@ export class FilesService {
           message: `File ${file.fileNumber}: ${file.subject}`,
           fileId: file.id,
         });
+        await this.notificationsService.createNotification({
+          userId: r.finalToUserId,
+          type: 'file_received',
+          title: 'New File Assigned',
+          message: `File ${file.fileNumber}: ${file.subject}`,
+          fileId: file.id,
+          priority: file.isRedListed ? 'urgent' : 'normal',
+          actionRequired: true,
+          actionType: 'open_file',
+          metadata: { link: `/files/${file.id}` },
+        });
       }
       await this.processQueueForUser(fromUserId);
       return updatedFile;
@@ -1840,6 +1853,17 @@ export class FilesService {
             },
           ],
         });
+        await this.notificationsService.createNotification({
+          userId: finalToUserId,
+          type: 'file_received',
+          title: 'New File Assigned',
+          message: `File ${file.fileNumber}: ${file.subject}`,
+          fileId: file.id,
+          priority: file.isRedListed ? 'urgent' : 'normal',
+          actionRequired: true,
+          actionType: 'open_file',
+          metadata: { link: `/files/${file.id}` },
+        });
       } else {
         await this.rabbitmq.publishToast({
           userId: finalToUserId,
@@ -1847,6 +1871,17 @@ export class FilesService {
           title: 'File Queued',
           message: `File ${file.fileNumber} is in your queue (desk at capacity). It will move to your inbox when you have space.`,
           fileId: file.id,
+        });
+        await this.notificationsService.createNotification({
+          userId: finalToUserId,
+          type: 'file_queued',
+          title: 'File Queued',
+          message: `File ${file.fileNumber} is queued and will enter your inbox when capacity is free.`,
+          fileId: file.id,
+          priority: 'normal',
+          actionRequired: true,
+          actionType: 'open_file',
+          metadata: { link: `/files/${file.id}` },
         });
       }
     }
@@ -2906,12 +2941,20 @@ export class FilesService {
     userDepartmentId: string | null,
     remarks?: string,
   ) {
-    const isDeveloper = userRoles.includes('DEVELOPER');
-    const isSuperAdmin = userRoles.includes('SUPER_ADMIN');
-    const isSupport = userRoles.includes('SUPPORT');
-    const isDeptAdmin = userRoles.includes('DEPT_ADMIN');
-    if (!isDeveloper && !isSuperAdmin && !isSupport && !isDeptAdmin) {
-      throw new ForbiddenException('Only Department Admin, Support, or Super Admin can recall files');
+    const isTechPanel = userRoles.includes('DEVELOPER');
+
+    // Recall permission is explicit per-user setting (not role-based).
+    const recallAllowedSetting = await this.prisma.systemSettings.findFirst({
+      where: { key: 'RECALL_ALLOWED_USER_IDS', departmentId: null },
+      select: { value: true },
+    });
+    const recallAllowedIds = (recallAllowedSetting?.value ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    if (!isTechPanel && !recallAllowedIds.includes(userId)) {
+      throw new ForbiddenException('You are not configured as a recall authority');
     }
 
     const file = await this.prisma.file.findUnique({
@@ -2922,10 +2965,20 @@ export class FilesService {
       throw new NotFoundException('File not found');
     }
 
-    if (isDeptAdmin && !isDeveloper && !isSuperAdmin && !isSupport) {
-      if (file.departmentId !== userDepartmentId) {
-        throw new ForbiddenException('Department Admin can only recall files within their department');
-      }
+    const recallDestinationSetting = await this.prisma.systemSettings.findFirst({
+      where: { key: 'RECALL_DESTINATION_USER_ID', departmentId: null },
+      select: { value: true },
+    });
+    const recallDestinationUserId = (recallDestinationSetting?.value ?? '').trim() || null;
+    if (!recallDestinationUserId) {
+      throw new BadRequestException('Recall destination is not configured. Ask Tech Panel to configure RECALL_DESTINATION_USER_ID');
+    }
+    const recallDestinationUser = await this.prisma.user.findUnique({
+      where: { id: recallDestinationUserId },
+      select: { id: true, divisionId: true, departmentId: true, isActive: true },
+    });
+    if (!recallDestinationUser || !recallDestinationUser.isActive) {
+      throw new BadRequestException('Recall destination user is invalid or inactive');
     }
 
     const previousAssigneeId = file.assignedToId;
@@ -2934,7 +2987,10 @@ export class FilesService {
       where: { id: fileId },
       data: {
         status: FileStatus.RECALLED,
-        assignedToId: null,
+        assignedToId: recallDestinationUser.id,
+        currentDivisionId: recallDestinationUser.divisionId ?? null,
+        departmentId: recallDestinationUser.departmentId ?? file.departmentId,
+        isInQueue: false,
       },
     });
 
@@ -2949,7 +3005,10 @@ export class FilesService {
         fromUserId: userId,
         action: FileAction.RECALLED,
         actionString: 'recall',
-        remarks: remarks || 'File recalled by Super Admin',
+        toUserId: recallDestinationUser.id,
+        toDivisionId: recallDestinationUser.divisionId ?? undefined,
+        toDepartmentId: recallDestinationUser.departmentId ?? undefined,
+        remarks: remarks || 'File recalled',
       },
     });
 
@@ -2960,6 +3019,18 @@ export class FilesService {
       'recall',
       remarks || 'File recalled',
     );
+
+    await this.notificationsService.createNotification({
+      userId: recallDestinationUser.id,
+      type: 'file_recalled',
+      title: 'File Recalled To You',
+      message: `File ${file.fileNumber}: ${file.subject} has been recalled to your inbox.`,
+      fileId: file.id,
+      priority: 'high',
+      actionRequired: true,
+      actionType: 'open_file',
+      metadata: { link: `/files/${file.id}` },
+    });
 
     return updatedFile;
   }
@@ -3033,7 +3104,8 @@ export class FilesService {
   }
 
   /**
-   * Set due time/allotted time for a file (Department Admin and Super Admin only)
+   * Set due time/allotted time for a file (Tech Panel only).
+   * Tech Panel is represented by DEVELOPER role.
    */
   async setFileDueTime(
     fileId: string,
@@ -3041,16 +3113,9 @@ export class FilesService {
     userRoles: string[],
     allottedTimeInHours: number,
   ) {
-    // Check authorization - Department Admin, Support, and Super Admin can set due time
-    if (
-      !userRoles.includes(UserRole.DEVELOPER) &&
-      !userRoles.includes(UserRole.SUPER_ADMIN) &&
-      !userRoles.includes(UserRole.SUPPORT) &&
-      !userRoles.includes(UserRole.DEPT_ADMIN)
-    ) {
-      throw new ForbiddenException(
-        'Only Department Admin, Support, or Super Admin can set due time for files',
-      );
+    // Tech Panel only (DEVELOPER). Keep this strict per policy.
+    if (!userRoles.includes(UserRole.DEVELOPER)) {
+      throw new ForbiddenException('Only Tech Panel can set due time for files');
     }
 
     const file = await this.prisma.file.findUnique({
@@ -3060,25 +3125,6 @@ export class FilesService {
 
     if (!file) {
       throw new NotFoundException('File not found');
-    }
-
-    // Department Admin can only set due time for files in their department (Support and Super Admin can set any)
-    if (
-      userRoles.includes(UserRole.DEPT_ADMIN) &&
-      !userRoles.includes(UserRole.DEVELOPER) &&
-      !userRoles.includes(UserRole.SUPER_ADMIN) &&
-      !userRoles.includes(UserRole.SUPPORT)
-    ) {
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { departmentId: true },
-      });
-
-      if (user?.departmentId !== file.departmentId) {
-        throw new ForbiddenException(
-          'Department Admin can only set due time for files in their own department',
-        );
-      }
     }
 
     if (allottedTimeInHours <= 0) {

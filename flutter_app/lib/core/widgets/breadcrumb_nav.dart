@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 
-/// Breadcrumb nav from current path (e.g. Home > Files > Inbox). Matches web BreadcrumbNav.
+/// Breadcrumb from current path using [FBreadcrumb] ([Forui](https://forui.dev/)).
 class BreadcrumbNav extends StatelessWidget {
   const BreadcrumbNav({super.key, required this.path, this.labelOverrides});
 
-  /// Current route path, e.g. /files/inbox or /admin/users/abc-123
   final String path;
-
-  /// Optional map of path segment -> display label (e.g. 'inbox' -> 'File Inbox')
   final Map<String, String>? labelOverrides;
 
   static String _segmentToLabel(String segment) {
@@ -53,7 +51,6 @@ class BreadcrumbNav extends StatelessWidget {
     final segments = path.split('/').where((s) => s.isNotEmpty).toList();
     if (segments.isEmpty) return const SizedBox.shrink();
 
-    final theme = Theme.of(context);
     final overrides = labelOverrides ?? {};
 
     String labelFor(String segment) {
@@ -61,60 +58,43 @@ class BreadcrumbNav extends StatelessWidget {
       return overrides[lower] ?? _segmentToLabel(segment);
     }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.home_outlined),
-            iconSize: 20,
-            onPressed: () => context.go('/dashboard'),
-            tooltip: 'Home',
-            style: IconButton.styleFrom(
-              foregroundColor: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(width: 4),
-          ...List.generate(segments.length * 2 - 1, (i) {
-            if (i.isOdd) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Icon(Icons.chevron_right, size: 18, color: theme.colorScheme.onSurfaceVariant.withOpacity( 0.7)),
-              );
-            }
-            final idx = i ~/ 2;
-            final segment = segments[idx];
-            final href = '/' + segments.sublist(0, idx + 1).join('/');
-            final isLast = idx == segments.length - 1;
-            final label = labelFor(segment);
+    final items = <Widget>[
+      FBreadcrumbItem(
+        onPress: () => context.go('/dashboard'),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(FIcons.house, size: 16, color: context.theme.colors.mutedForeground),
+            const SizedBox(width: 6),
+            const Text('Home'),
+          ],
+        ),
+      ),
+    ];
 
-            if (isLast) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                child: Text(
-                  label,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: theme.colorScheme.onSurface,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              );
-            }
-            return InkWell(
-              onTap: () => context.go(href),
-              borderRadius: BorderRadius.circular(6),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                child: Text(
-                  label,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            );
-          }),
-        ],
+    for (var i = 0; i < segments.length; i++) {
+      final segment = segments[i];
+      final href = '/${segments.sublist(0, i + 1).join('/')}';
+      final isLast = i == segments.length - 1;
+      final label = labelFor(segment);
+
+      if (isLast) {
+        items.add(FBreadcrumbItem(current: true, child: Text(label)));
+      } else {
+        items.add(
+          FBreadcrumbItem(
+            onPress: () => context.go(href),
+            child: Text(label),
+          ),
+        );
+      }
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+        child: FBreadcrumb(children: items),
       ),
     );
   }

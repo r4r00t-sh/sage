@@ -19,7 +19,7 @@ export class AdminController {
   constructor(private adminService: AdminService) {}
 
   private checkAdminAccess(user: { roles?: string[] }) {
-    if (!hasAnyRole(user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
+    if (!hasAnyRole(user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN', 'APPROVAL_AUTHORITY'])) {
       throw new ForbiddenException('Admin access required');
     }
   }
@@ -81,6 +81,15 @@ export class AdminController {
     return this.adminService.getDepartmentWiseAnalytics();
   }
 
+  /** Organisations list (for creating departments — Super Admin / Tech Panel). */
+  @Get('organisations')
+  async listOrganisations(@Request() req) {
+    if (!hasGodRole(req.user)) {
+      throw new ForbiddenException('Super Admin or Tech Panel access required');
+    }
+    return this.adminService.listOrganisations();
+  }
+
   // Get red listed files
   @Get('redlist')
   async getRedListedFiles(@Request() req) {
@@ -132,14 +141,11 @@ export class AdminController {
     @Param('key') key: string,
     @Body() body: { value: string; departmentId?: string | null },
   ) {
-    this.checkAdminAccess(req.user);
-    const isDeptAdminOnly =
-      hasRole(req.user, 'DEPT_ADMIN') &&
-      !hasRole(req.user, 'SUPER_ADMIN') &&
-      !hasRole(req.user, 'DEVELOPER');
-    const departmentId = isDeptAdminOnly
-      ? req.user.departmentId
-      : body.departmentId !== undefined
+    if (!hasRole(req.user, 'DEVELOPER')) {
+      throw new ForbiddenException('Only Tech Panel can update global settings');
+    }
+    const departmentId =
+      body.departmentId !== undefined
         ? body.departmentId ?? null
         : undefined;
     return this.adminService.updateSetting(

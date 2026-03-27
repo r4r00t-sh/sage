@@ -40,6 +40,10 @@ interface User {
   avatarKey?: string | null;
   mustChangePassword?: boolean;
   profileCompletedAt?: string | null;
+  /** light | dark | system — saved with account */
+  uiAppearanceTheme?: string | null;
+  /** Color preset id or null for neutral */
+  uiColorTheme?: string | null;
 }
 
 interface AuthState {

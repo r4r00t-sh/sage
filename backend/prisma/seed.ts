@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { PrismaClient, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { Pool } from 'pg';
@@ -8,25 +10,78 @@ const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-// Minimal demo structure: 5 departments with one division each
-const CORE_DEPARTMENTS: { name: string; code: string; divisionName: string }[] = [
-  { name: 'General Administration', code: 'GEN', divisionName: 'GEN Main Division' },
-  { name: 'Finance', code: 'FIN', divisionName: 'FIN Main Division' },
-  { name: 'Human Resources', code: 'HR', divisionName: 'HR Main Division' },
-  { name: 'Operations', code: 'OPS', divisionName: 'OPS Main Division' },
-  { name: 'IT Services', code: 'IT', divisionName: 'IT Main Division' },
-];
+type EfileClusterEntry = { name: string; divisions: string[] };
 
-function divisionCode(name: string, index: number): string {
-  const slug = name
-    .replace(/[^a-zA-Z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 12);
-  return (slug || `DIV${index}`).toUpperCase();
+/** Stable short codes for departments (must match parsed order). */
+const DEPARTMENT_CODES = [
+  'AGR',
+  'ART',
+  'COM',
+  'EDU',
+  'EAM',
+  'FIN',
+  'GAD',
+  'HR',
+  'IND',
+  'LAW',
+  'MKT',
+  'MMO',
+  'OGS',
+  'OOP',
+  'OPD',
+  'PND',
+  'QAD',
+  'SAF',
+  'SHR',
+  'SRF',
+  'SEC',
+] as const;
+
+function parseEfileClusterTree(md: string): EfileClusterEntry[] {
+  const lines = md.split('\n');
+  const out: EfileClusterEntry[] = [];
+  let current: EfileClusterEntry | null = null;
+
+  for (const line of lines) {
+    const deptMatch = line.match(/^\s{4}[├└]───(.+)$/);
+    if (deptMatch) {
+      current = { name: deptMatch[1].trim(), divisions: [] };
+      out.push(current);
+      continue;
+    }
+    let divMatch = line.match(/^\s{4}│\s+[├└]───(.+)$/);
+    if (!divMatch) divMatch = line.match(/^\s{8}[├└]───(.+)$/);
+    if (divMatch && current) {
+      current.divisions.push(divMatch[1].trim());
+    }
+  }
+
+  return out;
+}
+
+function loadEfileClusterFromRepo(): EfileClusterEntry[] {
+  const candidates = [
+    join(__dirname, '../../EFILE_CLUSTER_TREE.md'), // local: repo root from backend/prisma
+    join(__dirname, '../EFILE_CLUSTER_TREE.md'), // Docker image: /app/EFILE_CLUSTER_TREE.md from prisma/
+  ];
+  for (const treePath of candidates) {
+    if (existsSync(treePath)) {
+      const md = readFileSync(treePath, 'utf8');
+      return parseEfileClusterTree(md);
+    }
+  }
+  throw new Error(`EFILE_CLUSTER_TREE.md not found. Tried:\n  ${candidates.join('\n  ')}`);
 }
 
 async function main() {
   console.log('🌱 Starting seed...');
+
+  const cluster = loadEfileClusterFromRepo();
+  if (cluster.length !== DEPARTMENT_CODES.length) {
+    throw new Error(
+      `EFILE cluster parse: expected ${DEPARTMENT_CODES.length} departments, got ${cluster.length}. Update DEPARTMENT_CODES or the tree file.`,
+    );
+  }
 
   // --- Cleanup: remove all existing data ---
   console.log('🧹 Cleaning up existing data...');
@@ -76,41 +131,39 @@ async function main() {
   });
   console.log('✅ Organisation:', org.name);
 
-  // 5 Departments and 1 Division per department
-  const departmentByCode = new Map<string, string>();
-  const divisionByCode = new Map<string, string>();
-
-  for (const dept of CORE_DEPARTMENTS) {
+  let divisionCount = 0;
+  for (let i = 0; i < cluster.length; i++) {
+    const entry = cluster[i];
+    const code = DEPARTMENT_CODES[i];
     const createdDept = await prisma.department.create({
       data: {
-        name: dept.name,
-        code: dept.code,
+        name: entry.name,
+        code,
         organisationId: org.id,
       },
     });
-    departmentByCode.set(dept.code, createdDept.id);
 
-    const divCode = `${dept.code}-${divisionCode(dept.divisionName, 0)}`;
-    const createdDiv = await prisma.division.create({
-      data: {
-        name: dept.divisionName,
-        code: divCode,
-        departmentId: createdDept.id,
-      },
-    });
-    divisionByCode.set(dept.code, createdDiv.id);
+    for (let j = 0; j < entry.divisions.length; j++) {
+      const divCode = `${code}-D${String(j + 1).padStart(3, '0')}`;
+      await prisma.division.create({
+        data: {
+          name: entry.divisions[j],
+          code: divCode,
+          departmentId: createdDept.id,
+        },
+      });
+      divisionCount++;
+    }
   }
 
-  console.log('✅ Departments created:', CORE_DEPARTMENTS.length);
-  console.log('✅ Divisions created:', CORE_DEPARTMENTS.length);
+  console.log('✅ Departments created:', cluster.length);
+  console.log('✅ Divisions created:', divisionCount);
 
-  const passwordHash = await bcrypt.hash('password123', 10);
-
-  // Super Admin (no department)
+  // Super Admin only (no department)
   const superAdmin = await prisma.user.create({
     data: {
-      username: 'admin',
-      passwordHash: await bcrypt.hash('admin123', 10),
+      username: 'super.admin',
+      passwordHash: await bcrypt.hash('Sup3r.4dm!n@s4nthigiri', 10),
       name: 'Super Administrator',
       email: 'admin@example.com',
       roles: [UserRole.SUPER_ADMIN],
@@ -134,170 +187,14 @@ async function main() {
   });
   console.log('✅ Super Admin:', superAdmin.username);
 
-  // 5 users per department (5 roles) attached to the single division
-  const deptUsers: typeof superAdmin[] = [];
-  let staffCounter = 2;
-
-  for (const dept of CORE_DEPARTMENTS) {
-    const deptId = departmentByCode.get(dept.code)!;
-    const divId = divisionByCode.get(dept.code)!;
-    const baseUsername = dept.code.toLowerCase();
-
-    const admin = await prisma.user.create({
-      data: {
-        username: `${baseUsername}.admin`,
-        passwordHash,
-        name: `${dept.name} Admin`,
-        email: `${baseUsername}.admin@example.com`,
-        roles: [UserRole.DEPT_ADMIN],
-        departmentId: deptId,
-        divisionId: divId,
-        isActive: true,
-        profileApprovalStatus: 'APPROVED',
-        designation: 'Department Admin',
-        staffId: `STAFF-${String(staffCounter++).padStart(3, '0')}`,
-        phone: '+91 9000000101',
-        firstName: dept.name,
-        lastName: 'Admin',
-        employmentType: 'Permanent',
-        dateOfJoining: new Date('2023-01-01'),
-        workLocation: `${dept.name} Block`,
-        accountStatus: 'Active',
-        personalEmail: `${baseUsername}.admin.personal@example.com`,
-        address: `${dept.name} Block, Santhigiri`,
-        city: 'Thiruvananthapuram',
-        postalCode: '695589',
-        profileCompletedAt: new Date(),
-      },
-    });
-
-    const sectionOfficer = await prisma.user.create({
-      data: {
-        username: `${baseUsername}.section`,
-        passwordHash,
-        name: `${dept.name} Section Officer`,
-        email: `${baseUsername}.section@example.com`,
-        roles: [UserRole.SECTION_OFFICER],
-        departmentId: deptId,
-        divisionId: divId,
-        isActive: true,
-        profileApprovalStatus: 'APPROVED',
-        designation: 'Section Officer',
-        staffId: `STAFF-${String(staffCounter++).padStart(3, '0')}`,
-        phone: '+91 9000000201',
-        firstName: dept.name,
-        lastName: 'Section Officer',
-        employmentType: 'Permanent',
-        dateOfJoining: new Date('2023-01-15'),
-        workLocation: `${dept.name} Section`,
-        accountStatus: 'Active',
-        personalEmail: `${baseUsername}.section.personal@example.com`,
-        address: `${dept.name} Section, Santhigiri`,
-        city: 'Thiruvananthapuram',
-        postalCode: '695589',
-        profileCompletedAt: new Date(),
-      },
-    });
-
-    const inwardDesk = await prisma.user.create({
-      data: {
-        username: `${baseUsername}.inward`,
-        passwordHash,
-        name: `${dept.name} Inward Desk`,
-        email: `${baseUsername}.inward@example.com`,
-        roles: [UserRole.INWARD_DESK],
-        departmentId: deptId,
-        divisionId: divId,
-        isActive: true,
-        profileApprovalStatus: 'APPROVED',
-        designation: 'Inward Desk',
-        staffId: `STAFF-${String(staffCounter++).padStart(3, '0')}`,
-        phone: '+91 9000000301',
-        firstName: dept.name,
-        lastName: 'Inward Desk',
-        employmentType: 'Permanent',
-        dateOfJoining: new Date('2023-02-01'),
-        workLocation: `${dept.name} Inward`,
-        accountStatus: 'Active',
-        personalEmail: `${baseUsername}.inward.personal@example.com`,
-        address: `${dept.name} Inward Desk, Santhigiri`,
-        city: 'Thiruvananthapuram',
-        postalCode: '695589',
-        profileCompletedAt: new Date(),
-      },
-    });
-
-    const dispatcher = await prisma.user.create({
-      data: {
-        username: `${baseUsername}.dispatch`,
-        passwordHash,
-        name: `${dept.name} Dispatcher`,
-        email: `${baseUsername}.dispatch@example.com`,
-        roles: [UserRole.DISPATCHER],
-        departmentId: deptId,
-        divisionId: divId,
-        isActive: true,
-        profileApprovalStatus: 'APPROVED',
-        designation: 'Dispatcher',
-        staffId: `STAFF-${String(staffCounter++).padStart(3, '0')}`,
-        phone: '+91 9000000401',
-        firstName: dept.name,
-        lastName: 'Dispatcher',
-        employmentType: 'Permanent',
-        dateOfJoining: new Date('2023-02-15'),
-        workLocation: `${dept.name} Dispatch`,
-        accountStatus: 'Active',
-        personalEmail: `${baseUsername}.dispatch.personal@example.com`,
-        address: `${dept.name} Dispatch, Santhigiri`,
-        city: 'Thiruvananthapuram',
-        postalCode: '695589',
-        profileCompletedAt: new Date(),
-      },
-    });
-
-    const approver = await prisma.user.create({
-      data: {
-        username: `${baseUsername}.approver`,
-        passwordHash,
-        name: `${dept.name} Approval Authority`,
-        email: `${baseUsername}.approver@example.com`,
-        roles: [UserRole.APPROVAL_AUTHORITY],
-        departmentId: deptId,
-        divisionId: divId,
-        isActive: true,
-        profileApprovalStatus: 'APPROVED',
-        designation: 'Approval Authority',
-        staffId: `STAFF-${String(staffCounter++).padStart(3, '0')}`,
-        phone: '+91 9000000501',
-        firstName: dept.name,
-        lastName: 'Approver',
-        employmentType: 'Permanent',
-        dateOfJoining: new Date('2023-03-01'),
-        workLocation: `${dept.name} Office`,
-        accountStatus: 'Active',
-        personalEmail: `${baseUsername}.approver.personal@example.com`,
-        address: `${dept.name} Office, Santhigiri`,
-        city: 'Thiruvananthapuram',
-        postalCode: '695589',
-        profileCompletedAt: new Date(),
-      },
-    });
-
-    deptUsers.push(admin, sectionOfficer, inwardDesk, dispatcher, approver);
-  }
-
-  const allUsers = [superAdmin, ...deptUsers];
-
-  for (const user of allUsers) {
-    await prisma.userPoints.create({
-      data: {
-        userId: user.id,
-        basePoints: 1000,
-        currentPoints: 1000,
-      },
-    });
-  }
-  console.log('✅ Users and UserPoints created');
+  await prisma.userPoints.create({
+    data: {
+      userId: superAdmin.id,
+      basePoints: 1000,
+      currentPoints: 1000,
+    },
+  });
+  console.log('✅ UserPoints for Super Admin');
 
   // Default Workflow: Inward → Section Officer → Department Admin → Approval Authority → Dispatch → End
   const defaultWorkflow = await prisma.workflow.create({
@@ -449,7 +346,6 @@ async function main() {
     }
   };
 
-  // Default SLA norm: 48 hours
   await setGlobalSetting(
     'defaultSlaNormHours',
     '48',
@@ -477,10 +373,7 @@ async function main() {
   console.log('✅ SAGE global config (business hours, OPTIMUM_TIME, IN_PROGRESS_PERCENTAGE)');
 
   console.log('🎉 Seed completed successfully!');
-  console.log('\n📋 Test Accounts:');
-  console.log('  Super Admin: admin / admin123');
-  console.log('  Dept users (per department, password123):');
-  console.log('    <code>.admin, <code>.section, <code>.inward, <code>.dispatch, <code>.approver');
+  console.log('\n📋 Login: Super Admin — username: super.admin / password: Sup3r.4dm!n@s4nthigiri');
 }
 
 main()

@@ -178,12 +178,39 @@ const navigation = {
           name: 'Files',
           icon: FolderOpen,
           children: [
+            { name: 'New File', href: '/files/new', icon: FilePlus },
             { name: 'Inbox', href: '/files/inbox', icon: Inbox },
             { name: 'Pending Approvals', href: '/files/approvals', icon: CheckCircle },
             { name: 'Track File', href: '/files/track', icon: MapPin },
           ],
         },
         { name: 'Opinion Inbox', href: '/opinions/inbox', icon: MessageSquare },
+        {
+          name: 'Analytics',
+          icon: BarChart3,
+          children: [
+            { name: 'Overview', href: '/admin/analytics', icon: BarChart3 },
+            { name: 'Desk Performance', href: '/admin/analytics/desk-performance', icon: Activity },
+          ],
+        },
+      ],
+    },
+    {
+      title: 'Admin',
+      items: [
+        {
+          name: 'Desk Management',
+          icon: Monitor,
+          children: [
+            { name: 'Active Desk', href: '/admin/desk', icon: Monitor },
+            { name: 'Desk Capacity', href: '/admin/desks', icon: Building2 },
+            { name: 'Capacity Management', href: '/admin/capacity', icon: Settings },
+          ],
+        },
+        { name: 'Users', href: '/admin/users', icon: Users },
+        { name: 'Departments', href: '/admin/departments', icon: Building2 },
+        { name: 'Documents', href: '/admin/documents', icon: FileStack },
+        { name: 'Support Panel', href: '/support?supportView=true', icon: LifeBuoy },
       ],
     },
     {
@@ -307,7 +334,6 @@ const navigation = {
               { name: 'Capacity Management', href: '/admin/capacity', icon: Settings },
             ],
           },
-          { name: 'Workflows', href: '/admin/workflows', icon: GitBranch },
           { name: 'Users', href: '/admin/users', icon: Users },
           { name: 'Departments', href: '/admin/departments', icon: Building2 },
           { name: 'Documents', href: '/admin/documents', icon: FileStack },
@@ -474,6 +500,18 @@ export function AppSidebar() {
 
   const primaryRole = (user as { roles?: string[]; role?: string }).roles?.[0] ?? (user as { role?: string }).role ?? 'SECTION_OFFICER';
   const userNav = navigation[primaryRole as keyof typeof navigation] || navigation.SECTION_OFFICER;
+  const userNavWithGlobalOverview = userNav.map((group) => {
+    if (group.title !== 'Platform') return group;
+    const hasGlobalOverview = group.items.some((item) => item.href === '/admin/analytics');
+    if (hasGlobalOverview) return group;
+    return {
+      ...group,
+      items: [
+        ...group.items,
+        { name: 'Global Overview', href: '/admin/analytics', icon: BarChart3 },
+      ],
+    };
+  });
 
   const handleLogout = () => {
     logout();
@@ -511,7 +549,7 @@ export function AppSidebar() {
       </SidebarHeader>
       
       <SidebarContent className="px-2">
-        {userNav.map((group) => (
+        {userNavWithGlobalOverview.map((group) => (
           <SidebarGroup key={group.title} className="py-2">
             <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground/70 font-semibold px-2 mb-1">
               {navLabel(locale, group.title)}

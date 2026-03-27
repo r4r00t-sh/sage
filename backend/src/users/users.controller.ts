@@ -16,6 +16,7 @@ import {
   UploadedFile,
   StreamableFile,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Readable } from 'stream';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
@@ -89,6 +90,8 @@ export class UsersController {
     return result;
   }
 
+  /** Read-heavy; JWT + id checks already restrict abuse */
+  @SkipThrottle()
   @Get(':id/stats')
   async getUserStats(@Param('id') id: string, @Request() req) {
     if (
@@ -253,6 +256,8 @@ export class UsersController {
       emergencyContactPhoneAlt?: string;
       emergencyContactEmail?: string;
       adminNotes?: string;
+      uiAppearanceTheme?: string | null;
+      uiColorTheme?: string | null;
     },
   ) {
     // Only admins can update users (except self profile updates)
@@ -307,6 +312,8 @@ export class UsersController {
         emergencyContactPhoneAlt: body.emergencyContactPhoneAlt,
         emergencyContactEmail: body.emergencyContactEmail,
         adminNotes: body.adminNotes,
+        uiAppearanceTheme: body.uiAppearanceTheme,
+        uiColorTheme: body.uiColorTheme,
       });
     }
 

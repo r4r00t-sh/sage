@@ -53,6 +53,7 @@ import api from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store';
+import { hasRole } from '@/lib/auth-utils';
 import { Progress } from '@/components/ui/progress';
 
 interface UserCapacity {
@@ -83,6 +84,7 @@ interface DepartmentCapacity {
 
 export default function CapacityManagementPage() {
   const { user } = useAuthStore();
+  const canEditCapacity = hasRole(user, 'DEVELOPER');
   const [loading, setLoading] = useState(true);
   const [departments, setDepartments] = useState<any[]>([]);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
@@ -357,14 +359,18 @@ export default function CapacityManagementPage() {
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-right">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleEditUser(userCapacity)}
-                                >
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Edit
-                                </Button>
+                                {canEditCapacity ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleEditUser(userCapacity)}
+                                  >
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Edit
+                                  </Button>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">View only</span>
+                                )}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -380,7 +386,7 @@ export default function CapacityManagementPage() {
       ) : null}
 
       {/* Edit User Capacity Dialog */}
-      <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
+      <Dialog open={!!editingUser && canEditCapacity} onOpenChange={(open) => !open && setEditingUser(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit User Capacity</DialogTitle>

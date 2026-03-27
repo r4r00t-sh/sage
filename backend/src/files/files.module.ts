@@ -7,9 +7,10 @@ import { SecurityModule } from '../security/security.module';
 import { CapacityModule } from '../capacity/capacity.module';
 import { AuthModule } from '../auth/auth.module';
 import { WorkflowModule } from '../workflow/workflow.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [TimingModule, SecurityModule, CapacityModule, AuthModule, WorkflowModule],
+  imports: [TimingModule, SecurityModule, CapacityModule, AuthModule, WorkflowModule, NotificationsModule],
   controllers: [FilesPublicController, FilesController],
   providers: [FilesService],
   exports: [FilesService],

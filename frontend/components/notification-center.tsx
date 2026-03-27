@@ -13,21 +13,48 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import api from '@/lib/api';
 import { formatDistanceToNow } from 'date-fns';
+import { useRouter } from 'next/navigation';
+
+type NotificationType = 'file' | 'chat' | 'system' | 'user';
 
 interface Notification {
   id: string;
-  type: 'file' | 'chat' | 'system' | 'user';
+  type: NotificationType;
   title: string;
   message: string;
   read: boolean;
   createdAt: string;
   link?: string;
+  fileId?: string;
+  priority?: string;
+  metadata?: Record<string, unknown>;
+}
+
+const NOTIFICATION_TYPES: readonly NotificationType[] = [
+  'file',
+  'chat',
+  'system',
+  'user',
+];
+
+function parseNotificationType(raw: unknown): NotificationType {
+  const s = typeof raw === 'string' ? raw : '';
+  return NOTIFICATION_TYPES.includes(s as NotificationType)
+    ? (s as NotificationType)
+    : 'system';
 }
 
 export function NotificationCenter() {
+  const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -39,7 +66,21 @@ export function NotificationCenter() {
     setLoading(true);
     try {
       const response = await api.get('/notifications');
-      setNotifications(response.data);
+      const data = Array.isArray(response.data) ? response.data : [];
+      setNotifications(
+        data.map((n: any) => ({
+          id: String(n.id),
+          type: parseNotificationType(n.type),
+          title: n.title || 'Notification',
+          message: n.message || '',
+          read: Boolean(n.read ?? n.isRead),
+          createdAt: n.createdAt || new Date().toISOString(),
+          link: n.link ?? n?.metadata?.link,
+          fileId: n.fileId,
+          priority: n.priority,
+          metadata: n.metadata,
+        }))
+      );
     } catch (error) {
       console.error('Failed to fetch notifications:', error);
     } finally {
@@ -49,7 +90,7 @@ export function NotificationCenter() {
 
   const markAsRead = async (id: string) => {
     try {
-      await api.patch(`/notifications/${id}/read`);
+      await api.post(`/notifications/${id}/read`);
       setNotifications(prev =>
         prev.map(n => n.id === id ? { ...n, read: true } : n)
       );
@@ -60,7 +101,7 @@ export function NotificationCenter() {
 
   const markAllAsRead = async () => {
     try {
-      await api.patch('/notifications/read-all');
+      await api.post('/notifications/mark-all-read');
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     } catch (error) {
       console.error('Failed to mark all as read:', error);
@@ -69,7 +110,7 @@ export function NotificationCenter() {
 
   const deleteNotification = async (id: string) => {
     try {
-      await api.delete(`/notifications/${id}`);
+      await api.post(`/notifications/${id}/dismiss`);
       setNotifications(prev => prev.filter(n => n.id !== id));
     } catch (error) {
       console.error('Failed to delete notification:', error);
@@ -77,6 +118,7 @@ export function NotificationCenter() {
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
+  const hasUrgentUnread = notifications.some((n) => !n.read && (n.priority === 'urgent' || n.priority === 'high'));
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -88,6 +130,30 @@ export function NotificationCenter() {
     }
   };
 
+  const openNotification = async (notification: Notification) => {
+    if (!notification.read) {
+      await markAsRead(notification.id);
+    }
+    if (notification.link) {
+      router.push(notification.link);
+      setOpen(false);
+      return;
+    }
+    // backend-backed notifications: metadata.link or fileId are used for deep-linking
+    try {
+      const raw = notifications.find((n) => n.id === notification.id) as any;
+      const metadataLink = raw?.metadata?.link;
+      const fileId = raw?.fileId;
+      if (typeof metadataLink === 'string' && metadataLink) {
+        router.push(metadataLink);
+      } else if (typeof fileId === 'string' && fileId) {
+        router.push(`/files/${fileId}`);
+      }
+    } finally {
+      setOpen(false);
+    }
+  };
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -95,8 +161,8 @@ export function NotificationCenter() {
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <Badge 
-              variant="destructive" 
-              className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+              variant="secondary"
+              className={`absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs text-white ${hasUrgentUnread ? 'bg-red-600' : 'bg-green-600'}`}
             >
               {unreadCount > 9 ? '9+' : unreadCount}
             </Badge>
@@ -137,6 +203,7 @@ export function NotificationCenter() {
                   className={`p-4 hover:bg-muted/50 transition-colors ${
                     !notification.read ? 'bg-primary/5' : ''
                   }`}
+                  onClick={() => openNotification(notification)}
                 >
                   <div className="flex gap-3">
                     <div className={`mt-1 ${!notification.read ? 'text-primary' : 'text-muted-foreground'}`}>

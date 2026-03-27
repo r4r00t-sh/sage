@@ -163,13 +163,13 @@ class _FileDetailScreenState extends State<FileDetailScreen> with SingleTickerPr
     final isCreator = f.createdById == userId;
     final isUnassigned = f.assignedToId == null || f.assignedToId!.isEmpty;
     final roles = auth.user?.roles ?? [];
-    final isSuperAdmin = roles.contains('SUPER_ADMIN');
-    return isAssignee || (isCreator && isUnassigned) || isSuperAdmin;
+    final isTechPanel = roles.contains('DEVELOPER') || roles.contains('SUPER_ADMIN');
+    return isAssignee || (isCreator && isUnassigned) || isTechPanel;
   }
 
   bool _canRecall(FileModel f) {
     final roles = context.read<AuthProvider>().user?.roles ?? [];
-    return roles.contains('SUPER_ADMIN');
+    return roles.contains('DEVELOPER') || roles.contains('SUPER_ADMIN');
   }
 
   List<Map<String, dynamic>> _displayAttachments(FileModel f) {

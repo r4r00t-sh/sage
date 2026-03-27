@@ -22,7 +22,7 @@ class _FeaturesScreenState extends State<FeaturesScreen> {
   bool _enableDefaultDueTime = true;
   final _hoursController = TextEditingController(text: '48');
 
-  bool _isSuper(UserModel? u) => u?.hasRole('SUPER_ADMIN') == true || u?.hasRole('DEVELOPER') == true;
+  bool _isTechPanel(UserModel? u) => u?.hasRole('DEVELOPER') == true;
 
   @override
   void initState() {
@@ -46,7 +46,7 @@ class _FeaturesScreenState extends State<FeaturesScreen> {
 
       final user = context.read<AuthProvider>().user;
       final myDept = user?.departmentId;
-      final isSuper = _isSuper(user);
+      final isSuper = _isTechPanel(user);
 
       String? sla;
       String? enabled;
@@ -85,7 +85,7 @@ class _FeaturesScreenState extends State<FeaturesScreen> {
       return;
     }
     final user = context.read<AuthProvider>().user;
-    final isSuper = _isSuper(user);
+    final isSuper = _isTechPanel(user);
     final myDept = user?.departmentId;
 
     setState(() => _saving = true);
@@ -135,6 +135,7 @@ class _FeaturesScreenState extends State<FeaturesScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final padding = Responsive.padding(context);
+    final isTechPanel = _isTechPanel(context.watch<AuthProvider>().user);
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
       return Center(
@@ -174,7 +175,7 @@ class _FeaturesScreenState extends State<FeaturesScreen> {
                     title: const Text('Enable default due time'),
                     subtitle: const Text('Auto-assign a due date/time when creating files'),
                     value: _enableDefaultDueTime,
-                    onChanged: _saving ? null : (v) => setState(() => _enableDefaultDueTime = v),
+                    onChanged: (_saving || !isTechPanel) ? null : (v) => setState(() => _enableDefaultDueTime = v),
                   ),
                   const SizedBox(height: 8),
                   TextField(
@@ -184,17 +185,24 @@ class _FeaturesScreenState extends State<FeaturesScreen> {
                       labelText: 'Default due time (hours)',
                       border: OutlineInputBorder(),
                     ),
-                    enabled: !_saving,
+                    enabled: !_saving && isTechPanel,
                   ),
+                  if (!isTechPanel) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'View only. Global parameter editing is restricted to Tech Panel.',
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   FilledButton.icon(
-                    onPressed: _saving ? null : _save,
+                    onPressed: (_saving || !isTechPanel) ? null : _save,
                     icon: _saving ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save),
                     label: const Text('Save'),
                   ),
                   const SizedBox(height: 8),
                   OutlinedButton.icon(
-                    onPressed: _saving ? null : _backfillDueTimes,
+                    onPressed: (_saving || !isTechPanel) ? null : _backfillDueTimes,
                     icon: const Icon(Icons.history),
                     label: const Text('Backfill due times'),
                   ),

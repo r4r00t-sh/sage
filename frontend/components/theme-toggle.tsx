@@ -9,9 +9,30 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useTheme } from '@/components/theme-provider';
+import { useAuthStore } from '@/lib/store';
+import { persistUserUiThemes } from '@/lib/persist-user-theme';
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+  const { setTheme, colorTheme } = useTheme();
+  const { user, token, setAuth } = useAuthStore();
+
+  const apply = async (mode: 'light' | 'dark' | 'system') => {
+    setTheme(mode);
+    if (!user?.id || !token) return;
+    try {
+      await persistUserUiThemes(user.id, mode, colorTheme);
+      setAuth(
+        {
+          ...user,
+          uiAppearanceTheme: mode,
+          uiColorTheme: colorTheme === 'neutral' ? null : colorTheme,
+        },
+        token
+      );
+    } catch {
+      // Navbar: keep UI change; account sync can retry from Settings
+    }
+  };
 
   return (
     <DropdownMenu>
@@ -23,15 +44,15 @@ export function ThemeToggle() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => setTheme('light')}>
+        <DropdownMenuItem onClick={() => void apply('light')}>
           <Sun className="mr-2 h-4 w-4" />
           Light
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme('dark')}>
+        <DropdownMenuItem onClick={() => void apply('dark')}>
           <Moon className="mr-2 h-4 w-4" />
           Dark
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme('system')}>
+        <DropdownMenuItem onClick={() => void apply('system')}>
           <Monitor className="mr-2 h-4 w-4" />
           System
         </DropdownMenuItem>

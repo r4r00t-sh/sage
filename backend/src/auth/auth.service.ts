@@ -96,7 +96,12 @@ export class AuthService {
 
     const userWithAvatarAndProfile = await this.prisma.user.findUnique({
       where: { id: user.id },
-      select: { avatarKey: true, profileCompletedAt: true },
+      select: {
+        avatarKey: true,
+        profileCompletedAt: true,
+        uiAppearanceTheme: true,
+        uiColorTheme: true,
+      },
     });
 
     const profileCompletedAt =
@@ -117,6 +122,8 @@ export class AuthService {
         avatarKey: userWithAvatarAndProfile?.avatarKey ?? null,
         mustChangePassword: user.mustChangePassword ?? false,
         profileCompletedAt,
+        uiAppearanceTheme: userWithAvatarAndProfile?.uiAppearanceTheme ?? null,
+        uiColorTheme: userWithAvatarAndProfile?.uiColorTheme ?? null,
       },
     };
   }

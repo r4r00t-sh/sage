@@ -28,7 +28,7 @@ export class DesksController {
   // Create desk (Admin only)
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.DEPT_ADMIN)
+  @Roles(UserRole.DEVELOPER)
   async createDesk(
     @Request() req,
     @Body()
@@ -98,7 +98,7 @@ export class DesksController {
   // Check and auto-create desk if needed
   @Post('auto-create')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.DEPT_ADMIN)
+  @Roles(UserRole.DEVELOPER)
   async checkAndAutoCreateDesk(
     @Request() req,
     @Body() body: { divisionId?: string },
@@ -117,7 +117,7 @@ export class DesksController {
   // Update desk
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.DEPT_ADMIN)
+  @Roles(UserRole.DEVELOPER)
   async updateDesk(
     @Param('id') id: string,
     @Request() req,
@@ -137,7 +137,7 @@ export class DesksController {
   // Delete desk
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.DEPT_ADMIN)
+  @Roles(UserRole.DEVELOPER)
   async deleteDesk(@Param('id') id: string, @Request() req) {
     return this.desksService.deleteDesk(id, req.user.id, req.user.roles ?? []);
   }

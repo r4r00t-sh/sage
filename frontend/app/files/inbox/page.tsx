@@ -700,8 +700,8 @@ function InboxContent() {
                               <MapPin className="mr-2 h-4 w-4" />
                               Track File
                             </DropdownMenuItem>
-                            {hasAnyRole(user, ['SECTION_OFFICER', 'DEPT_ADMIN', 'SUPER_ADMIN']) && (
-                              <DropdownMenuItem onClick={(e) => e.stopPropagation()}>
+                            {hasAnyRole(user, ['SECTION_OFFICER', 'DEPT_ADMIN', 'APPROVAL_AUTHORITY', 'SUPER_ADMIN', 'DEVELOPER']) && (
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/files/${file.id}?action=forward`); }}>
                                 <Send className="mr-2 h-4 w-4" />
                                 Forward File
                               </DropdownMenuItem>

@@ -9,6 +9,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -65,7 +71,6 @@ import {
   Timer,
   Loader2,
   MessageSquare,
-  CheckCircle,
   Trash2,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -945,7 +950,6 @@ function FileDetailContent() {
   const [file, setFile] = useState<FileDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [forwardModalOpen, setForwardModalOpen] = useState(false);
-  const [submitToSectionOfficerLoading, setSubmitToSectionOfficerLoading] = useState(false);
   const [opinionModalOpen, setOpinionModalOpen] = useState(false);
   const [recallModalOpen, setRecallModalOpen] = useState(false);
   const [showSetDueTimeDialog, setShowSetDueTimeDialog] = useState(false);
@@ -1032,28 +1036,6 @@ function FileDetailContent() {
     }
   }, [fileId]);
 
-  const handleSubmitToSectionOfficer = async () => {
-    if (!file?.id) return;
-    setSubmitToSectionOfficerLoading(true);
-    try {
-      await api.post(`/files/${file.id}/forward`, {
-        submitToSectionOfficer: true,
-        remarks: '',
-      });
-      toast.success('File submitted', {
-        description: 'Sent to Section Officer as per workflow.',
-      });
-      await fetchFile();
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
-      toast.error('Submit failed', {
-        description: err.response?.data?.message || 'An error occurred',
-      });
-    } finally {
-      setSubmitToSectionOfficerLoading(false);
-    }
-  };
-
   const fetchFile = async () => {
     try {
       const response = await api.get(`/files/${fileId}`);
@@ -1112,9 +1094,10 @@ function FileDetailContent() {
   const isCreator = file.createdBy?.id === user?.id;
   const isUnassigned = !file.assignedTo;
   const isMultiAssignment = (file.fileAssignments?.length ?? 0) > 1;
-  const isSuperAdmin = hasGodRole(user);
+  const isSuperAdmin = hasRole(user, 'SUPER_ADMIN');
   const isDeptAdmin = hasRole(user, 'DEPT_ADMIN');
-  const canSetDueTime = isSuperAdmin || isDeptAdmin;
+  const isTechPanel = hasRole(user, 'DEVELOPER');
+  const canSetDueTime = isTechPanel;
   
   // Role-based permission checks
   const isInwardDesk = hasRole(user, 'INWARD_DESK') && !isDeptAdmin && !isSuperAdmin;
@@ -1213,20 +1196,6 @@ function FileDetailContent() {
           <div className="flex gap-2">
             {canUseManualForward && (
               <>
-                {isInwardDesk && (
-                  <Button
-                    onClick={handleSubmitToSectionOfficer}
-                    disabled={submitToSectionOfficerLoading}
-                    className="transition-all duration-200 hover:shadow-md bg-green-600 hover:bg-green-700"
-                  >
-                    {submitToSectionOfficerLoading ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <CheckCircle className="mr-2 h-4 w-4" />
-                    )}
-                    Submit
-                  </Button>
-                )}
                 <Button
                   variant="outline"
                   onClick={() => setForwardModalOpen(true)}
@@ -1346,150 +1315,190 @@ function FileDetailContent() {
 
       {/* File Info Card - Full Width */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            File Information
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {file.description && (
-            <div>
-              <h4 className="text-sm font-medium text-muted-foreground mb-2">File Matter</h4>
-              <div
-                className="prose dark:prose-invert max-w-none text-sm file-rich-text"
-                dangerouslySetInnerHTML={{ __html: file.description }}
-              />
-            </div>
-          )}
-
-          <Separator />
-
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="space-y-1">
-              <h4 className="text-sm font-medium text-muted-foreground">Host Department</h4>
-              <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-                <DepartmentProfileLink departmentId={file.department.id} name={file.department.name} code={file.department.code} />
-              </div>
-            </div>
-            {file.originDesk && (
-              <div className="space-y-1">
-                <h4 className="text-sm font-medium text-muted-foreground">Desk of Origin</h4>
-                <p className="text-sm font-medium">
-                  {[file.originDesk.department?.name, file.originDesk.division?.name, file.originDesk.name].filter(Boolean).join(' / ')}
-                </p>
-                <p className="text-xs text-muted-foreground">{file.originDesk.code}</p>
-              </div>
-            )}
-            <div className="space-y-1">
-              <h4 className="text-sm font-medium text-muted-foreground">Current Location</h4>
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
-                {file.currentDivision ? (
-                  <DivisionProfileLink departmentId={file.department.id} divisionId={file.currentDivision.id} name={file.currentDivision.name} />
-                ) : (file.fileAssignments && file.fileAssignments.length > 0) ? (
-                  <span className="font-medium">Multiple departments</span>
-                ) : (
-                  <span className="font-medium">General</span>
+        <Accordion type="single" collapsible defaultValue="file-info" className="w-full">
+          <AccordionItem value="file-info" className="border-none">
+            <AccordionTrigger className="px-6 py-3 hover:no-underline [&[data-state=open]]:border-b">
+              <span className="flex items-center gap-2 font-semibold">
+                <FileText className="h-5 w-5" />
+                File Information
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="px-6 pb-4 pt-0">
+              <div className="space-y-4 pt-3">
+                {file.description && (
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground mb-2">File Matter</h4>
+                    <div
+                      className="prose dark:prose-invert max-w-none text-sm file-rich-text"
+                      dangerouslySetInnerHTML={{ __html: file.description }}
+                    />
+                  </div>
                 )}
-              </div>
-            </div>
-            <div className="space-y-1">
-              <h4 className="text-sm font-medium text-muted-foreground">Created By</h4>
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-muted-foreground" />
-                <UserProfileLink userId={file.createdBy.id} name={file.createdBy.name} />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <h4 className="text-sm font-medium text-muted-foreground">Assigned To</h4>
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-muted-foreground" />
-                {file.assignedTo ? (
-                  <UserProfileLink userId={file.assignedTo.id} name={file.assignedTo.name} />
-                ) : file.fileAssignments && file.fileAssignments.length > 0 ? (
-                  <span className="text-sm">
-                    {hasActiveAssignment && file.fileAssignments.length > 1 ? (
-                      <>You <span className="text-muted-foreground">(and {file.fileAssignments.length - 1} other department(s))</span></>
-                    ) : hasActiveAssignment ? (
-                      'You'
-                    ) : (
-                      <>
-                        {file.fileAssignments.map((a) => (
-                          <span key={a.id} className="inline-flex items-center gap-1 mr-1.5">
-                            <UserProfileLink userId={a.toUser.id} name={a.toUser.name} />
-                            {a.toUser.department?.name && <span className="text-muted-foreground">({a.toUser.department.name})</span>}
-                          </span>
-                        ))}
-                      </>
+
+                <Separator />
+
+                {/* Row 1: keep the 4 columns stable so Row 2 can align under them */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-medium text-muted-foreground">Host Department</h4>
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                      <DepartmentProfileLink
+                        departmentId={file.department.id}
+                        name={file.department.name}
+                        code={file.department.code}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-medium text-muted-foreground">Current Location</h4>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      {file.currentDivision ? (
+                        <DivisionProfileLink
+                          departmentId={file.department.id}
+                          divisionId={file.currentDivision.id}
+                          name={file.currentDivision.name}
+                        />
+                      ) : file.fileAssignments && file.fileAssignments.length > 0 ? (
+                        <span className="font-medium">Multiple departments</span>
+                      ) : (
+                        <span className="font-medium">General</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-medium text-muted-foreground">Created By</h4>
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <UserProfileLink userId={file.createdBy.id} name={file.createdBy.name} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-medium text-muted-foreground">Assigned To</h4>
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      {file.assignedTo ? (
+                        <UserProfileLink userId={file.assignedTo.id} name={file.assignedTo.name} />
+                      ) : file.fileAssignments && file.fileAssignments.length > 0 ? (
+                        <span className="text-sm">
+                          {hasActiveAssignment && file.fileAssignments.length > 1 ? (
+                            <>
+                              You{' '}
+                              <span className="text-muted-foreground">
+                                (and {file.fileAssignments.length - 1} other department(s))
+                              </span>
+                            </>
+                          ) : hasActiveAssignment ? (
+                            'You'
+                          ) : (
+                            <>
+                              {file.fileAssignments.map((a) => (
+                                <span key={a.id} className="inline-flex items-center gap-1 mr-1.5">
+                                  <UserProfileLink userId={a.toUser.id} name={a.toUser.name} />
+                                  {a.toUser.department?.name && (
+                                    <span className="text-muted-foreground">({a.toUser.department.name})</span>
+                                  )}
+                                </span>
+                              ))}
+                            </>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="font-medium">Unassigned</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {file.originDesk && (
+                  <div className="rounded-lg border bg-muted/30 px-4 py-3">
+                    <h4 className="text-sm font-medium text-muted-foreground mb-1">Desk of Origin</h4>
+                    <p className="text-sm font-medium">
+                      {[file.originDesk.department?.name, file.originDesk.division?.name, file.originDesk.name]
+                        .filter(Boolean)
+                        .join(' / ')}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{file.originDesk.code}</p>
+                  </div>
+                )}
+
+                {(file.intendedDivision || file.intendedUser) && (
+                  <div className="rounded-lg border bg-muted/30 px-4 py-3 flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-muted-foreground shrink-0">For:</span>
+                    <span className="font-medium flex items-center gap-1 flex-wrap">
+                      {file.intendedDivision && (
+                        <DivisionProfileLink
+                          departmentId={file.department.id}
+                          divisionId={file.intendedDivision.id}
+                          name={file.intendedDivision.name}
+                        />
+                      )}
+                      {file.intendedDivision && file.intendedUser && ' → '}
+                      {file.intendedUser && (
+                        <UserProfileLink userId={file.intendedUser.id} name={file.intendedUser.name} />
+                      )}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {file.intendedUser ? 'Inward can forward in one click' : 'At department/division inward desk'}
+                    </span>
+                  </div>
+                )}
+
+                <Separator />
+
+                {/* Row 2: align under Row 1 columns (Created under Host Dept, Due Date under Current Location, Arrived under Created By) */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-medium text-muted-foreground">Created</h4>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <span>{format(new Date(file.createdAt), 'PPP')}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDistanceToNow(new Date(file.createdAt), { addSuffix: true })}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-medium text-muted-foreground">Due Date</h4>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      {file.dueDate ? (
+                        <span>{format(new Date(file.dueDate), 'PPP')}</span>
+                      ) : (
+                        <span className="text-muted-foreground">Not set</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-medium text-muted-foreground">Arrived at Desk</h4>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      {file.deskArrivalTime ? (
+                        <span>{format(new Date(file.deskArrivalTime), 'PPp')}</span>
+                      ) : (
+                        <span className="text-muted-foreground">Not set</span>
+                      )}
+                    </div>
+                    {file.deskArrivalTime && (
+                      <p className="text-xs text-muted-foreground">
+                        {formatDistanceToNow(new Date(file.deskArrivalTime), { addSuffix: true })}
+                      </p>
                     )}
-                  </span>
-                ) : (
-                  <span className="font-medium">Unassigned</span>
-                )}
-              </div>
-            </div>
-          </div>
+                  </div>
 
-          {(file.intendedDivision || file.intendedUser) && (
-            <div className="rounded-lg border bg-muted/30 px-4 py-3 flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-medium text-muted-foreground shrink-0">For:</span>
-              <span className="font-medium flex items-center gap-1 flex-wrap">
-                {file.intendedDivision && (
-                  <DivisionProfileLink
-                    departmentId={file.department.id}
-                    divisionId={file.intendedDivision.id}
-                    name={file.intendedDivision.name}
-                  />
-                )}
-                {file.intendedDivision && file.intendedUser && ' → '}
-                {file.intendedUser && (
-                  <UserProfileLink userId={file.intendedUser.id} name={file.intendedUser.name} />
-                )}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {file.intendedUser ? 'Inward can forward in one click' : 'At department/division inward desk'}
-              </span>
-            </div>
-          )}
-
-          <Separator />
-
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="space-y-1">
-              <h4 className="text-sm font-medium text-muted-foreground">Created</h4>
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span>{format(new Date(file.createdAt), 'PPP')}</span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {formatDistanceToNow(new Date(file.createdAt), { addSuffix: true })}
-              </p>
-            </div>
-            {file.dueDate && (
-              <div className="space-y-1">
-                <h4 className="text-sm font-medium text-muted-foreground">Due Date</h4>
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span>{format(new Date(file.dueDate), 'PPP')}</span>
+                  {/* Keep the 4th column empty on large screens for perfect vertical alignment */}
+                  <div className="hidden lg:block" />
                 </div>
               </div>
-            )}
-            {file.deskArrivalTime && (
-              <div className="space-y-1">
-                <h4 className="text-sm font-medium text-muted-foreground">Arrived at Desk</h4>
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span>{format(new Date(file.deskArrivalTime), 'PPp')}</span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {formatDistanceToNow(new Date(file.deskArrivalTime), { addSuffix: true })}
-                </p>
-              </div>
-            )}
-          </div>
-        </CardContent>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </Card>
 
       {/* Main Content - Split Layout like Create File Page */}

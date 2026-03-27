@@ -78,8 +78,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: efiling-backend
     ports:
       - "3001:3001"
@@ -119,8 +119,8 @@ services:
   # Usage: docker compose run --rm backend-seed
   backend-seed:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: efiling-backend-seed
     environment:
       DATABASE_URL: "postgresql://efiling:efiling123@postgres:5432/efiling_db?schema=public"

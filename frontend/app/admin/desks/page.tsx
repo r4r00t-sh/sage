@@ -61,6 +61,8 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { DepartmentProfileLink } from '@/components/profile-links';
+import { useAuthStore } from '@/lib/store';
+import { hasRole } from '@/lib/auth-utils';
 
 interface Desk {
   id: string;
@@ -100,6 +102,8 @@ interface WorkloadSummary {
 }
 
 export default function DesksPage() {
+  const { user } = useAuthStore();
+  const canManageDesks = hasRole(user, 'DEVELOPER');
   const [desks, setDesks] = useState<Desk[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -279,12 +283,14 @@ export default function DesksPage() {
             Refresh
           </Button>
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Create Desk
-              </Button>
-            </DialogTrigger>
+            {canManageDesks && (
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Desk
+                </Button>
+              </DialogTrigger>
+            )}
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Create New Desk</DialogTitle>
@@ -455,7 +461,7 @@ export default function DesksPage() {
                 <TableHead>Utilization</TableHead>
                 <TableHead>Active Docks</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                {canManageDesks && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -605,24 +611,26 @@ export default function DesksPage() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEditDialog(desk)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setConfirmDeleteDeskId(desk.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    {canManageDesks && (
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditDialog(desk)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setConfirmDeleteDeskId(desk.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}

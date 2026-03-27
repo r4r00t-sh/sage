@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore, useChatStore } from '@/lib/store';
@@ -10,6 +10,7 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { PresenceClient } from '@/components/presence-client';
 import { ToastConsumer } from '@/components/toast-consumer';
 import { ThemeProvider } from '@/components/theme-provider';
+import { AuthUserThemeSync } from '@/components/auth-user-theme-sync';
 import { ChatFab } from '@/components/chat-fab';
 import { ChatSidebar } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
@@ -80,6 +81,27 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
     }
   }, [mounted, isAuthenticated, isPublicRoute, pathname, router]);
 
+  // Logged-in users should not stay on /login (e.g. after submit or restored session)
+  useEffect(() => {
+    if (!mounted || !isAuthenticated || pathname !== '/login') return;
+    if (mustChangePassword) {
+      router.replace(changePasswordPath);
+      return;
+    }
+    if (mustCompleteProfile) {
+      router.replace(completeProfilePath);
+      return;
+    }
+    router.replace('/dashboard');
+  }, [
+    mounted,
+    isAuthenticated,
+    pathname,
+    mustChangePassword,
+    mustCompleteProfile,
+    router,
+  ]);
+
   // Floating chat FAB + sidebar: render in portal so they're always on top and visible
   const chatWidget =
     mounted &&
@@ -96,32 +118,36 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
         )
       : null;
 
-  // Onboarding (change password / complete profile): only the form on a blank background, no sidebar/nav
-  if (isAuthenticated && isOnboardingRoute) {
-    const handleLogout = () => {
-      logout();
-      router.push('/login');
-    };
-    return (
-      <ThemeProvider defaultTheme="system" storageKey="efiling-theme">
-        <div className="min-h-screen bg-muted/30 flex flex-col items-center justify-start pt-12 pb-12 px-4 relative">
-          <div className="absolute top-4 right-4">
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground">
-              <LogOut className="mr-2 h-4 w-4" />
-              Log out
-            </Button>
-          </div>
-          <ToastConsumer />
-          <PageTransition>{children}</PageTransition>
-        </div>
-      </ThemeProvider>
-    );
-  }
+  const handleOnboardingLogout = () => {
+    logout();
+    router.push('/login');
+  };
 
-  // Show full layout only if authenticated and not on public routes
-  if (isAuthenticated && !isPublicRoute) {
-    return (
-      <ThemeProvider defaultTheme="system" storageKey="efiling-theme">
+  // Single ThemeProvider for the whole app shell so it does not remount on login → dashboard
+  // (remounting used to blank the UI because ThemeProvider returned null until mounted).
+  let shell: ReactNode;
+
+  if (isAuthenticated && isOnboardingRoute) {
+    shell = (
+      <div className="min-h-screen bg-muted/30 flex flex-col items-center justify-start pt-12 pb-12 px-4 relative">
+        <div className="absolute top-4 right-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleOnboardingLogout}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Log out
+          </Button>
+        </div>
+        <ToastConsumer />
+        <PageTransition>{children}</PageTransition>
+      </div>
+    );
+  } else if (isAuthenticated && !isPublicRoute) {
+    shell = (
+      <>
         <SidebarProvider>
           <AppSidebar />
           <SidebarInset className="bg-muted/30">
@@ -130,7 +156,6 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
             <main className="flex flex-1 flex-col">
               <PresenceClient />
               <ToastConsumer />
-              {/* Content container with proper spacing */}
               <div className="flex flex-1 flex-col gap-3 p-4 md:p-5">
                 <BreadcrumbNav />
                 <PageTransition>{children}</PageTransition>
@@ -141,25 +166,22 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
         {chatWidget}
         <CommandPalette />
         <KeyboardShortcuts />
-      </ThemeProvider>
+      </>
     );
+  } else if (!isAuthenticated && !isPublicRoute) {
+    shell = (
+      <div className="flex min-h-screen items-center justify-center bg-muted/30">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  } else {
+    shell = <PageTransition>{children}</PageTransition>;
   }
 
-  // Not authenticated on a protected route: show nothing while redirecting to login
-  if (!isAuthenticated && !isPublicRoute) {
-    return (
-      <ThemeProvider defaultTheme="system" storageKey="efiling-theme">
-        <div className="flex min-h-screen items-center justify-center bg-muted/30">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        </div>
-      </ThemeProvider>
-    );
-  }
-
-  // Public routes (login, etc.) - no sidebar/navbar, no presence/toast
   return (
     <ThemeProvider defaultTheme="system" storageKey="efiling-theme">
-      <PageTransition>{children}</PageTransition>
+      <AuthUserThemeSync />
+      {shell}
     </ThemeProvider>
   );
 }

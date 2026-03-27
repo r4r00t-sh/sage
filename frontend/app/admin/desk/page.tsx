@@ -49,7 +49,7 @@ interface UserPresence {
 
 const roleLabels: Record<string, string> = {
   DEVELOPER: 'Developer',
-  SUPER_ADMIN: 'Super Admin',
+  SUPER_ADMIN: 'Tech Panel',
   DEPT_ADMIN: 'Dept Admin',
   SUPPORT: 'Support',
   APPROVAL_AUTHORITY: 'Approval Authority',

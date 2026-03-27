@@ -159,6 +159,10 @@ model User {
   maxFilesPerDay Int?       @default(10) // User-level file capacity (set by admin)
   isActive     Boolean     @default(true)
   avatarKey    String?     // MinIO object key for profile avatar
+  /// light | dark | system — user UI preference (synced across devices)
+  uiAppearanceTheme String?
+  /// neutral | blue | green | … — color preset (see frontend COLOR_THEMES)
+  uiColorTheme      String?
   profileApprovalStatus ProfileApprovalStatus? // PENDING_APPROVAL until Super Admin approves
   approvedById String?
   approvedAt   DateTime?

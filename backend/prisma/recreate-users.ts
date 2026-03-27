@@ -15,7 +15,7 @@ async function main() {
   const usersToDelete = await prisma.user.findMany({
     where: {
       username: {
-        not: 'admin',
+        not: 'super.admin',
       },
     },
     select: { id: true },
@@ -26,7 +26,7 @@ async function main() {
     
     // Get super admin ID to reassign files
     const superAdmin = await prisma.user.findUnique({
-      where: { username: 'admin' },
+      where: { username: 'super.admin' },
       select: { id: true },
     });
     

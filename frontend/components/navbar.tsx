@@ -33,7 +33,7 @@ export function Navbar() {
   const getRoleBadgeStyle = () => {
     const roleStyles: Record<string, string> = {
       DEVELOPER: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800',
-      SUPER_ADMIN: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800',
+      SUPER_ADMIN: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800',
       DEPT_ADMIN: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800',
       SECTION_OFFICER: 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800',
       INWARD_DESK: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800',
@@ -75,7 +75,10 @@ export function Navbar() {
             getRoleBadgeStyle()
           )}
         >
-          {(((user as { roles?: string[]; role?: string }).roles?.[0] ?? (user as { role?: string }).role ?? '')).replace('_', ' ')}
+          {((((user as { roles?: string[]; role?: string }).roles?.[0] ?? (user as { role?: string }).role ?? '') === 'SUPER_ADMIN'
+            ? 'TECH_PANEL'
+            : ((user as { roles?: string[]; role?: string }).roles?.[0] ?? (user as { role?: string }).role ?? '')
+          )).replace('_', ' ')}
         </Badge>
         
         <Separator orientation="vertical" className="hidden sm:block h-5 mx-1" />

@@ -14,12 +14,21 @@ import {
 } from '@nestjs/common';
 import { DepartmentsService } from './departments.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { hasRole, hasAnyRole, hasGodRole } from '../auth/auth.helpers';
+import { hasAnyRole, hasGodRole } from '../auth/auth.helpers';
 
 @Controller('departments')
 @UseGuards(JwtAuthGuard)
 export class DepartmentsController {
   constructor(private departmentsService: DepartmentsService) {}
+
+  /** Super Admin and Developer (tech panel) only. */
+  private assertOrgStructureManager(req: { user?: { roles?: string[] } }) {
+    if (!hasGodRole(req.user)) {
+      throw new ForbiddenException(
+        'Only Super Admin or Tech Panel can create or modify departments and divisions',
+      );
+    }
+  }
 
   @Get()
   @Header('Cache-Control', 'no-store')
@@ -39,8 +48,10 @@ export class DepartmentsController {
 
   @Post()
   async createDepartment(
+    @Request() req: { user?: { roles?: string[] } },
     @Body() body: { name: string; code: string; organisationId: string },
   ) {
+    this.assertOrgStructureManager(req);
     return this.departmentsService.createDepartment(body);
   }
 
@@ -50,20 +61,28 @@ export class DepartmentsController {
     @Request() req: { user?: { roles?: string[] } },
     @Body() body: { name?: string; code?: string; defaultWorkflowId?: string | null },
   ) {
-    // Only Super Admin / Developer can set department default workflow
     if (body.defaultWorkflowId !== undefined && !hasGodRole(req.user)) {
-      const roles = req.user?.roles ?? [];
-      if (!roles.includes('SUPER_ADMIN') && !roles.includes('DEVELOPER')) {
-        throw new ForbiddenException(
-          'Only Super Admin can assign a department default workflow',
-        );
-      }
+      throw new ForbiddenException(
+        'Only Super Admin or Tech Panel can assign a department default workflow',
+      );
+    }
+    if (
+      (body.name !== undefined || body.code !== undefined) &&
+      !hasGodRole(req.user)
+    ) {
+      throw new ForbiddenException(
+        'Only Super Admin or Tech Panel can change department name or code',
+      );
     }
     return this.departmentsService.updateDepartment(id, body);
   }
 
   @Delete(':id')
-  async deleteDepartment(@Param('id') id: string) {
+  async deleteDepartment(
+    @Request() req: { user?: { roles?: string[] } },
+    @Param('id') id: string,
+  ) {
+    this.assertOrgStructureManager(req);
     return this.departmentsService.deleteDepartment(id);
   }
 
@@ -83,9 +102,11 @@ export class DepartmentsController {
 
   @Post(':id/divisions')
   async createDivision(
+    @Request() req: { user?: { roles?: string[] } },
     @Param('id') departmentId: string,
     @Body() body: { name: string },
   ) {
+    this.assertOrgStructureManager(req);
     return this.departmentsService.createDivision(departmentId, body.name);
   }
 

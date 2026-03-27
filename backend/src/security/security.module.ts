@@ -16,7 +16,8 @@ import { SsrfService } from './ssrf.service';
           {
             name: 'default',
             ttl: 60000, // 1 minute
-            limit: config.get<number>('RATE_LIMIT_DEFAULT', 100), // 100 requests per minute
+            // SPA + polling can burst; raise default (override with RATE_LIMIT_DEFAULT)
+            limit: config.get<number>('RATE_LIMIT_DEFAULT', 800),
           },
         ],
       }),

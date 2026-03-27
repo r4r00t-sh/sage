@@ -5,7 +5,7 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+COPY backend/package.json backend/package-lock.json* ./
 # Install dependencies from lockfile and then add pdf-lib for PDF export
 RUN npm ci && npm install pdf-lib
 
@@ -13,7 +13,9 @@ RUN npm ci && npm install pdf-lib
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY backend/ .
+# Repo-root cluster tree (used by prisma/seed.ts in Docker: /app/EFILE_CLUSTER_TREE.md)
+COPY EFILE_CLUSTER_TREE.md ./EFILE_CLUSTER_TREE.md
 
 # Generate Prisma Client
 RUN npx prisma generate
@@ -35,7 +37,8 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
-COPY docker-entrypoint.sh ./
+COPY --from=builder /app/EFILE_CLUSTER_TREE.md ./EFILE_CLUSTER_TREE.md
+COPY backend/docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
 EXPOSE 3001

@@ -655,6 +655,12 @@ export function ForwardFileModal({
                 key={`dept-select-${departments.length}`}
                 value={selectedDepartmentId || undefined}
                 onValueChange={(value) => {
+                  if (value === '__none__') {
+                    setSelectedDepartmentId('');
+                    setDivisionId('');
+                    setUserId('');
+                    return;
+                  }
                   setSelectedDepartmentId(value || '');
                   setDivisionId('');
                   setUserId('');
@@ -672,6 +678,9 @@ export function ForwardFileModal({
                   )}
                 </SelectTrigger>
                 <SelectContent className="z-[100] max-h-60 min-w-[var(--radix-select-trigger-width)]" position="popper" sideOffset={4}>
+                  <SelectItem value="__none__" className="py-2.5 text-muted-foreground">
+                    Clear selection
+                  </SelectItem>
                   {departments.length === 0 ? (
                     <div className="p-4 text-center text-sm text-muted-foreground">
                       No departments available
@@ -679,12 +688,7 @@ export function ForwardFileModal({
                   ) : (
                     departments.map((dept) => (
                       <SelectItem key={dept.id} value={dept.id} className="py-2.5">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-blue-100 text-blue-600 text-xs font-medium">
-                            {dept.code || dept.name.charAt(0)}
-                          </div>
-                          <span className="truncate">{dept.name}</span>
-                        </div>
+                        <span className="truncate">{dept.name}</span>
                       </SelectItem>
                     ))
                   )}
@@ -719,6 +723,11 @@ export function ForwardFileModal({
               <Select
                 value={divisionId}
                 onValueChange={(value) => {
+                  if (value === '__none__') {
+                    setDivisionId('');
+                    setUserId('');
+                    return;
+                  }
                   setDivisionId(value);
                   setUserId('');
                 }}
@@ -742,6 +751,9 @@ export function ForwardFileModal({
                   )}
                 </SelectTrigger>
                 <SelectContent className="z-[100] max-h-60 min-w-[var(--radix-select-trigger-width)] w-[var(--radix-select-trigger-width)]" position="popper" sideOffset={4}>
+                  <SelectItem value="__none__" className="py-2.5 text-muted-foreground">
+                    Clear selection
+                  </SelectItem>
                   {divisions.length === 0 ? (
                     <div className="p-4 text-center text-sm text-muted-foreground">
                       No divisions available
@@ -749,12 +761,7 @@ export function ForwardFileModal({
                   ) : (
                     divisions.map((division) => (
                       <SelectItem key={division.id} value={division.id} className="py-2.5 focus:bg-muted">
-                        <div className="flex items-center gap-2 min-w-0 w-full">
-                          <span className="shrink-0 w-7 text-center rounded bg-blue-100 text-blue-600 text-xs font-medium py-0.5">
-                            {division.code || division.name.charAt(0)}
-                          </span>
-                          <span className="truncate min-w-0 flex-1">{division.name}</span>
-                        </div>
+                        <span className="truncate min-w-0 flex-1">{division.name}</span>
                       </SelectItem>
                     ))
                   )}
@@ -779,7 +786,7 @@ export function ForwardFileModal({
               </Label>
               <Select
                 value={userId}
-                onValueChange={setUserId}
+                onValueChange={(value) => setUserId(value === '__none__' ? '' : value)}
                 disabled={loading || loadingUsers}
               >
                 <SelectTrigger className={cn('h-11 w-full', !divisionId && 'opacity-60')}>
@@ -793,6 +800,9 @@ export function ForwardFileModal({
                   )}
                 </SelectTrigger>
                 <SelectContent className="z-[100] max-h-60" position="popper" sideOffset={4}>
+                  <SelectItem value="__none__" className="text-muted-foreground">
+                    Clear selection
+                  </SelectItem>
                   {users.length === 0 ? (
                     <div className="p-4 text-center text-sm text-muted-foreground">
                       No users in this division
@@ -800,16 +810,11 @@ export function ForwardFileModal({
                   ) : (
                     users.map((u) => (
                       <SelectItem key={u.id} value={u.id}>
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-purple-600 text-white text-xs font-medium">
-                            {getInitials(u.name)}
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{u.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              @{u.username}
-                            </span>
-                          </div>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{u.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            @{u.username}
+                          </span>
                         </div>
                       </SelectItem>
                     ))

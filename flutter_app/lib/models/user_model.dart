@@ -53,4 +53,7 @@ class UserModel {
 
   bool hasRole(String r) => roles?.contains(r) == true || role == r;
   bool hasAnyRole(List<String> list) => list.any(hasRole);
+
+  /// Super Admin or Tech Panel (Developer) — full app / org-structure management.
+  bool get hasGodRole => hasAnyRole(['DEVELOPER', 'SUPER_ADMIN']);
 }

@@ -36,7 +36,7 @@ export default function RootLayout({
         {/* Set data-locale before paint when user previously chose Malayalam */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var d=localStorage.getItem('locale-storage');if(d){var j=JSON.parse(d);if(j.state&&j.state.locale==='ml'){document.documentElement.setAttribute('data-locale','ml');document.documentElement.lang='ml';}}}catch(e){}})();`,
+            __html: `(function(){try{var d=localStorage.getItem('locale-storage');if(d){var j=JSON.parse(d);if(j.state&&j.state.locale==='ml'){document.documentElement.setAttribute('data-locale','ml');document.documentElement.lang='ml';}}}catch(e){}try{var ct=localStorage.getItem('efiling-color-theme');if(ct&&ct!=='neutral')document.documentElement.setAttribute('data-color-theme',ct);else document.documentElement.removeAttribute('data-color-theme');}catch(e){}})();`,
           }}
         />
       </head>
