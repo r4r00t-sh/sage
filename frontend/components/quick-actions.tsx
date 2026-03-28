@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
+import { AiTextarea } from '@/components/ai-textarea';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -35,6 +35,9 @@ import {
   Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ASSISTANT_ENABLED } from '@/lib/feature-flags';
+import { useAssistantStore } from '@/lib/store';
+import { GeminiIcon } from '@/components/gemini-icon';
 
 interface QuickActionsProps {
   fileId: string;
@@ -53,6 +56,7 @@ export function QuickActions({
   userRoles,
   onActionComplete,
 }: QuickActionsProps) {
+  const openAssistantForFile = useAssistantStore((s) => s.openAssistantForFile);
   const [loading, setLoading] = useState<string | null>(null);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [showReturnDialog, setShowReturnDialog] = useState(false);
@@ -144,6 +148,7 @@ export function QuickActions({
     <>
       {/* Main Action Bar */}
       <div className="flex flex-wrap items-center gap-3 p-4 bg-muted/30 rounded-xl border">
+        <div className="flex flex-wrap items-center gap-3 min-w-0 flex-1">
         {/* Hold / Release */}
         {canHold && (
           <Button
@@ -205,20 +210,38 @@ export function QuickActions({
           </Button>
         )}
 
-        {/* Divider */}
-        <div className="h-8 w-px bg-border mx-2" />
+        </div>
 
-        {/* Request Extension */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowExtensionDialog(true)}
-          disabled={loading !== null}
-          className="gap-2 text-muted-foreground"
-        >
-          <Clock className="h-4 w-4" />
-          Request Extension
-        </Button>
+        <div className="flex flex-wrap items-center gap-2 sm:ml-auto shrink-0">
+          <div className="hidden sm:block h-8 w-px bg-border" aria-hidden />
+
+          {/* Request Extension */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowExtensionDialog(true)}
+            disabled={loading !== null}
+            className="gap-2 text-muted-foreground"
+          >
+            <Clock className="h-4 w-4" />
+            Request Extension
+          </Button>
+
+          {ASSISTANT_ENABLED && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2 border-foreground/20 text-foreground"
+              onClick={() => openAssistantForFile(fileId, fileNumber)}
+              disabled={loading !== null}
+              title="Ask Gemini about this file"
+            >
+              <GeminiIcon className="h-4 w-4 shrink-0" />
+              Ask AI
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Reject Dialog */}
@@ -236,12 +259,14 @@ export function QuickActions({
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="reject-reason">Reason for Rejection *</Label>
-              <Textarea
+              <AiTextarea
                 id="reject-reason"
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Enter the reason for rejection..."
+                placeholder="Enter the reason… (@Ai + Ctrl+Enter)"
                 rows={4}
+                fileId={fileId}
+                fieldHint="Rejection reason"
               />
             </div>
           </div>
@@ -302,12 +327,14 @@ export function QuickActions({
             </div>
             <div className="space-y-2">
               <Label htmlFor="return-remarks">Remarks (Optional)</Label>
-              <Textarea
+              <AiTextarea
                 id="return-remarks"
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Add any comments or queries..."
+                placeholder="Add any comments… (@Ai + Ctrl+Enter)"
                 rows={3}
+                fileId={fileId}
+                fieldHint="Return remarks"
               />
             </div>
           </div>
@@ -341,12 +368,14 @@ export function QuickActions({
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="hold-reason">Reason for Hold *</Label>
-              <Textarea
+              <AiTextarea
                 id="hold-reason"
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Why is this file being put on hold?"
+                placeholder="Why is this file on hold? (@Ai + Ctrl+Enter)"
                 rows={3}
+                fileId={fileId}
+                fieldHint="Hold reason"
               />
             </div>
           </div>
@@ -393,12 +422,14 @@ export function QuickActions({
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="approve-remarks">Note (Optional)</Label>
-              <Textarea
+              <AiTextarea
                 id="approve-remarks"
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Add any approval notes..."
+                placeholder="Add any approval notes… (@Ai + Ctrl+Enter)"
                 rows={3}
+                fileId={fileId}
+                fieldHint="Submit or approval note"
               />
             </div>
           </div>

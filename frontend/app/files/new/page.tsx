@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
+import { AiInput } from '@/components/ai-input';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Editor } from '@/components/ui/editor';
@@ -406,7 +407,7 @@ export default function NewFilePage() {
                   <Label htmlFor="subject" className="text-base">
                     Subject <span className="text-destructive">*</span>
                   </Label>
-                  <Input
+                  <AiInput
                     id="subject"
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
@@ -414,6 +415,7 @@ export default function NewFilePage() {
                     required
                     disabled={loading}
                     className="h-12 text-base"
+                    fieldHint="File subject line"
                   />
                 </div>
 
@@ -425,9 +427,14 @@ export default function NewFilePage() {
                   <Editor
                     value={fileMatter}
                     onChange={setFileMatter}
-                    placeholder="Enter the detailed file matter..."
+                    placeholder="Enter the detailed file matter… (type @Ai and your instruction, then Ctrl+Enter)"
                     disabled={loading}
                     minHeight="200px"
+                    inlineAi={{
+                      fieldHint: 'File matter / description body',
+                      extraContext: () =>
+                        subject.trim() ? `Subject: ${subject.trim()}` : null,
+                    }}
                   />
                 </div>
               </CardContent>

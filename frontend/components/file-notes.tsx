@@ -184,9 +184,13 @@ export function FileNotes({ fileId, notes: initialNotes, noteLogGrouped, onNoteA
             <Editor
               value={newNote}
               onChange={setNewNote}
-              placeholder="Write a detailed note for this file…"
+              placeholder="Write a detailed note… (@Ai + Ctrl+Enter for AI draft)"
               disabled={loading}
               minHeight="140px"
+              inlineAi={{
+                fileId,
+                fieldHint: 'Internal file note',
+              }}
             />
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>{newNote.length} characters</span>

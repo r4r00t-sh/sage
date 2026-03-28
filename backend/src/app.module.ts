@@ -32,6 +32,7 @@ import { ChatModule } from './chat/chat.module';
 import { DeskProfileModule } from './desk-profile/desk-profile.module';
 import { CapacityModule } from './capacity/capacity.module';
 import { TicketsModule } from './tickets/tickets.module';
+import { AssistantModule } from './assistant/assistant.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { TicketsModule } from './tickets/tickets.module';
     DeskProfileModule,
     CapacityModule,
     TicketsModule,
+    AssistantModule,
   ],
   controllers: [AppController],
   providers: [AppService],

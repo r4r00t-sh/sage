@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { AiTextarea } from '@/components/ai-textarea';
 import {
   Select,
   SelectContent,
@@ -303,12 +303,13 @@ export default function NewTicketPage() {
             )}
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
-              <Textarea
+              <AiTextarea
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Describe your issue in detail..."
+                placeholder="Describe your issue… (@Ai + Ctrl+Enter)"
                 rows={6}
+                fieldHint="Support ticket description"
               />
             </div>
             <div className="flex gap-2">

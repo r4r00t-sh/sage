@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { AiTextarea } from '@/components/ai-textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog,
@@ -505,11 +505,17 @@ export default function WorkflowsPage() {
 
             <div>
               <Label>Description</Label>
-              <Textarea
-                placeholder="Describe what this workflow does..."
+              <AiTextarea
+                placeholder="Describe this workflow… (@Ai + Ctrl+Enter)"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={3}
+                fieldHint="Workflow description"
+                extraContext={() =>
+                  formData.code.trim()
+                    ? `Workflow code: ${formData.code}`
+                    : null
+                }
               />
             </div>
 

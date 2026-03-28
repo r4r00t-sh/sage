@@ -3,7 +3,7 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname, useRouter } from 'next/navigation';
-import { useAuthStore, useChatStore } from '@/lib/store';
+import { useAuthStore, useAssistantStore, useChatStore } from '@/lib/store';
 import { AppSidebar } from '@/components/app-sidebar';
 import { Navbar } from '@/components/navbar';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
@@ -11,7 +11,9 @@ import { PresenceClient } from '@/components/presence-client';
 import { ToastConsumer } from '@/components/toast-consumer';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthUserThemeSync } from '@/components/auth-user-theme-sync';
-import { CHAT_ENABLED } from '@/lib/feature-flags';
+import { ASSISTANT_ENABLED, CHAT_ENABLED } from '@/lib/feature-flags';
+import { AssistantFab } from '@/components/assistant-fab';
+import { AssistantPanel } from '@/components/assistant-panel';
 import { ChatFab } from '@/components/chat-fab';
 import { ChatSidebar } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
@@ -32,6 +34,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
   const { user, setLastVisitedPath, logout } = useAuthStore();
   const { isChatOpen: chatOpen, setChatOpen, openChatWithUserId, clearOpenChatWithUserId } = useChatStore();
   const [mounted, setMounted] = useState(false);
+  const { toggleAssistant } = useAssistantStore();
   const isPublicRoute = publicRoutes.includes(pathname);
   const isChangePasswordRoute = pathname === changePasswordPath;
   const isCompleteProfileRoute = pathname === completeProfilePath;
@@ -120,6 +123,22 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
         )
       : null;
 
+  const assistantWidget =
+    ASSISTANT_ENABLED &&
+    mounted &&
+    typeof document !== 'undefined' &&
+    isAuthenticated &&
+    !isPublicRoute &&
+    !isOnboardingRoute
+      ? createPortal(
+          <>
+            <AssistantFab onClick={() => toggleAssistant()} />
+            <AssistantPanel pathname={pathname} />
+          </>,
+          document.body,
+        )
+      : null;
+
   const handleOnboardingLogout = () => {
     logout();
     router.push('/login');
@@ -166,6 +185,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
           </SidebarInset>
         </SidebarProvider>
         {chatWidget}
+        {assistantWidget}
         <CommandPalette />
         <KeyboardShortcuts />
       </>

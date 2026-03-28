@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { AiTextarea } from '@/components/ai-textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -467,12 +467,15 @@ export function RequestOpinionModal({
             <Label htmlFor="opinion-reason" className="text-sm font-medium">
               Reason / Instructions (optional)
             </Label>
-            <Textarea
+            <AiTextarea
               id="opinion-reason"
-              placeholder="Provide any context or specific questions for the opinion…"
+              placeholder="Provide any context… (@Ai + Ctrl+Enter)"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
+              fileId={fileId}
+              fieldHint="Opinion request — reason or instructions"
+              extraContext={() => `File: ${fileNumber}`}
             />
           </div>
 

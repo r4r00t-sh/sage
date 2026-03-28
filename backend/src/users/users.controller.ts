@@ -362,10 +362,10 @@ export class UsersController {
 
   @Delete(':id')
   async deleteUser(@Param('id') id: string, @Request() req) {
-    // Only platform / support admins can delete (deactivate) users
+    // Only platform / support admins can permanently delete users
     if (!hasAnyRole(req.user, ['DEVELOPER', 'SUPER_ADMIN', 'SUPPORT'])) {
       throw new ForbiddenException('Not authorized');
     }
-    return this.usersService.deactivateUser(id);
+    return this.usersService.permanentlyDeleteUser(req.user.id, id);
   }
 }

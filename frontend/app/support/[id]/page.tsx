@@ -7,7 +7,7 @@ import { useAuthStore } from '@/lib/store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
+import { AiTextarea } from '@/components/ai-textarea';
 import {
   Select,
   SelectContent,
@@ -389,11 +389,12 @@ export default function TicketDetailPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleReply} className="space-y-3">
-              <Textarea
+              <AiTextarea
                 value={replyContent}
                 onChange={(e) => setReplyContent(e.target.value)}
-                placeholder="Type your reply..."
+                placeholder="Type your reply… (@Ai + Ctrl+Enter)"
                 rows={4}
+                fieldHint="Support ticket reply"
               />
               <Button type="submit" disabled={submitting || !replyContent.trim()}>
                 {submitting ? 'Sending...' : 'Send reply'}

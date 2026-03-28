@@ -296,14 +296,13 @@ export default function UsersPage() {
       for (const id of ids) {
         await api.delete(`/users/${id}`);
       }
-      toast.success(`${ids.length} user(s) deactivated`);
-      setLastUndoable({ ids, wasActivate: false });
+      toast.success(`${ids.length} user(s) deleted permanently`);
       clearSelection();
       setDeleteDialogOpen(false);
       fetchUsers();
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || 'Failed to deactivate users');
+      toast.error(err.response?.data?.message || 'Failed to delete users');
     } finally {
       setBulkLoading(false);
     }
@@ -954,7 +953,7 @@ export default function UsersPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Do you want to delete {selectedIds.size} user{selectedIds.size > 1 ? 's' : ''}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will deactivate the selected user account{selectedIds.size > 1 ? 's' : ''}. Deactivated users cannot log in. You can undo this action or reactivate them later.
+              This permanently removes the account{selectedIds.size > 1 ? 's' : ''} from the database. Files and notes they created stay in the system but are attributed to another active user. This cannot be undone. Use &quot;Deactivate&quot; in the toolbar if you only want to block login.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

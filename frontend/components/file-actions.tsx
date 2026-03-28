@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
+import { AiTextarea } from '@/components/ai-textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -231,13 +231,15 @@ export function FileActions({
                 <Label htmlFor="remarks">
                   Remarks {config?.requiresRemarks ? '*' : '(Optional)'}
                 </Label>
-                <Textarea
+                <AiTextarea
                   id="remarks"
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
-                  placeholder="Enter your remarks..."
+                  placeholder="Enter your remarks… (@Ai + Ctrl+Enter)"
                   rows={3}
                   disabled={loading}
+                  fileId={fileId}
+                  fieldHint={`Remarks for ${actionType ?? 'action'}`}
                 />
               </div>
             )}

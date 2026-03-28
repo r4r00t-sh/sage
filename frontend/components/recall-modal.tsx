@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
+import { AiTextarea } from '@/components/ai-textarea';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
@@ -209,13 +209,18 @@ export function RecallModal({
             <Label htmlFor="recall-reason" className="text-base font-semibold">
               Reason for Recall *
             </Label>
-            <Textarea
+            <AiTextarea
               id="recall-reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Document the reason for this system intervention..."
+              placeholder="Document the reason… (@Ai + Ctrl+Enter)"
               rows={4}
               className="resize-none"
+              fileId={file.id}
+              fieldHint="Recall — audit reason"
+              extraContext={() =>
+                `File ${file.fileNumber}. Subject: ${file.subject}`
+              }
             />
             <p className="text-xs text-muted-foreground">
               This reason will be logged in the audit trail and visible to all parties

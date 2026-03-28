@@ -3,7 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { AiTextarea } from '@/components/ai-textarea';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -415,7 +415,7 @@ export function StaffProfileForm({
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label>Residential Address *</Label>
-              <Textarea value={data.address} onChange={(e) => set('address', e.target.value)} placeholder="House No., Street, Area, City, State, Postal Code, Country" rows={2} disabled={disabled} />
+              <AiTextarea value={data.address} onChange={(e) => set('address', e.target.value)} placeholder="Address… (@Ai + Ctrl+Enter)" rows={2} disabled={disabled} fieldHint="Postal address" />
             </div>
             <div className="space-y-2">
               <Label>City</Label>
@@ -540,11 +540,11 @@ export function StaffProfileForm({
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label>Remarks / Admin Notes</Label>
-            <Textarea value={data.adminNotes} onChange={(e) => set('adminNotes', e.target.value)} placeholder="Any additional notes for HR or administration…" rows={3} disabled={disabled} />
+            <AiTextarea value={data.adminNotes} onChange={(e) => set('adminNotes', e.target.value)} placeholder="HR / admin notes… (@Ai + Ctrl+Enter)" rows={3} disabled={disabled} fieldHint="Staff admin notes" />
           </div>
           <div className="space-y-2">
             <Label>Bio</Label>
-            <Textarea value={data.bio} onChange={(e) => set('bio', e.target.value)} placeholder="Brief description (optional)" rows={2} disabled={disabled} />
+            <AiTextarea value={data.bio} onChange={(e) => set('bio', e.target.value)} placeholder="Brief bio… (@Ai + Ctrl+Enter)" rows={2} disabled={disabled} fieldHint="Staff bio" />
           </div>
         </CardContent>
       </Card>

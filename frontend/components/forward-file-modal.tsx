@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { AiTextarea } from '@/components/ai-textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
@@ -578,8 +578,8 @@ export function ForwardFileModal({
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                    <Textarea
-                      placeholder={`Task for ${r.departmentName} (visible only to them in notes)`}
+                    <AiTextarea
+                      placeholder={`Task for ${r.departmentName} (@Ai + Ctrl+Enter)`}
                       value={r.task}
                       onChange={(e) =>
                         setMultiRecipients((prev) =>
@@ -588,6 +588,8 @@ export function ForwardFileModal({
                       }
                       className="min-h-[72px] resize-none"
                       disabled={loading}
+                      fileId={fileId}
+                      fieldHint={`Forward task note for ${r.departmentName}`}
                     />
                   </div>
                 ))}
@@ -872,13 +874,15 @@ export function ForwardFileModal({
                   Optional
                 </Badge>
               </Label>
-              <Textarea
+              <AiTextarea
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Add a note/instruction for the receiving department/user (shown in their notes)..."
+                placeholder="Note for recipient… (@Ai + Ctrl+Enter)"
                 rows={3}
                 disabled={loading}
                 className="resize-none"
+                fileId={fileId}
+                fieldHint="Forward remarks / instruction for recipient"
               />
             </div>
           )}

@@ -568,6 +568,178 @@ export class UsersService {
     });
   }
 
+  /**
+   * Hard-delete a user row. Reassigns FKs that would block deletion (files created, notes,
+   * opinions, etc.) to another active user. Destroys chat/DM data tied with onDelete: Cascade.
+   */
+  async permanentlyDeleteUser(actorId: string, targetUserId: string) {
+    if (actorId === targetUserId) {
+      throw new BadRequestException('You cannot delete your own account.');
+    }
+
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true, avatarKey: true },
+    });
+    if (!target) {
+      throw new NotFoundException('User not found');
+    }
+
+    const fallback = await this.prisma.user.findFirst({
+      where: {
+        id: { not: targetUserId },
+        isActive: true,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        departmentId: true,
+        divisionId: true,
+      },
+    });
+
+    if (!fallback) {
+      throw new BadRequestException(
+        'Cannot delete the only active user account. Create or activate another admin first.',
+      );
+    }
+
+    if (target.avatarKey) {
+      try {
+        await this.minio.deleteFile(target.avatarKey);
+      } catch {
+        /* ignore missing object */
+      }
+    }
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.file.updateMany({
+          where: { createdById: targetUserId },
+          data: { createdById: fallback.id },
+        });
+
+        await tx.file.updateMany({
+          where: { assignedToId: targetUserId },
+          data: { assignedToId: null },
+        });
+
+        await tx.note.updateMany({
+          where: { userId: targetUserId },
+          data: { userId: fallback.id },
+        });
+
+        await tx.forwardQueue.updateMany({
+          where: { fromUserId: targetUserId },
+          data: { fromUserId: null },
+        });
+
+        const queueRows = await tx.forwardQueue.findMany({
+          where: { toUserId: targetUserId },
+        });
+        for (const row of queueRows) {
+          await tx.forwardQueue.update({
+            where: { id: row.id },
+            data: {
+              toUserId: fallback.id,
+              toDivisionId: fallback.divisionId ?? row.toDivisionId,
+            },
+          });
+        }
+
+        const assignments = await tx.fileAssignment.findMany({
+          where: { toUserId: targetUserId },
+        });
+        for (const a of assignments) {
+          await tx.fileAssignment.update({
+            where: { id: a.id },
+            data: {
+              toUserId: fallback.id,
+              toDepartmentId: fallback.departmentId ?? a.toDepartmentId,
+              toDivisionId: fallback.divisionId ?? a.toDivisionId,
+            },
+          });
+        }
+
+        await tx.opinionRequest.updateMany({
+          where: { requestedById: targetUserId },
+          data: { requestedById: fallback.id },
+        });
+
+        await tx.opinionRequest.updateMany({
+          where: { respondedById: targetUserId },
+          data: { respondedById: null },
+        });
+
+        await tx.opinionRequest.updateMany({
+          where: { requestedToUserId: targetUserId },
+          data: { requestedToUserId: null },
+        });
+
+        await tx.opinionNote.updateMany({
+          where: { addedById: targetUserId },
+          data: { addedById: fallback.id },
+        });
+
+        await tx.dispatchProof.updateMany({
+          where: { dispatchedById: targetUserId },
+          data: { dispatchedById: fallback.id },
+        });
+
+        await tx.fileBackFileLink.updateMany({
+          where: { linkedById: targetUserId },
+          data: { linkedById: fallback.id },
+        });
+
+        await tx.workflow.updateMany({
+          where: { createdById: targetUserId },
+          data: { createdById: fallback.id },
+        });
+
+        await tx.workflow.updateMany({
+          where: { publishedById: targetUserId },
+          data: { publishedById: null },
+        });
+
+        await tx.user.updateMany({
+          where: { approvedById: targetUserId },
+          data: { approvedById: null },
+        });
+
+        await tx.notification.deleteMany({
+          where: { userId: targetUserId },
+        });
+
+        await tx.loginSession.deleteMany({
+          where: { userId: targetUserId },
+        });
+
+        await tx.pointsTransaction.deleteMany({
+          where: { userId: targetUserId },
+        });
+
+        await tx.user.delete({ where: { id: targetUserId } });
+      });
+    } catch (e: unknown) {
+      if (
+        e &&
+        typeof e === 'object' &&
+        'code' in e &&
+        (e as { code: string }).code === 'P2003'
+      ) {
+        throw new BadRequestException(
+          'Cannot delete user: some records still reference this account. Contact support with this error.',
+        );
+      }
+      throw e;
+    }
+
+    return {
+      message:
+        'User deleted permanently. Files and notes they created are attributed to a fallback account.',
+    };
+  }
+
   async getStats(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },

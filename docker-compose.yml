@@ -81,6 +81,8 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     container_name: efiling-backend
+    env_file:
+      - ./backend/.env
     ports:
       - "3001:3001"
     environment:

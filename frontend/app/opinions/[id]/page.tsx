@@ -37,6 +37,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 
 interface OpinionFileData {
   file: {
+    id?: string;
     fileNumber: string;
     subject: string;
     description?: string;
@@ -281,8 +282,14 @@ export default function OpinionDetailPage() {
               <Editor
                 value={opinionNote}
                 onChange={setOpinionNote}
-                placeholder="Add your thoughts or findings..."
+                placeholder="Add your thoughts… (@Ai + Ctrl+Enter)"
                 minHeight="140px"
+                inlineAi={{
+                  fileId: file.id ?? null,
+                  fieldHint: 'Formal opinion note',
+                  extraContext: () =>
+                    `File ${file.fileNumber}. Subject: ${file.subject}. Request reason: ${opinionRequest.requestReason ?? 'N/A'}`,
+                }}
               />
               <Button onClick={addOpinionNote} disabled={!opinionNote.trim()}>
                 <MessageSquare className="h-4 w-4 mr-2" />

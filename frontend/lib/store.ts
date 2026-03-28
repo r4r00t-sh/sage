@@ -262,3 +262,36 @@ export const useChatStore = create<ChatState>((set) => ({
   clearOpenChatWithUserId: () => set({ openChatWithUserId: null }),
 }));
 
+// AI assistant (Gemini): open from FAB or from file page “Ask AI” with optional file context override
+interface AssistantState {
+  isOpen: boolean;
+  /** Used when not on a file URL (e.g. continued chat); pathname file id wins when present */
+  fileIdOverride: string | null;
+  fileNumberLabel: string | null;
+  openAssistant: () => void;
+  closeAssistant: () => void;
+  toggleAssistant: () => void;
+  openAssistantForFile: (fileId: string, fileNumber?: string) => void;
+}
+
+export const useAssistantStore = create<AssistantState>((set) => ({
+  isOpen: false,
+  fileIdOverride: null,
+  fileNumberLabel: null,
+  openAssistant: () => set({ isOpen: true }),
+  closeAssistant: () =>
+    set({ isOpen: false, fileIdOverride: null, fileNumberLabel: null }),
+  toggleAssistant: () =>
+    set((s) =>
+      s.isOpen
+        ? { isOpen: false, fileIdOverride: null, fileNumberLabel: null }
+        : { isOpen: true },
+    ),
+  openAssistantForFile: (fileId, fileNumber) =>
+    set({
+      isOpen: true,
+      fileIdOverride: fileId,
+      fileNumberLabel: fileNumber ?? null,
+    }),
+}));
+
