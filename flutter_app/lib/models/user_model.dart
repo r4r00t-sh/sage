@@ -56,4 +56,7 @@ class UserModel {
 
   /// Super Admin or Tech Panel (Developer) — full app / org-structure management.
   bool get hasGodRole => hasAnyRole(['DEVELOPER', 'SUPER_ADMIN']);
+
+  /// Matches backend `DELETE /users/:id` authorization.
+  bool get canPermanentlyDeleteUsers => hasAnyRole(['DEVELOPER', 'SUPER_ADMIN', 'SUPPORT']);
 }

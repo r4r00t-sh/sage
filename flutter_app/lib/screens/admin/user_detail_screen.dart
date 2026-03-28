@@ -1,7 +1,10 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:efiling_app/core/api/api_client.dart';
+import 'package:efiling_app/core/auth/auth_provider.dart';
 import 'package:efiling_app/core/theme/app_colors.dart';
 
 class UserDetailScreen extends StatefulWidget {
@@ -18,6 +21,16 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   Map<String, dynamic>? _presence;
   bool _loading = true;
   String? _error;
+  bool _actionBusy = false;
+
+  String _errMsg(Object e) {
+    if (e is DioException) {
+      final d = e.response?.data;
+      if (d is Map && d['message'] != null) return d['message'].toString();
+      return e.message ?? e.toString();
+    }
+    return e.toString();
+  }
 
   @override
   void initState() {
@@ -79,6 +92,10 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     final email = u['email']?.toString() ?? '';
     final roles = (u['roles'] as List<dynamic>?)?.join(', ') ?? u['role']?.toString() ?? '';
     final isActive = u['isActive'] == true;
+    final auth = context.watch<AuthProvider>();
+    final me = auth.user;
+    final isSelf = me?.id == widget.userId;
+    final canHardDelete = me?.canPermanentlyDeleteUsers == true && !isSelf;
     final dept = u['department'] is Map ? (u['department'] as Map)['name']?.toString() : null;
     final division = u['division'] is Map ? (u['division'] as Map)['name']?.toString() : null;
     final points = u['points'] is num ? (u['points'] as num).toInt() : 0;
@@ -206,6 +223,110 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
               ),
             ),
           ),
+          if (!isSelf) ...[
+            const SizedBox(height: 24),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Account actions', style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 12),
+                    FilledButton.tonalIcon(
+                      onPressed: _actionBusy
+                          ? null
+                          : () async {
+                              final title = isActive ? 'Deactivate user' : 'Activate user';
+                              final body = isActive
+                                  ? 'Deactivated users cannot log in. You can activate them again later from the user list.'
+                                  : 'This user will be able to log in again.';
+                              final ok = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: Text(title),
+                                  content: Text(body),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                    FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isActive ? 'Deactivate' : 'Activate')),
+                                  ],
+                                ),
+                              );
+                              if (ok != true || !mounted) return;
+                              setState(() => _actionBusy = true);
+                              try {
+                                await ApiClient().put('/users/${widget.userId}', data: {'isActive': !isActive});
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(isActive ? 'User deactivated' : 'User activated')),
+                                );
+                                await _load();
+                              } catch (e) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(_errMsg(e)), backgroundColor: theme.colorScheme.error),
+                                );
+                              } finally {
+                                if (mounted) setState(() => _actionBusy = false);
+                              }
+                            },
+                      icon: Icon(isActive ? Icons.person_off_outlined : Icons.person_outline),
+                      label: Text(isActive ? 'Deactivate' : 'Activate'),
+                    ),
+                    if (canHardDelete) ...[
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: _actionBusy
+                            ? null
+                            : () async {
+                                final ok = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('Delete user permanently?'),
+                                    content: const Text(
+                                      'This permanently removes the account from the database. Files and notes they created stay in the system but are attributed to another active user. This cannot be undone.',
+                                    ),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                      FilledButton(
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor: theme.colorScheme.error,
+                                          foregroundColor: theme.colorScheme.onError,
+                                        ),
+                                        onPressed: () => Navigator.pop(ctx, true),
+                                        child: const Text('Delete permanently'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (ok != true || !mounted) return;
+                                setState(() => _actionBusy = true);
+                                try {
+                                  await ApiClient().delete('/users/${widget.userId}');
+                                  if (!mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('User deleted permanently')),
+                                  );
+                                  context.go('/admin/users');
+                                } catch (e) {
+                                  if (!mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(_errMsg(e)), backgroundColor: theme.colorScheme.error),
+                                  );
+                                } finally {
+                                  if (mounted) setState(() => _actionBusy = false);
+                                }
+                              },
+                        icon: const Icon(Icons.delete_forever_outlined),
+                        label: const Text('Delete permanently'),
+                        style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
