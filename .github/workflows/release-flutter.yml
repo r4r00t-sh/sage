@@ -23,7 +23,8 @@ on:
         default: ''
 
 env:
-  FLUTTER_VERSION: '3.32.x'
+  # forui ^0.20.x requires Flutter 3.41+ (pub resolver suggests 3.41.6).
+  FLUTTER_VERSION: '3.41.6'
   FLUTTER_CHANNEL: stable
 
 jobs:
