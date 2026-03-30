@@ -14,7 +14,17 @@ import {
 } from '@nestjs/common';
 import { DepartmentsService } from './departments.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { hasAnyRole, hasGodRole } from '../auth/auth.helpers';
+import { hasAnyRole, hasGodRole, getDeptAdminDepartmentIds } from '../auth/auth.helpers';
+
+function userCanAccessDepartment(
+  req: { user?: { roles?: string[]; departmentId?: string | null; administeredDepartments?: { id: string }[] } },
+  departmentId: string,
+): boolean {
+  if (hasGodRole(req.user)) return true;
+  const adminScope = getDeptAdminDepartmentIds(req.user);
+  if (adminScope.length > 0 && adminScope.includes(departmentId)) return true;
+  return req.user?.departmentId === departmentId;
+}
 
 @Controller('departments')
 @UseGuards(JwtAuthGuard)
@@ -92,10 +102,8 @@ export class DepartmentsController {
     // RBAC: Users can only access divisions from their department (unless super admin or dept admin)
     // Super Admins and Dept Admins can access divisions from any department
     // Other users can only access divisions from their own department
-    if (!hasAnyRole(req.user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
-      if (req.user.departmentId !== departmentId) {
-        throw new ForbiddenException('You can only access divisions from your department');
-      }
+    if (!userCanAccessDepartment(req, departmentId)) {
+      throw new ForbiddenException('You can only access divisions from your department');
     }
     return this.departmentsService.getDivisions(departmentId);
   }
@@ -116,10 +124,8 @@ export class DepartmentsController {
     @Param('divisionId') divisionId: string,
     @Request() req,
   ) {
-    if (!hasAnyRole(req.user, ['DEVELOPER', 'SUPER_ADMIN', 'DEPT_ADMIN'])) {
-      if (req.user.departmentId !== departmentId) {
-        throw new ForbiddenException('You can only access divisions from your department');
-      }
+    if (!userCanAccessDepartment(req, departmentId)) {
+      throw new ForbiddenException('You can only access divisions from your department');
     }
     const division = await this.departmentsService.getDivisionWithUsers(
       departmentId,
@@ -139,13 +145,11 @@ export class DepartmentsController {
   ) {
     // RBAC: Users can only access users from their department (unless super admin)
     if (!hasGodRole(req.user)) {
-      // First verify the division belongs to the department
       const division = await this.departmentsService.getDivisionById(divisionId);
       if (!division || division.departmentId !== departmentId) {
         throw new ForbiddenException('Division not found in this department');
       }
-      // Then check if user's department matches
-      if (req.user.departmentId !== departmentId) {
+      if (!userCanAccessDepartment(req, departmentId)) {
         throw new ForbiddenException('You can only access users from your department');
       }
     }

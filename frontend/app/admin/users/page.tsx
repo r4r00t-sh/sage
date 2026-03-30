@@ -99,6 +99,7 @@ interface User {
   isActive: boolean;
   department?: { id: string; name: string; code: string };
   division?: { id: string; name: string };
+  administeredDepartments?: { id: string; name: string; code: string }[];
   points?: { currentPoints: number };
 }
 
@@ -107,6 +108,12 @@ interface Department {
   name: string;
   code: string;
   divisions: { id: string; name: string }[];
+}
+
+const MULTI_DEPARTMENT_ROLES = ['DEPT_ADMIN', 'APPROVAL_AUTHORITY'] as const;
+
+function hasMultiDepartmentRole(roles: string[]): boolean {
+  return MULTI_DEPARTMENT_ROLES.some((role) => roles.includes(role));
 }
 
 export default function UsersPage() {
@@ -143,6 +150,7 @@ export default function UsersPage() {
     roles: ['SECTION_OFFICER'] as string[],
     departmentId: '',
     divisionId: '',
+    administeredDepartmentIds: [] as string[],
   });
 
   useEffect(() => {
@@ -195,15 +203,33 @@ export default function UsersPage() {
       toast.error('Please select at least one role');
       return;
     }
+    if (hasMultiDepartmentRole(formData.roles) && formData.administeredDepartmentIds.length === 0) {
+      toast.error('Select at least one department for multi-department role');
+      return;
+    }
 
     setFormLoading(true);
     try {
+      const primaryDeptId =
+        hasMultiDepartmentRole(formData.roles) && formData.administeredDepartmentIds.length > 0
+          ? formData.administeredDepartmentIds[0]
+          : formData.departmentId || undefined;
       await api.post('/users', {
-        ...formData,
-        roles: formData.roles.length ? formData.roles : ['USER'],
+        username: formData.username,
+        password: formData.password,
+        name: formData.name,
+        email: formData.email || undefined,
         designation: formData.designation || undefined,
         staffId: formData.staffId || undefined,
         phone: formData.phone || undefined,
+        roles: formData.roles.length ? formData.roles : ['USER'],
+        departmentId: primaryDeptId,
+        divisionId: hasMultiDepartmentRole(formData.roles)
+          ? undefined
+          : formData.divisionId || undefined,
+        ...(hasMultiDepartmentRole(formData.roles)
+          ? { administeredDepartmentIds: formData.administeredDepartmentIds }
+          : {}),
       });
       toast.success('User created successfully');
       setIsCreateOpen(false);
@@ -219,9 +245,17 @@ export default function UsersPage() {
 
   const handleUpdate = async () => {
     if (!selectedUser) return;
+    if (hasMultiDepartmentRole(formData.roles) && formData.administeredDepartmentIds.length === 0) {
+      toast.error('Select at least one department for multi-department role');
+      return;
+    }
 
     setFormLoading(true);
     try {
+      const primaryDeptId =
+        hasMultiDepartmentRole(formData.roles) && formData.administeredDepartmentIds.length > 0
+          ? formData.administeredDepartmentIds[0]
+          : formData.departmentId || null;
       await api.put(`/users/${selectedUser.id}`, {
         name: formData.name,
         email: formData.email,
@@ -229,8 +263,13 @@ export default function UsersPage() {
         staffId: formData.staffId || undefined,
         phone: formData.phone || undefined,
         roles: formData.roles,
-        departmentId: formData.departmentId || null,
-        divisionId: formData.divisionId || null,
+        departmentId: primaryDeptId,
+        divisionId: hasMultiDepartmentRole(formData.roles)
+          ? null
+          : formData.divisionId || null,
+        ...(hasMultiDepartmentRole(formData.roles)
+          ? { administeredDepartmentIds: formData.administeredDepartmentIds }
+          : {}),
       });
       toast.success('User updated successfully');
       setIsEditOpen(false);
@@ -347,6 +386,14 @@ export default function UsersPage() {
 
   const openEditModal = (user: User) => {
     setSelectedUser(user);
+    const adminDeptIds =
+      hasMultiDepartmentRole(user.roles ?? [])
+        ? user.administeredDepartments?.length
+          ? user.administeredDepartments.map((d) => d.id)
+          : user.department?.id
+            ? [user.department.id]
+            : []
+        : [];
     setFormData({
       username: user.username,
       password: '',
@@ -358,6 +405,7 @@ export default function UsersPage() {
       roles: user.roles?.length ? [...user.roles] : ['USER'],
       departmentId: user.department?.id || '',
       divisionId: user.division?.id || '',
+      administeredDepartmentIds: hasMultiDepartmentRole(user.roles ?? []) ? adminDeptIds : [],
     });
     setIsEditOpen(true);
   };
@@ -374,17 +422,55 @@ export default function UsersPage() {
       roles: ['SECTION_OFFICER'],
       departmentId: '',
       divisionId: '',
+      administeredDepartmentIds: [],
     });
     setSelectedUser(null);
   };
 
   const toggleRole = (role: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      roles: prev.roles.includes(role)
+    setFormData((prev) => {
+      const nextRoles = prev.roles.includes(role)
         ? prev.roles.filter((r) => r !== role)
-        : [...prev.roles, role],
-    }));
+        : [...prev.roles, role];
+      let administeredDepartmentIds = prev.administeredDepartmentIds;
+      const isMultiAfter = hasMultiDepartmentRole(nextRoles);
+      const wasMultiBefore = hasMultiDepartmentRole(prev.roles);
+      if (wasMultiBefore && !isMultiAfter) {
+        administeredDepartmentIds = [];
+      }
+      if (!wasMultiBefore && isMultiAfter) {
+        if (administeredDepartmentIds.length === 0 && prev.departmentId) {
+          administeredDepartmentIds = [prev.departmentId];
+        }
+      }
+      const nextDeptId =
+        isMultiAfter && administeredDepartmentIds.length > 0
+          ? administeredDepartmentIds[0]
+          : prev.departmentId;
+      return {
+        ...prev,
+        roles: nextRoles,
+        administeredDepartmentIds,
+        departmentId: nextDeptId,
+        divisionId: isMultiAfter ? '' : prev.divisionId,
+      };
+    });
+  };
+
+  const toggleAdministeredDepartment = (deptId: string) => {
+    setFormData((prev) => {
+      const has = prev.administeredDepartmentIds.includes(deptId);
+      const next = has
+        ? prev.administeredDepartmentIds.filter((id) => id !== deptId)
+        : [...prev.administeredDepartmentIds, deptId];
+      const primary = next[0] ?? '';
+      return {
+        ...prev,
+        administeredDepartmentIds: next,
+        departmentId: hasMultiDepartmentRole(prev.roles) ? primary : prev.departmentId,
+        divisionId: hasMultiDepartmentRole(prev.roles) ? '' : prev.divisionId,
+      };
+    });
   };
 
   const getRoleBadge = (role: string) => {
@@ -398,7 +484,10 @@ export default function UsersPage() {
     return colors[role] || 'bg-gray-500/10 text-gray-600';
   };
 
-  const selectedDepartment = departments.find(d => d.id === formData.departmentId);
+  const primaryDeptIdForDivisions = hasMultiDepartmentRole(formData.roles)
+    ? formData.administeredDepartmentIds[0] || formData.departmentId
+    : formData.departmentId;
+  const selectedDepartment = departments.find((d) => d.id === primaryDeptIdForDivisions);
   const canCreateDirectly = hasAnyRole(currentUser, ['DEVELOPER', 'SUPER_ADMIN', 'SUPPORT']);
   const isDeptAdminOnly =
     hasAnyRole(currentUser, ['DEPT_ADMIN']) && !hasAnyRole(currentUser, ['DEVELOPER', 'SUPER_ADMIN', 'SUPPORT']);
@@ -518,7 +607,17 @@ export default function UsersPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {user.department ? (
+                      {hasMultiDepartmentRole(user.roles ?? []) &&
+                      user.administeredDepartments &&
+                      user.administeredDepartments.length > 0 ? (
+                        <div className="space-y-1">
+                          {user.administeredDepartments.map((d) => (
+                            <p key={d.id} className="text-sm">
+                              <DepartmentProfileLink departmentId={d.id} name={d.name} />
+                            </p>
+                          ))}
+                        </div>
+                      ) : user.department ? (
                         <div>
                           <p className="text-sm">
                             <DepartmentProfileLink departmentId={user.department.id} name={user.department.name} />
@@ -773,45 +872,73 @@ export default function UsersPage() {
               </div>
               <p className="text-xs text-muted-foreground">Select one or more roles</p>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            {hasMultiDepartmentRole(formData.roles) ? (
               <div className="space-y-2">
-                <Label>Department</Label>
-                <Select
-                  value={formData.departmentId}
-                  onValueChange={(value) => setFormData({ ...formData, departmentId: value, divisionId: '' })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {departments.map((dept) => (
-                      <SelectItem key={dept.id} value={dept.id}>
+                <Label>Administered departments *</Label>
+                <div className="rounded-md border p-3 space-y-2 max-h-44 overflow-y-auto">
+                  {departments.map((dept) => (
+                    <div key={dept.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`create-admin-dept-${dept.id}`}
+                        checked={formData.administeredDepartmentIds.includes(dept.id)}
+                        onCheckedChange={() => toggleAdministeredDepartment(dept.id)}
+                      />
+                      <label
+                        htmlFor={`create-admin-dept-${dept.id}`}
+                        className="text-sm font-medium leading-none cursor-pointer"
+                      >
                         {dept.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Choose all departments this user can handle for the selected role.
+                </p>
               </div>
-              <div className="space-y-2">
-                <Label>Division</Label>
-                <Select
-                  value={formData.divisionId}
-                  onValueChange={(value) => setFormData({ ...formData, divisionId: value })}
-                  disabled={!formData.departmentId}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select division" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {selectedDepartment?.divisions.map((div) => (
-                      <SelectItem key={div.id} value={div.id}>
-                        {div.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Department</Label>
+                  <Select
+                    value={formData.departmentId}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, departmentId: value, divisionId: '' })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departments.map((dept) => (
+                        <SelectItem key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Division</Label>
+                  <Select
+                    value={formData.divisionId}
+                    onValueChange={(value) => setFormData({ ...formData, divisionId: value })}
+                    disabled={!formData.departmentId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select division" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {selectedDepartment?.divisions.map((div) => (
+                        <SelectItem key={div.id} value={div.id}>
+                          {div.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
@@ -895,45 +1022,73 @@ export default function UsersPage() {
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            {hasMultiDepartmentRole(formData.roles) ? (
               <div className="space-y-2">
-                <Label>Department</Label>
-                <Select
-                  value={formData.departmentId}
-                  onValueChange={(value) => setFormData({ ...formData, departmentId: value, divisionId: '' })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {departments.map((dept) => (
-                      <SelectItem key={dept.id} value={dept.id}>
+                <Label>Administered departments *</Label>
+                <div className="rounded-md border p-3 space-y-2 max-h-44 overflow-y-auto">
+                  {departments.map((dept) => (
+                    <div key={dept.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`edit-admin-dept-${dept.id}`}
+                        checked={formData.administeredDepartmentIds.includes(dept.id)}
+                        onCheckedChange={() => toggleAdministeredDepartment(dept.id)}
+                      />
+                      <label
+                        htmlFor={`edit-admin-dept-${dept.id}`}
+                        className="text-sm font-medium leading-none cursor-pointer"
+                      >
                         {dept.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Choose all departments this user can handle for the selected role.
+                </p>
               </div>
-              <div className="space-y-2">
-                <Label>Division</Label>
-                <Select
-                  value={formData.divisionId}
-                  onValueChange={(value) => setFormData({ ...formData, divisionId: value })}
-                  disabled={!formData.departmentId}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select division" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {selectedDepartment?.divisions.map((div) => (
-                      <SelectItem key={div.id} value={div.id}>
-                        {div.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Department</Label>
+                  <Select
+                    value={formData.departmentId}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, departmentId: value, divisionId: '' })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departments.map((dept) => (
+                        <SelectItem key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Division</Label>
+                  <Select
+                    value={formData.divisionId}
+                    onValueChange={(value) => setFormData({ ...formData, divisionId: value })}
+                    disabled={!formData.departmentId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select division" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {selectedDepartment?.divisions.map((div) => (
+                        <SelectItem key={div.id} value={div.id}>
+                          {div.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditOpen(false)}>

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { deptAdminInDepartmentWhere } from '../auth/dept-admin-prisma';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { FileRedListService, RedListReason } from './file-redlist.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -95,7 +96,7 @@ export class RedListService {
           OR: [
             { roles: { has: 'DEVELOPER' } },
             { roles: { has: 'SUPER_ADMIN' } },
-            { roles: { has: 'DEPT_ADMIN' }, departmentId: file.departmentId },
+            deptAdminInDepartmentWhere(file.departmentId),
           ],
           isActive: true,
         },

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { deptAdminInDepartmentWhere } from '../auth/dept-admin-prisma';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
@@ -236,8 +237,10 @@ export class GamificationService {
       where: {
         OR: [
           { roles: { has: 'DEVELOPER' } },
-        { roles: { has: 'SUPER_ADMIN' } },
-          { roles: { has: 'DEPT_ADMIN' }, departmentId: user.departmentId },
+          { roles: { has: 'SUPER_ADMIN' } },
+          ...(user.departmentId
+            ? [deptAdminInDepartmentWhere(user.departmentId)]
+            : []),
         ],
         isActive: true,
       },

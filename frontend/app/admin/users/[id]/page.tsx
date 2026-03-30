@@ -54,6 +54,7 @@ interface UserDetail {
   updatedAt: string;
   department?: { id: string; name: string; code: string };
   division?: { id: string; name: string };
+  administeredDepartments?: { id: string; name: string; code: string }[];
   points?: {
     id: string;
     currentPoints: number;
@@ -84,6 +85,11 @@ interface FileRouting {
   wasOverdue: boolean;
   createdAt: string;
   file?: { id: string; fileNumber: string; subject: string; status: string };
+}
+
+function hasMultiDepartmentRole(roles?: string[]): boolean {
+  const list = roles ?? [];
+  return list.includes('DEPT_ADMIN') || list.includes('APPROVAL_AUTHORITY');
 }
 
 interface PointsTransaction {
@@ -411,14 +417,28 @@ export default function UserDetailPage() {
                 <Building2 className="h-5 w-5 text-amber-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Department</p>
-                <p className="font-medium truncate">
-                  {user.department ? (
-                    <DepartmentProfileLink departmentId={user.department.id} name={user.department.name} />
-                  ) : (
-                    '—'
-                  )}
+                <p className="text-sm text-muted-foreground">
+                  {hasMultiDepartmentRole(user.roles) && user.administeredDepartments?.length
+                    ? 'Administered departments'
+                    : 'Department'}
                 </p>
+                <div className="font-medium space-y-1">
+                  {hasMultiDepartmentRole(user.roles) &&
+                  user.administeredDepartments &&
+                  user.administeredDepartments.length > 0 ? (
+                    user.administeredDepartments.map((d) => (
+                      <p key={d.id} className="truncate">
+                        <DepartmentProfileLink departmentId={d.id} name={d.name} />
+                      </p>
+                    ))
+                  ) : user.department ? (
+                    <p className="truncate">
+                      <DepartmentProfileLink departmentId={user.department.id} name={user.department.name} />
+                    </p>
+                  ) : (
+                    <p>—</p>
+                  )}
+                </div>
               </div>
             </div>
           </CardContent>

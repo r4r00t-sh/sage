@@ -12,6 +12,11 @@ import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { TimingService } from '../timing/timing.service';
 import { CapacityService } from '../capacity/capacity.service';
 import { RbacService } from '../auth/rbac.service';
+import { getDepartmentalScopeDepartmentIds } from '../auth/auth.helpers';
+import {
+  deptAdminInDepartmentWhere,
+  departmentalRoleInDepartmentWhere,
+} from '../auth/dept-admin-prisma';
 import { WorkflowEngineService } from '../workflow/workflow-engine.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FileStatus, FilePriority, FileAction, UserRole, FileAssignmentStatus } from '@prisma/client';
@@ -28,6 +33,25 @@ export class FilesService {
     private workflowEngine: WorkflowEngineService,
     private notificationsService: NotificationsService,
   ) {}
+
+  private rbacUserPayload(user: {
+    id: string;
+    roles?: string[];
+    departmentId: string | null;
+    divisionId: string | null;
+    administeredDepartments?: { id: string }[];
+  }) {
+    return {
+      userId: user.id,
+      roles: user.roles ?? [],
+      departmentId: user.departmentId,
+      divisionId: user.divisionId,
+      departmentalScopeDepartmentIds:
+        user.roles?.includes('DEPT_ADMIN') || user.roles?.includes('APPROVAL_AUTHORITY')
+        ? getDepartmentalScopeDepartmentIds(user)
+        : undefined,
+    };
+  }
 
   /**
    * Export a full "packed" PDF of a file with:
@@ -718,7 +742,13 @@ export class FilesService {
     // Get user's division ID for proper RBAC
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, roles: true, departmentId: true, divisionId: true },
+      select: {
+        id: true,
+        roles: true,
+        departmentId: true,
+        divisionId: true,
+        administeredDepartments: { select: { id: true } },
+      },
     });
 
     if (!user) {
@@ -726,18 +756,18 @@ export class FilesService {
     }
 
     // Build RBAC filter
-    const accessFilter = this.rbac.buildFileAccessFilter({
-      userId: user.id,
-      roles: user.roles ?? [],
-      departmentId: user.departmentId,
-      divisionId: user.divisionId,
-    });
+    const accessFilter = this.rbac.buildFileAccessFilter(this.rbacUserPayload(user));
 
     const where: any = { ...accessFilter.where };
 
     // Originated files: only files initiated by the host department (Rule 9)
-    if (options?.originated && user.departmentId) {
-      where.originDepartmentId = user.departmentId;
+    if (options?.originated) {
+      const deptScope = getDepartmentalScopeDepartmentIds(user);
+      if (deptScope.length > 0) {
+        where.originDepartmentId = { in: deptScope };
+      } else if (user.departmentId) {
+        where.originDepartmentId = user.departmentId;
+      }
     }
 
     // Red-listed filter (e.g. Home > Red Listed)
@@ -821,19 +851,20 @@ export class FilesService {
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, roles: true, departmentId: true, divisionId: true },
+      select: {
+        id: true,
+        roles: true,
+        departmentId: true,
+        divisionId: true,
+        administeredDepartments: { select: { id: true } },
+      },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    const accessFilter = this.rbac.buildFileAccessFilter({
-      userId: user.id,
-      roles: user.roles ?? [],
-      departmentId: user.departmentId,
-      divisionId: user.divisionId,
-    });
+    const accessFilter = this.rbac.buildFileAccessFilter(this.rbacUserPayload(user));
 
     // File IDs where user was the forwarder (fromUserId in FileRouting)
     const sentRouting = await this.prisma.fileRouting.findMany({
@@ -924,7 +955,13 @@ export class FilesService {
     // Get user info for RBAC
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, roles: true, departmentId: true, divisionId: true },
+      select: {
+        id: true,
+        roles: true,
+        departmentId: true,
+        divisionId: true,
+        administeredDepartments: { select: { id: true } },
+      },
     });
 
     if (!user) {
@@ -932,12 +969,7 @@ export class FilesService {
     }
 
     // Build RBAC filter
-    const accessFilter = this.rbac.buildFileAccessFilter({
-      userId: user.id,
-      roles: user.roles ?? [],
-      departmentId: user.departmentId,
-      divisionId: user.divisionId,
-    });
+    const accessFilter = this.rbac.buildFileAccessFilter(this.rbacUserPayload(user));
 
     const recentLogs = await this.prisma.auditLog.findMany({
       where: { userId, fileId: { not: null } },
@@ -1068,11 +1100,12 @@ export class FilesService {
     // Get user for permission checks
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { 
+      select: {
         id: true,
-        roles: true, 
+        roles: true,
         departmentId: true,
         divisionId: true,
+        administeredDepartments: { select: { id: true } },
       },
     });
 
@@ -1090,12 +1123,7 @@ export class FilesService {
         createdById: file.createdById,
         originDepartmentId: file.originDepartmentId ?? undefined,
       },
-      {
-        userId: user.id,
-        roles: user.roles ?? [],
-        departmentId: user.departmentId,
-        divisionId: user.divisionId,
-      },
+      this.rbacUserPayload(user),
     );
 
     if (!hasAccess) {
@@ -1109,15 +1137,26 @@ export class FilesService {
     const isDeptAdmin = userRoles.includes('DEPT_ADMIN') || userRoles.includes('SUPER_ADMIN') || userRoles.includes('DEVELOPER');
     const isApprovalAuthority = userRoles.includes('APPROVAL_AUTHORITY') && !userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEVELOPER');
 
+    const adminScope = getDepartmentalScopeDepartmentIds(user);
+    const isPureDepartmentalScopedRole =
+      (userRoles.includes('DEPT_ADMIN') || userRoles.includes('APPROVAL_AUTHORITY')) &&
+      !userRoles.includes('SUPER_ADMIN') &&
+      !userRoles.includes('DEVELOPER');
+
     // Filter notes: Host department sees ALL notes (all tasks + all notes). Other departments see only notes assigned to them (their task + their own notes).
     const isHostDepartment = !!(
       file.originDepartmentId &&
-      user.departmentId &&
-      file.originDepartmentId === user.departmentId
+      (isPureDepartmentalScopedRole && adminScope.length > 0
+        ? adminScope.includes(file.originDepartmentId)
+        : !!(user.departmentId && file.originDepartmentId === user.departmentId))
     );
     let filteredNotes = file.notes;
     if (isHostDepartment) {
       filteredNotes = file.notes; // Host sees everything
+    } else if (isPureDepartmentalScopedRole && adminScope.length > 0) {
+      filteredNotes = file.notes.filter(
+        (n: any) => n.departmentId && adminScope.includes(n.departmentId),
+      );
     } else if (user.departmentId) {
       filteredNotes = file.notes.filter(
         (n: any) => n.departmentId === user.departmentId,
@@ -1125,7 +1164,11 @@ export class FilesService {
     }
 
     // Further restriction: non-host INWARD_DESK on external file sees only latest note (routing assist)
-    if (!isHostDepartment && isInwardDesk && file.departmentId !== user.departmentId) {
+    const fileOutsideUserDept =
+      isPureDepartmentalScopedRole && adminScope.length > 0
+        ? !adminScope.includes(file.departmentId)
+        : file.departmentId !== user.departmentId;
+    if (!isHostDepartment && isInwardDesk && fileOutsideUserDept) {
       filteredNotes = filteredNotes.slice(0, 1);
     }
 
@@ -1985,7 +2028,7 @@ export class FilesService {
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { division: true },
+      include: { division: true, administeredDepartments: { select: { id: true } } },
     });
 
     if (!user) {
@@ -2013,8 +2056,8 @@ export class FilesService {
       );
     }
 
-    // Use submitter's department for routing so Submit goes to same-dept next role (e.g. HR Sec Officer → HR Admin, not Finance).
-    const routingDepartmentId = user.departmentId ?? file.departmentId;
+    // Route strictly by the file's current department context.
+    const routingDepartmentId = file.departmentId ?? user.departmentId;
 
     /**
      * Universal hardcoded shortcut (1):
@@ -2025,8 +2068,7 @@ export class FilesService {
     if (isSectionOfficer && file.createdById === userId && routingDepartmentId) {
       const targetUser = await this.prisma.user.findFirst({
         where: {
-          departmentId: routingDepartmentId,
-          roles: { has: 'DEPT_ADMIN' },
+          ...deptAdminInDepartmentWhere(routingDepartmentId),
           isActive: true,
         },
         include: { division: true },
@@ -2101,8 +2143,10 @@ export class FilesService {
     if (isDeptAdmin && routingDepartmentId) {
       const targetUser = await this.prisma.user.findFirst({
         where: {
-          departmentId: routingDepartmentId,
-          roles: { has: 'APPROVAL_AUTHORITY' },
+          ...departmentalRoleInDepartmentWhere(
+            'APPROVAL_AUTHORITY',
+            routingDepartmentId,
+          ),
           isActive: true,
         },
         include: { division: true },
@@ -2255,8 +2299,8 @@ export class FilesService {
 
     // If no running execution exists yet but the department has a default
     // workflow, start it now so that routing follows the configured flow.
-    // Use submitter's department (routingDepartmentId) so Submit routes within
-    // the same department (e.g. HR Sec Officer → HR Admin, not Finance Dispatcher).
+    // Use the file's department (routingDepartmentId) so Submit always follows
+    // the workflow chain of the department that currently owns this file.
     if (!execution && routingDepartmentId) {
       const department = await this.prisma.department.findUnique({
         where: { id: routingDepartmentId },
@@ -2580,18 +2624,25 @@ export class FilesService {
 
     const actor = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { roles: true, departmentId: true },
+      select: {
+        roles: true,
+        departmentId: true,
+        administeredDepartments: { select: { id: true } },
+      },
     });
     const roles = (actor?.roles ?? []) as string[];
     const isDeveloper = roles.includes('DEVELOPER');
     const isSuperAdmin = roles.includes('SUPER_ADMIN');
     const isDeptAdmin = roles.includes('DEPT_ADMIN');
+    const actorAdminScope = actor ? getDepartmentalScopeDepartmentIds(actor) : [];
+    const fileInDeptAdminScope =
+      actorAdminScope.length > 0 && actorAdminScope.includes(file.departmentId);
 
     if (action === 'hold') {
       if (!isDeveloper && !isSuperAdmin && !isDeptAdmin) {
         throw new ForbiddenException('Only Department Admin, Developer or Super Admin can hold files');
       }
-      if (isDeptAdmin && !isDeveloper && !isSuperAdmin && file.departmentId !== actor?.departmentId) {
+      if (isDeptAdmin && !isDeveloper && !isSuperAdmin && !fileInDeptAdminScope) {
         throw new ForbiddenException('Department Admin can only hold files within their department');
       }
     }
@@ -2599,7 +2650,7 @@ export class FilesService {
       if (!isDeveloper && !isSuperAdmin && !isDeptAdmin) {
         throw new ForbiddenException('Only Department Admin, Developer or Super Admin can release files from hold');
       }
-      if (isDeptAdmin && !isDeveloper && !isSuperAdmin && file.departmentId !== actor?.departmentId) {
+      if (isDeptAdmin && !isDeveloper && !isSuperAdmin && !fileInDeptAdminScope) {
         throw new ForbiddenException('Department Admin can only release files within their department');
       }
     }
@@ -2656,7 +2707,13 @@ export class FilesService {
     });
 
     // When host closes the file/process, close the current process cycle (Rule 3 & 6)
-    if (action === 'close' && file.currentProcessCycleId && file.originDepartmentId && actor?.departmentId === file.originDepartmentId) {
+    const actorIsHostForClose =
+      !!actor &&
+      !!file.originDepartmentId &&
+      (actorAdminScope.length > 0
+        ? actorAdminScope.includes(file.originDepartmentId)
+        : actor.departmentId === file.originDepartmentId);
+    if (action === 'close' && file.currentProcessCycleId && actorIsHostForClose) {
       await this.prisma.processCycle.update({
         where: { id: file.currentProcessCycleId },
         data: { closedAt: new Date() },
@@ -2770,10 +2827,7 @@ export class FilesService {
     // Notify department admin and super admin
     const admins = await this.prisma.user.findMany({
       where: {
-        OR: [
-          { roles: { has: 'SUPER_ADMIN' } },
-          { roles: { has: 'DEPT_ADMIN' }, departmentId: file.departmentId },
-        ],
+        OR: [{ roles: { has: 'SUPER_ADMIN' } }, deptAdminInDepartmentWhere(file.departmentId)],
         isActive: true,
       },
       select: { id: true },
@@ -2883,7 +2937,7 @@ export class FilesService {
       where: {
         OR: [
           { roles: { has: 'SUPER_ADMIN' } },
-          { roles: { has: 'DEPT_ADMIN' }, departmentId: request.file.departmentId },
+          deptAdminInDepartmentWhere(request.file.departmentId),
         ],
         isActive: true,
         id: { not: userId }, // Don't notify the approver

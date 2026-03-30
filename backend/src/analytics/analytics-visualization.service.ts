@@ -362,8 +362,8 @@ export class AnalyticsVisualizationService {
   /**
    * Get Red-List Morgue (Escalation Pit) visualization
    */
-  async getRedListMorgueVisualization(departmentId?: string) {
-    const morgue = await this.fileRedList.getRedListMorgue(departmentId);
+  async getRedListMorgueVisualization(departmentId?: string, departmentIds?: string[]) {
+    const morgue = await this.fileRedList.getRedListMorgue(departmentId, departmentIds);
 
     // Group by escalation level
     const byEscalationLevel = {

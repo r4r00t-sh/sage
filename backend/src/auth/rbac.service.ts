@@ -7,6 +7,8 @@ export interface UserAccessInfo {
   roles: string[];
   departmentId: string | null;
   divisionId: string | null;
+  /** Departments in scope for DEPT_ADMIN/APPROVAL_AUTHORITY. */
+  departmentalScopeDepartmentIds?: string[];
 }
 
 export interface FileAccessFilter {
@@ -47,11 +49,13 @@ export class RbacService {
       return true;
     }
 
-    // Department Admin can access files in their department
-    if (isDeptAdmin && user.departmentId) {
-      if (file.departmentId === user.departmentId) {
-        return true;
-      }
+    const scopedDeptIds = user.departmentalScopeDepartmentIds;
+    if (
+      (isDeptAdmin || isApprovalAuthority) &&
+      scopedDeptIds?.length &&
+      scopedDeptIds.includes(file.departmentId)
+    ) {
+      return true;
     }
 
     // Check if file is assigned to the user
@@ -77,8 +81,22 @@ export class RbacService {
     }
 
     // Host department: originator can always view (Rule 7 & 9)
-    if (file.originDepartmentId && user.departmentId && file.originDepartmentId === user.departmentId) {
-      return true;
+    if (file.originDepartmentId) {
+      if (
+        (isDeptAdmin || isApprovalAuthority) &&
+        scopedDeptIds?.length &&
+        scopedDeptIds.includes(file.originDepartmentId)
+      ) {
+        return true;
+      }
+      if (
+        !isDeptAdmin &&
+        !isApprovalAuthority &&
+        user.departmentId &&
+        file.originDepartmentId === user.departmentId
+      ) {
+        return true;
+      }
     }
 
     // IMPORTANT: For regular staff (Section Officer, Approval Authority,
@@ -128,12 +146,12 @@ export class RbacService {
       };
     }
 
-    // Department Admin can see files in their department
-    if (isDeptAdmin && user.departmentId) {
-      where.departmentId = user.departmentId;
+    const scopedDeptIds = user.departmentalScopeDepartmentIds;
+    if ((isDeptAdmin || isApprovalAuthority) && scopedDeptIds?.length) {
+      where.departmentId = { in: scopedDeptIds };
       return {
         where,
-        canAccess: (file: any) => file.departmentId === user.departmentId,
+        canAccess: (file: any) => scopedDeptIds!.includes(file.departmentId),
       };
     }
 

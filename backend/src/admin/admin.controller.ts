@@ -11,7 +11,12 @@ import {
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { hasAnyRole, hasRole, hasGodRole } from '../auth/auth.helpers';
+import {
+  hasAnyRole,
+  hasRole,
+  hasGodRole,
+  getDeptAdminDepartmentIds,
+} from '../auth/auth.helpers';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard)
@@ -24,6 +29,10 @@ export class AdminController {
     }
   }
 
+  private deptAdminScopeIds(req: { user?: { roles?: string[]; administeredDepartments?: { id: string }[]; departmentId?: string | null } }) {
+    return hasRole(req.user, 'DEPT_ADMIN') ? getDeptAdminDepartmentIds(req.user) : undefined;
+  }
+
   // Get desk status (user presence)
   @Get('desk-status')
   async getDeskStatus(@Request() req) {
@@ -31,6 +40,7 @@ export class AdminController {
     return this.adminService.getDeskStatus(
       req.user.departmentId,
       req.user.roles ?? [],
+      this.deptAdminScopeIds(req),
     );
   }
 
@@ -62,6 +72,7 @@ export class AdminController {
         page: page ? parseInt(page) : 1,
         limit: limit ? parseInt(limit) : 50,
       },
+      this.deptAdminScopeIds(req),
     );
   }
 
@@ -69,7 +80,11 @@ export class AdminController {
   @Get('analytics')
   async getAnalytics(@Request() req) {
     this.checkAdminAccess(req.user);
-    return this.adminService.getAnalytics(req.user.departmentId, req.user.roles ?? []);
+    return this.adminService.getAnalytics(
+      req.user.departmentId,
+      req.user.roles ?? [],
+      this.deptAdminScopeIds(req),
+    );
   }
 
   // Get department-wise analytics (Super Admin only)
@@ -97,6 +112,7 @@ export class AdminController {
     return this.adminService.getRedListedFiles(
       req.user.departmentId,
       req.user.roles ?? [],
+      this.deptAdminScopeIds(req),
     );
   }
 
@@ -107,6 +123,7 @@ export class AdminController {
     return this.adminService.getExtensionRequests(
       req.user.departmentId,
       req.user.roles ?? [],
+      this.deptAdminScopeIds(req),
     );
   }
 
@@ -118,7 +135,11 @@ export class AdminController {
       hasRole(req.user, 'DEPT_ADMIN') && !hasRole(req.user, 'SUPER_ADMIN') && !hasRole(req.user, 'DEVELOPER')
         ? req.user.departmentId
         : undefined;
-    return this.adminService.getSettings(departmentId);
+    const departmentIds = this.deptAdminScopeIds(req);
+    return this.adminService.getSettings(
+      departmentId ?? undefined,
+      departmentIds?.length ? departmentIds : undefined,
+    );
   }
 
   // Get recent system setting activity (for Features page)
@@ -131,7 +152,12 @@ export class AdminController {
       hasRole(req.user, 'DEPT_ADMIN') && !hasRole(req.user, 'SUPER_ADMIN') && !hasRole(req.user, 'DEVELOPER')
         ? req.user.departmentId
         : undefined;
-    return this.adminService.getSettingsActivity(departmentId);
+    const departmentIds = this.deptAdminScopeIds(req);
+    return this.adminService.getSettingsActivity(
+      departmentId,
+      30,
+      departmentIds?.length ? departmentIds : undefined,
+    );
   }
 
   // Update system setting (Super Admin may pass body.departmentId for global null or specific dept; Dept Admin uses own department)

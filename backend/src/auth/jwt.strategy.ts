@@ -26,6 +26,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       include: {
         department: true,
         division: true,
+        administeredDepartments: { select: { id: true, name: true, code: true } },
       },
     });
 

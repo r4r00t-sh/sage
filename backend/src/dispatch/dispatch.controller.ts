@@ -16,6 +16,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { Readable } from 'stream';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { getDeptAdminDepartmentIds } from '../auth/auth.helpers';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '@prisma/client';
@@ -90,10 +91,17 @@ export class DispatchController {
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
   ) {
-    const departmentId =
-      (req.user.roles ?? []).includes(UserRole.DEPT_ADMIN) ? req.user.departmentId : undefined;
+    if ((req.user.roles ?? []).includes(UserRole.DEPT_ADMIN)) {
+      const scope = getDeptAdminDepartmentIds(req.user);
+      return this.dispatchService.getDispatchProofs(
+        scope.length === 1 ? scope[0] : undefined,
+        dateFrom ? new Date(dateFrom) : undefined,
+        dateTo ? new Date(dateTo) : undefined,
+        scope.length > 1 ? scope : undefined,
+      );
+    }
     return this.dispatchService.getDispatchProofs(
-      departmentId,
+      undefined,
       dateFrom ? new Date(dateFrom) : undefined,
       dateTo ? new Date(dateTo) : undefined,
     );

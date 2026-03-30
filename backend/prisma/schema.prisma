@@ -76,6 +76,8 @@ model Department {
   updatedAt   DateTime   @updatedAt
   divisions   Division[]
   users       User[]
+  /// Users with DEPT_ADMIN who may administer this department (in addition to their primary `User.departmentId`).
+  administrators User[] @relation("DepartmentAdministrators")
   files       File[]
   fileNumberCounters FileNumberCounter[]
   isInwardDesk Boolean   @default(false) // Marks department as "Inward Desk"
@@ -116,6 +118,8 @@ model User {
   roles        UserRole[]  @default([USER])
   departmentId String?
   department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  /// Extra departments this user may administer when they have DEPT_ADMIN (primary desk dept remains `departmentId`).
+  administeredDepartments Department[] @relation("DepartmentAdministrators")
   divisionId   String?
   division     Division?   @relation(fields: [divisionId], references: [id], onDelete: SetNull)
   designation  String?     // Desk Profile: designation

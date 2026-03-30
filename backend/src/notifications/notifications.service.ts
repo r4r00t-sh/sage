@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { deptAdminInDepartmentWhere } from '../auth/dept-admin-prisma';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 
 export interface CreateNotificationDto {
@@ -196,7 +197,11 @@ export class NotificationsService {
     // Get dept admin and super admin
     const admins = await this.prisma.user.findMany({
       where: {
-        OR: [{ roles: { has: 'DEVELOPER' } }, { roles: { has: 'SUPER_ADMIN' } }, { roles: { has: 'DEPT_ADMIN' }, departmentId }],
+        OR: [
+          { roles: { has: 'DEVELOPER' } },
+          { roles: { has: 'SUPER_ADMIN' } },
+          deptAdminInDepartmentWhere(departmentId),
+        ],
         isActive: true,
       },
       select: { id: true },
@@ -235,7 +240,11 @@ export class NotificationsService {
 
     const admins = await this.prisma.user.findMany({
       where: {
-        OR: [{ roles: { has: 'DEVELOPER' } }, { roles: { has: 'SUPER_ADMIN' } }, { roles: { has: 'DEPT_ADMIN' }, departmentId }],
+        OR: [
+          { roles: { has: 'DEVELOPER' } },
+          { roles: { has: 'SUPER_ADMIN' } },
+          deptAdminInDepartmentWhere(departmentId),
+        ],
         isActive: true,
       },
       select: { id: true },

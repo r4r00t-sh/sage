@@ -61,12 +61,14 @@ export class DesksService {
 
   // Get all desks for a department
   // In this system, "desk" means: Departments, Divisions, Users, and actual Desk entities
-  async getDesks(departmentId?: string, divisionId?: string) {
+  async getDesks(departmentId?: string, divisionId?: string, departmentIds?: string[]) {
     const allDesks: any[] = [];
 
     // 1. Get all Departments as desks
     const deptWhere: any = {};
-    if (departmentId) {
+    if (departmentIds?.length) {
+      deptWhere.id = { in: departmentIds };
+    } else if (departmentId) {
       deptWhere.id = departmentId;
     }
     const departments = await this.prisma.department.findMany({
@@ -106,7 +108,9 @@ export class DesksService {
 
     // 2. Get all Divisions as desks
     const divWhere: any = {};
-    if (departmentId) {
+    if (departmentIds?.length) {
+      divWhere.departmentId = { in: departmentIds };
+    } else if (departmentId) {
       divWhere.departmentId = departmentId;
     }
     if (divisionId) {
@@ -150,7 +154,9 @@ export class DesksService {
 
     // 3. Get all Users as desks
     const userWhere: any = { isActive: true };
-    if (departmentId) {
+    if (departmentIds?.length) {
+      userWhere.departmentId = { in: departmentIds };
+    } else if (departmentId) {
       userWhere.departmentId = departmentId;
     }
     if (divisionId) {
@@ -196,7 +202,9 @@ export class DesksService {
 
     // 4. Get actual Desk entities
     const deskWhere: any = { isActive: true };
-    if (departmentId) {
+    if (departmentIds?.length) {
+      deskWhere.departmentId = { in: departmentIds };
+    } else if (departmentId) {
       deskWhere.departmentId = departmentId;
     }
     if (divisionId) {
@@ -484,9 +492,8 @@ export class DesksService {
 
   // Get desk workload and capacity summary
   // Counts all desks: Departments, Divisions, Users, and actual Desk entities
-  async getDeskWorkloadSummary(departmentId?: string) {
-    // Get all desks using the same method
-    const allDesks = await this.getDesks(departmentId);
+  async getDeskWorkloadSummary(departmentId?: string, departmentIds?: string[]) {
+    const allDesks = await this.getDesks(departmentId, undefined, departmentIds);
 
     const totalFiles = allDesks.reduce((sum, d) => sum + d.currentFileCount, 0);
     const totalCapacity = allDesks.reduce((sum, d) => sum + d.maxFilesPerDay, 0);

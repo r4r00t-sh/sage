@@ -21,7 +21,12 @@ import { Readable } from 'stream';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { hasAnyRole, hasRole, hasGodRole } from '../auth/auth.helpers';
+import {
+  hasAnyRole,
+  hasRole,
+  hasGodRole,
+  getDeptAdminDepartmentIds,
+} from '../auth/auth.helpers';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
@@ -40,12 +45,17 @@ export class UsersController {
       throw new ForbiddenException('Not authorized');
     }
 
-    // DEPT_ADMIN can only see their department users
-    const filterDeptId =
-      hasRole(req.user, 'DEPT_ADMIN') ? req.user.departmentId : departmentId;
+    const adminScope = getDeptAdminDepartmentIds(req.user);
+    if (hasRole(req.user, 'DEPT_ADMIN')) {
+      return this.usersService.getAllUsers({
+        departmentIds: adminScope,
+        role,
+        search,
+      });
+    }
 
     return this.usersService.getAllUsers({
-      departmentId: filterDeptId,
+      departmentId,
       role,
       search,
     });
@@ -102,7 +112,8 @@ export class UsersController {
     }
     if (id !== req.user.id && hasRole(req.user, 'DEPT_ADMIN')) {
       const target = await this.usersService.getUserById(id);
-      if (target.department?.id !== req.user.departmentId) {
+      const scope = getDeptAdminDepartmentIds(req.user);
+      if (!target.department?.id || !scope.includes(target.department.id)) {
         throw new ForbiddenException('Can only view users in your department');
       }
     }
@@ -132,7 +143,8 @@ export class UsersController {
     }
     if (hasRole(req.user, 'DEPT_ADMIN')) {
       const targetUser = await this.usersService.getUserById(id);
-      if (targetUser.department?.id !== req.user.departmentId) {
+      const scope = getDeptAdminDepartmentIds(req.user);
+      if (!targetUser.department?.id || !scope.includes(targetUser.department.id)) {
         throw new ForbiddenException('Can only view users in your department');
       }
     }
@@ -153,7 +165,8 @@ export class UsersController {
     }
     if (hasRole(req.user, 'DEPT_ADMIN')) {
       const targetUser = await this.usersService.getUserById(id);
-      if (targetUser.department?.id !== req.user.departmentId) {
+      const scope = getDeptAdminDepartmentIds(req.user);
+      if (!targetUser.department?.id || !scope.includes(targetUser.department.id)) {
         throw new ForbiddenException('Can only view users in your department');
       }
     }
@@ -170,7 +183,8 @@ export class UsersController {
     }
     if (hasRole(req.user, 'DEPT_ADMIN')) {
       const targetUser = await this.usersService.getUserById(id);
-      if (targetUser.department?.id !== req.user.departmentId) {
+      const scope = getDeptAdminDepartmentIds(req.user);
+      if (!targetUser.department?.id || !scope.includes(targetUser.department.id)) {
         throw new ForbiddenException('Can only view users in your department');
       }
     }
@@ -191,6 +205,7 @@ export class UsersController {
       phone?: string;
       roles: string[];
       departmentId?: string;
+      administeredDepartmentIds?: string[];
       divisionId?: string;
     },
   ) {
@@ -225,6 +240,7 @@ export class UsersController {
       roles?: string[];
       departmentId?: string;
       divisionId?: string;
+      administeredDepartmentIds?: string[];
       isActive?: boolean;
       firstName?: string;
       middleName?: string;
@@ -324,12 +340,18 @@ export class UsersController {
       !hasGodRole(req.user)
     ) {
       const targetUser = await this.usersService.getUserById(id);
-      if (targetUser.department?.id !== req.user.departmentId) {
+      const scope = getDeptAdminDepartmentIds(req.user);
+      if (!targetUser.department?.id || !scope.includes(targetUser.department.id)) {
         throw new ForbiddenException('Department Admin can only freeze users in their own department');
       }
     }
 
-    return this.usersService.updateUser(id, body);
+    const payload = { ...body };
+    if (!hasAnyRole(req.user, ['DEVELOPER', 'SUPER_ADMIN', 'SUPPORT'])) {
+      delete (payload as { administeredDepartmentIds?: string[] }).administeredDepartmentIds;
+    }
+
+    return this.usersService.updateUser(id, payload);
   }
 
   @Put(':id/password')

@@ -72,12 +72,19 @@ export class UsersService {
 
   async getAllUsers(filters?: {
     departmentId?: string;
+    /** When set (e.g. multi-department DEPT_ADMIN), filter users whose primary department is in this list. */
+    departmentIds?: string[];
     role?: string;
     search?: string;
   }) {
     const where: any = {};
 
-    if (filters?.departmentId) {
+    if (filters?.departmentIds !== undefined) {
+      if (filters.departmentIds.length === 0) {
+        return [];
+      }
+      where.departmentId = { in: filters.departmentIds };
+    } else if (filters?.departmentId) {
       where.departmentId = filters.departmentId;
     }
 
@@ -111,6 +118,7 @@ export class UsersService {
         createdAt: true,
         department: { select: { id: true, name: true, code: true } },
         division: { select: { id: true, name: true } },
+        administeredDepartments: { select: { id: true, name: true, code: true } },
         points: { select: { currentPoints: true } },
       },
       orderBy: { name: 'asc' },
@@ -173,6 +181,7 @@ export class UsersService {
         uiColorTheme: true,
         department: { select: { id: true, name: true, code: true } },
         division: { select: { id: true, name: true } },
+        administeredDepartments: { select: { id: true, name: true, code: true } },
         points: true,
         _count: {
           select: {
@@ -265,6 +274,8 @@ export class UsersService {
     phone?: string;
     roles: string[];
     departmentId?: string;
+    /** Departments this departmental admin/authority may administer. */
+    administeredDepartmentIds?: string[];
     divisionId?: string;
     createdBySuperAdmin?: boolean;
   }) {
@@ -279,6 +290,25 @@ export class UsersService {
 
     const passwordHash = await bcrypt.hash(data.password, 10);
     const roles = (data.roles?.length ? data.roles : ['USER']) as any[];
+    const isDepartmentalMultiRole =
+      roles.includes('DEPT_ADMIN') || roles.includes('APPROVAL_AUTHORITY');
+    let adminDeptIds = [...new Set((data.administeredDepartmentIds ?? []).filter(Boolean))];
+    if (isDepartmentalMultiRole && adminDeptIds.length === 0 && data.departmentId) {
+      adminDeptIds = [data.departmentId];
+    }
+    if (isDepartmentalMultiRole && adminDeptIds.length === 0) {
+      throw new BadRequestException(
+        'Departmental role must have at least one assigned department',
+      );
+    }
+    const primaryDepartmentId = isDepartmentalMultiRole
+      ? data.departmentId && adminDeptIds.includes(data.departmentId)
+        ? data.departmentId
+        : adminDeptIds[0]
+      : data.departmentId ?? null;
+    const administeredConnectIds = isDepartmentalMultiRole
+      ? [...new Set([...adminDeptIds, primaryDepartmentId].filter(Boolean) as string[])]
+      : [];
     // All users are auto-approved; no manual Super Admin approval step required.
     const profileApprovalStatus = 'APPROVED';
 
@@ -292,8 +322,13 @@ export class UsersService {
         staffId: data.staffId,
         phone: data.phone,
         roles,
-        departmentId: data.departmentId,
-        divisionId: data.divisionId,
+        departmentId: primaryDepartmentId,
+        divisionId: isDepartmentalMultiRole ? null : data.divisionId,
+        ...(administeredConnectIds.length > 0 && {
+          administeredDepartments: {
+            connect: administeredConnectIds.map((id) => ({ id })),
+          },
+        }),
         profileApprovalStatus: profileApprovalStatus as any,
         mustChangePassword: true,
       },
@@ -310,6 +345,7 @@ export class UsersService {
         profileApprovalStatus: true,
         department: { select: { id: true, name: true } },
         division: { select: { id: true, name: true } },
+        administeredDepartments: { select: { id: true, name: true, code: true } },
       },
     });
 
@@ -338,6 +374,7 @@ export class UsersService {
       profileCompletedAt?: boolean;
       roles?: string[];
       departmentId?: string;
+      administeredDepartmentIds?: string[];
       divisionId?: string;
       isActive?: boolean;
       firstName?: string;
@@ -384,6 +421,18 @@ export class UsersService {
           ? JSON.stringify(data.skills)
           : data.skills
         : undefined;
+
+    let administeredDepartmentsUpdate: { set: { id: string }[] } | undefined;
+    const isDepartmentalMultiRole =
+      data.roles?.includes('DEPT_ADMIN') || data.roles?.includes('APPROVAL_AUTHORITY');
+    if (data.roles?.length && !isDepartmentalMultiRole) {
+      administeredDepartmentsUpdate = { set: [] };
+    } else if (isDepartmentalMultiRole && data.administeredDepartmentIds !== undefined) {
+      administeredDepartmentsUpdate = {
+        set: data.administeredDepartmentIds.map((i) => ({ id: i })),
+      };
+    }
+
     return this.prisma.user.update({
       where: { id },
       data: {
@@ -400,7 +449,12 @@ export class UsersService {
         }),
         ...(data.roles && data.roles.length > 0 && { roles: data.roles as any }),
         ...(data.departmentId !== undefined && { departmentId: data.departmentId }),
-        ...(data.divisionId !== undefined && { divisionId: data.divisionId }),
+        ...(administeredDepartmentsUpdate !== undefined && {
+          administeredDepartments: administeredDepartmentsUpdate,
+        }),
+        ...(data.divisionId !== undefined && {
+          divisionId: isDepartmentalMultiRole ? null : data.divisionId,
+        }),
         ...(data.isActive !== undefined && { isActive: data.isActive }),
         ...(data.firstName !== undefined && { firstName: data.firstName }),
         ...(data.middleName !== undefined && { middleName: data.middleName }),
@@ -494,6 +548,7 @@ export class UsersService {
         uiColorTheme: true,
         department: { select: { id: true, name: true } },
         division: { select: { id: true, name: true } },
+        administeredDepartments: { select: { id: true, name: true, code: true } },
       },
     });
   }

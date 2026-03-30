@@ -26,6 +26,7 @@ export class AuthService {
       include: {
         department: true,
         division: true,
+        administeredDepartments: { select: { id: true, name: true, code: true } },
       },
     });
 
@@ -119,6 +120,7 @@ export class AuthService {
         roles,
         departmentId: user.departmentId,
         divisionId: user.divisionId,
+        administeredDepartments: user.administeredDepartments ?? [],
         avatarKey: userWithAvatarAndProfile?.avatarKey ?? null,
         mustChangePassword: user.mustChangePassword ?? false,
         profileCompletedAt,

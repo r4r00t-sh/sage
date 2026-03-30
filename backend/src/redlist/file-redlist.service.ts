@@ -313,13 +313,16 @@ export class FileRedListService {
   /**
    * Get Red-List Morgue (Escalation Pit) - All red-listed files
    */
-  async getRedListMorgue(departmentId?: string) {
+  async getRedListMorgue(departmentId?: string, departmentIds?: string[]) {
     const where: any = {
       isRedListed: true,
       status: { in: ['PENDING', 'IN_PROGRESS'] },
     };
 
-    if (departmentId) {
+    if (departmentIds !== undefined) {
+      where.departmentId =
+        departmentIds.length > 0 ? { in: departmentIds } : { in: [] };
+    } else if (departmentId) {
       where.departmentId = departmentId;
     }
 

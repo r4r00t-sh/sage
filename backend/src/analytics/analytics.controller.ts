@@ -14,6 +14,7 @@ import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '@prisma/client';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsVisualizationService } from './analytics-visualization.service';
+import { getDeptAdminDepartmentIds } from '../auth/auth.helpers';
 
 @Controller('analytics')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -295,8 +296,16 @@ export class AnalyticsController {
   @Get('redlist-morgue')
   @Roles(UserRole.SUPER_ADMIN, UserRole.DEPT_ADMIN)
   async getRedListMorgue(@Request() req) {
-    const departmentId =
-      (req.user.roles ?? []).includes(UserRole.DEPT_ADMIN) ? req.user.departmentId : undefined;
-    return this.visualizationService.getRedListMorgueVisualization(departmentId);
+    if ((req.user.roles ?? []).includes(UserRole.DEPT_ADMIN)) {
+      const scope = getDeptAdminDepartmentIds(req.user);
+      if (scope.length === 0) {
+        return this.visualizationService.getRedListMorgueVisualization(undefined, []);
+      }
+      return this.visualizationService.getRedListMorgueVisualization(
+        scope.length === 1 ? scope[0] : undefined,
+        scope.length > 1 ? scope : undefined,
+      );
+    }
+    return this.visualizationService.getRedListMorgueVisualization();
   }
 }

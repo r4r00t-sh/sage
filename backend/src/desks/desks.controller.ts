@@ -14,6 +14,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { getDeptAdminDepartmentIds } from '../auth/auth.helpers';
 import { DesksService } from './desks.service';
 import { DeskPerformanceService } from './desk-performance.service';
 
@@ -53,12 +54,19 @@ export class DesksController {
     @Query('departmentId') departmentId?: string,
     @Query('divisionId') divisionId?: string,
   ) {
-    const deptId =
-      departmentId ||
-      ((req.user.roles ?? []).includes(UserRole.DEPT_ADMIN)
-        ? req.user.departmentId
-        : undefined);
-    return this.desksService.getDesks(deptId, divisionId);
+    if (departmentId) {
+      return this.desksService.getDesks(departmentId, divisionId);
+    }
+    if ((req.user.roles ?? []).includes(UserRole.DEPT_ADMIN)) {
+      const scope = getDeptAdminDepartmentIds(req.user);
+      if (scope.length > 1) {
+        return this.desksService.getDesks(undefined, divisionId, scope);
+      }
+      if (scope.length === 1) {
+        return this.desksService.getDesks(scope[0], divisionId);
+      }
+    }
+    return this.desksService.getDesks(undefined, divisionId);
   }
 
   // Get desk by ID
@@ -70,9 +78,16 @@ export class DesksController {
   // Get desk workload summary
   @Get('workload/summary')
   async getDeskWorkloadSummary(@Request() req) {
-    const departmentId =
-      (req.user.roles ?? []).includes(UserRole.DEPT_ADMIN) ? req.user.departmentId : undefined;
-    return this.desksService.getDeskWorkloadSummary(departmentId);
+    if ((req.user.roles ?? []).includes(UserRole.DEPT_ADMIN)) {
+      const scope = getDeptAdminDepartmentIds(req.user);
+      if (scope.length > 1) {
+        return this.desksService.getDeskWorkloadSummary(undefined, scope);
+      }
+      if (scope.length === 1) {
+        return this.desksService.getDeskWorkloadSummary(scope[0]);
+      }
+    }
+    return this.desksService.getDeskWorkloadSummary(undefined);
   }
 
   // Assign file to desk

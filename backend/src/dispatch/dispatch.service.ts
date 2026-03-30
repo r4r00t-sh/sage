@@ -238,9 +238,12 @@ export class DispatchService {
     departmentId?: string,
     dateFrom?: Date,
     dateTo?: Date,
+    departmentIds?: string[],
   ) {
     const where: any = {};
-    if (departmentId) {
+    if (departmentIds?.length) {
+      where.file = { departmentId: { in: departmentIds } };
+    } else if (departmentId) {
       where.file = { departmentId };
     }
     if (dateFrom || dateTo) {

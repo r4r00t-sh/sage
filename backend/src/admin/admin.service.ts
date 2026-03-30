@@ -8,13 +8,40 @@ export class AdminService {
 
   constructor(private prisma: PrismaService) {}
 
+  /** File/user department filter for DEPT_ADMIN (not super/dev). */
+  private deptAdminScopeWhere(
+    userRoles: string[],
+    departmentId: string | null | undefined,
+    departmentIds?: string[],
+  ): { departmentId: string | { in: string[] } } | null {
+    if (
+      !userRoles.includes('DEPT_ADMIN') ||
+      userRoles.includes('SUPER_ADMIN') ||
+      userRoles.includes('DEVELOPER')
+    ) {
+      return null;
+    }
+    if (departmentIds?.length) {
+      return { departmentId: { in: departmentIds } };
+    }
+    if (departmentId) {
+      return { departmentId };
+    }
+    return null;
+  }
+
   // Get active desk status for department admin
-  async getDeskStatus(departmentId: string, userRoles: string[]) {
+  async getDeskStatus(
+    departmentId: string | null,
+    userRoles: string[],
+    departmentIds?: string[],
+  ) {
     // Build query based on role
     const where: any = { isActive: true };
 
-    if (userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEVELOPER')) {
-      where.departmentId = departmentId;
+    const scope = this.deptAdminScopeWhere(userRoles, departmentId, departmentIds);
+    if (scope) {
+      Object.assign(where, scope);
     }
     // SUPER_ADMIN sees all
 
@@ -93,6 +120,7 @@ export class AdminService {
       page?: number;
       limit?: number;
     },
+    departmentIds?: string[],
   ) {
     const {
       status,
@@ -104,9 +132,9 @@ export class AdminService {
     } = filters;
     const where: any = {};
 
-    // Role-based filtering
-    if (userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN') && departmentId) {
-      where.departmentId = departmentId;
+    const scope = this.deptAdminScopeWhere(userRoles, departmentId, departmentIds);
+    if (scope) {
+      Object.assign(where, scope);
     }
     // SUPER_ADMIN sees all
 
@@ -148,16 +176,28 @@ export class AdminService {
   }
 
   // Get analytics data
-  async getAnalytics(departmentId: string | null, userRoles: string[]) {
+  async getAnalytics(
+    departmentId: string | null,
+    userRoles: string[],
+    departmentIds?: string[],
+  ) {
     const where: any = {};
-    if (userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN') && departmentId) {
-      where.departmentId = departmentId;
+    const scope = this.deptAdminScopeWhere(userRoles, departmentId ?? undefined, departmentIds);
+    if (scope) {
+      Object.assign(where, scope);
     }
 
-    // Get user points stats
     const userPointsQuery: any = {};
-    if (departmentId && userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEVELOPER')) {
-      userPointsQuery.user = { departmentId };
+    if (
+      userRoles.includes('DEPT_ADMIN') &&
+      !userRoles.includes('SUPER_ADMIN') &&
+      !userRoles.includes('DEVELOPER')
+    ) {
+      if (departmentIds?.length) {
+        userPointsQuery.user = { departmentId: { in: departmentIds } };
+      } else if (departmentId) {
+        userPointsQuery.user = { departmentId };
+      }
     }
 
     const [
@@ -184,12 +224,22 @@ export class AdminService {
         },
         orderBy: { currentPoints: 'desc' },
       }),
-      this.prisma.timeExtensionRequest.count({
-        where:
-          departmentId && userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN') && !userRoles.includes('DEVELOPER')
-            ? { file: { departmentId } }
-            : {},
-      }),
+      (() => {
+        let extReqWhere: { file: { departmentId: string | { in: string[] } } } | Record<string, never> =
+          {};
+        if (
+          userRoles.includes('DEPT_ADMIN') &&
+          !userRoles.includes('SUPER_ADMIN') &&
+          !userRoles.includes('DEVELOPER')
+        ) {
+          if (departmentIds?.length) {
+            extReqWhere = { file: { departmentId: { in: departmentIds } } };
+          } else if (departmentId) {
+            extReqWhere = { file: { departmentId } };
+          }
+        }
+        return this.prisma.timeExtensionRequest.count({ where: extReqWhere });
+      })(),
       this.prisma.file.aggregate({
         where: {
           ...where,
@@ -307,9 +357,14 @@ export class AdminService {
   }
 
   // Get system settings (Super Admin: all; Dept Admin: global + their department)
-  async getSettings(departmentId?: string) {
+  async getSettings(departmentId?: string, departmentIds?: string[]) {
     const where: any = {};
-    if (departmentId) {
+    if (departmentIds?.length) {
+      where.OR = [
+        { departmentId: null },
+        ...departmentIds.map((id) => ({ departmentId: id })),
+      ];
+    } else if (departmentId) {
       where.OR = [{ departmentId: null }, { departmentId }];
     }
     return this.prisma.systemSettings.findMany({
@@ -382,9 +437,20 @@ export class AdminService {
   }
 
   // Get recent system setting changes for activity log (Super Admin: all; Dept Admin: global + their dept)
-  async getSettingsActivity(departmentId?: string | null, limit = 30) {
+  async getSettingsActivity(
+    departmentId?: string | null,
+    limit = 30,
+    departmentIds?: string[],
+  ) {
     const where: any = { entityType: 'SystemSetting' };
-    if (departmentId) {
+    if (departmentIds?.length) {
+      where.OR = [
+        { metadata: { path: ['departmentId'], equals: null } },
+        ...departmentIds.map((id) => ({
+          metadata: { path: ['departmentId'], equals: id },
+        })),
+      ];
+    } else if (departmentId) {
       where.OR = [
         { metadata: { path: ['departmentId'], equals: departmentId } },
         { metadata: { path: ['departmentId'], equals: null } },
@@ -402,10 +468,22 @@ export class AdminService {
   }
 
   // Get extension requests for admin view
-  async getExtensionRequests(departmentId: string | null, userRoles: string[]) {
+  async getExtensionRequests(
+    departmentId: string | null,
+    userRoles: string[],
+    departmentIds?: string[],
+  ) {
     const where: any = {};
-    if (userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN') && departmentId) {
-      where.file = { departmentId };
+    if (
+      userRoles.includes('DEPT_ADMIN') &&
+      !userRoles.includes('SUPER_ADMIN') &&
+      !userRoles.includes('DEVELOPER')
+    ) {
+      if (departmentIds?.length) {
+        where.file = { departmentId: { in: departmentIds } };
+      } else if (departmentId) {
+        where.file = { departmentId };
+      }
     }
 
     return this.prisma.timeExtensionRequest.findMany({
@@ -426,10 +504,15 @@ export class AdminService {
   }
 
   // Get red listed files
-  async getRedListedFiles(departmentId: string | null, userRoles: string[]) {
+  async getRedListedFiles(
+    departmentId: string | null,
+    userRoles: string[],
+    departmentIds?: string[],
+  ) {
     const where: any = { isRedListed: true };
-    if (userRoles.includes('DEPT_ADMIN') && !userRoles.includes('SUPER_ADMIN') && departmentId) {
-      where.departmentId = departmentId;
+    const scope = this.deptAdminScopeWhere(userRoles, departmentId, departmentIds);
+    if (scope) {
+      Object.assign(where, scope);
     }
 
     return this.prisma.file.findMany({
