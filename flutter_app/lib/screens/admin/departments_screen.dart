@@ -10,6 +10,16 @@ import 'package:efiling_app/models/user_model.dart';
 class DepartmentsScreen extends StatefulWidget {
   const DepartmentsScreen({super.key});
 
+  /// API / Dio errors for snackbars and inline messages (shared with dialogs).
+  static String errMsg(Object e) {
+    if (e is DioException) {
+      final d = e.response?.data;
+      if (d is Map && d['message'] is String) return d['message'] as String;
+      return e.message ?? e.toString();
+    }
+    return e.toString().replaceFirst('DioException: ', '');
+  }
+
   @override
   State<DepartmentsScreen> createState() => _DepartmentsScreenState();
 }
@@ -19,15 +29,6 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
   String? _error;
   List<Map<String, dynamic>> _departments = [];
   bool _accessChecked = false;
-
-  static String errMsg(Object e) {
-    if (e is DioException) {
-      final d = e.response?.data;
-      if (d is Map && d['message'] is String) return d['message'] as String;
-      return e.message ?? e.toString();
-    }
-    return e.toString().replaceFirst('DioException: ', '');
-  }
 
   List<Map<String, dynamic>> _applyDepartmentalScopeFilter(
     List<Map<String, dynamic>> raw,
@@ -91,7 +92,7 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = errMsg(e);
+          _error = DepartmentsScreen.errMsg(e);
         });
       }
     }
