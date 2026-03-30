@@ -13,6 +13,32 @@ class _UsersScreenState extends State<UsersScreen> {
   List<dynamic> _users = [];
   bool _loading = true;
 
+  static String _departmentLine(Map<String, dynamic> u) {
+    final roles = (u['roles'] as List<dynamic>?)?.cast<String>() ?? [];
+    final hasMulti =
+        roles.contains('DEPT_ADMIN') || roles.contains('APPROVAL_AUTHORITY');
+    if (hasMulti) {
+      final ad = u['administeredDepartments'] as List<dynamic>?;
+      if (ad != null && ad.isNotEmpty) {
+        final parts = ad
+            .whereType<Map>()
+            .map((e) =>
+                e['name']?.toString() ??
+                e['code']?.toString() ??
+                e['id']?.toString() ??
+                '')
+            .where((s) => s.isNotEmpty);
+        final s = parts.join(', ');
+        if (s.isNotEmpty) return s;
+      }
+    }
+    final dept = u['department'] is Map
+        ? (u['department'] as Map)['name']?.toString()
+        : null;
+    if (dept != null && dept.isNotEmpty) return dept;
+    return '';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -40,13 +66,17 @@ class _UsersScreenState extends State<UsersScreen> {
         final name = u['name'] as String? ?? '';
         final username = u['username'] as String? ?? '';
         final roles = (u['roles'] as List<dynamic>?)?.join(', ') ?? u['role']?.toString() ?? '';
+        final deptLine = _departmentLine(u);
         final userId = u['id']?.toString() ?? '';
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
             leading: CircleAvatar(child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?')),
             title: Text(name),
-            subtitle: Text('$username • $roles'),
+            subtitle: Text(
+              deptLine.isEmpty ? '$username • $roles' : '$username • $roles\n$deptLine',
+            ),
+            isThreeLine: deptLine.isNotEmpty,
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               if (userId.isNotEmpty) context.go('/admin/users/$userId');

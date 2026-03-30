@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:efiling_app/core/api/api_client.dart';
 import 'package:efiling_app/core/auth/auth_provider.dart';
 import 'package:efiling_app/core/utils/responsive.dart';
+import 'package:efiling_app/models/user_model.dart';
 
 String _apiErrMsg(Object e) {
   if (e is DioException) {
@@ -44,24 +45,23 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen> {
     _accessChecked = true;
     final user = context.read<AuthProvider>().user;
     if (user != null &&
-        !user.hasAnyRole(['SUPER_ADMIN', 'DEPT_ADMIN', 'DEVELOPER'])) {
+        !user.hasAnyRole(
+            ['SUPER_ADMIN', 'DEPT_ADMIN', 'DEVELOPER', 'APPROVAL_AUTHORITY'])) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) context.go('/dashboard');
       });
     }
   }
 
-  void _maybeRedirectDeptAdmin() {
-    final user = context.read<AuthProvider>().user;
+  void _maybeRedirectOutOfScope() {
+    final UserModel? user = context.read<AuthProvider>().user;
     if (user == null) return;
-    if (user.hasAnyRole(['DEPT_ADMIN']) &&
-        !user.hasGodRole &&
-        user.departmentId != null &&
-        user.departmentId != widget.departmentId) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) context.go('/admin/departments');
-      });
-    }
+    if (user.hasGodRole) return;
+    if (!user.hasMultiDepartmentRole) return;
+    if (user.isDepartmentInScope(widget.departmentId)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.go('/admin/departments');
+    });
   }
 
   Future<void> _load() async {
@@ -93,7 +93,7 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen> {
               .toList();
           _loading = false;
         });
-        _maybeRedirectDeptAdmin();
+        _maybeRedirectOutOfScope();
       }
     } catch (e) {
       if (mounted) {

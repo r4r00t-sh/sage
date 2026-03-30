@@ -349,6 +349,9 @@ class _ShellScreenState extends State<ShellScreen> {
             _NavItemData('Track File', '/files/track', Icons.pin_drop_outlined),
             _NavItemData('Opinion Inbox', '/opinions/inbox', Icons.message_outlined),
           ]),
+          _NavGroup(title: 'Admin', items: [
+            _NavItemData('Departments', '/admin/departments', Icons.apartment_outlined),
+          ]),
           _NavGroup(title: 'Other', items: [
             _NavItemData('Documentation', '/docs', Icons.menu_book_outlined),
             _NavItemData('My tickets', '/support', Icons.support_agent_outlined),

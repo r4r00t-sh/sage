@@ -98,5 +98,37 @@ void main() {
       expect(out['role'], u.role);
       expect(out['departmentId'], u.departmentId);
     });
+
+    test('administeredDepartments and departmentalScopeDepartmentIds', () {
+      final json = {
+        'id': 'u1',
+        'username': 'a',
+        'name': 'A',
+        'roles': ['DEPT_ADMIN'],
+        'departmentId': 'primary',
+        'administeredDepartments': [
+          {'id': 'd1', 'name': 'Dept One', 'code': 'D1'},
+          {'id': 'd2', 'name': 'Dept Two'},
+        ],
+      };
+      final u = UserModel.fromJson(json);
+      expect(u.administeredDepartments.length, 2);
+      expect(u.administeredDepartments[0].id, 'd1');
+      expect(u.administeredDepartments[0].name, 'Dept One');
+      expect(u.departmentalScopeDepartmentIds, ['d1', 'd2']);
+      expect(u.isDepartmentInScope('d1'), true);
+      expect(u.isDepartmentInScope('primary'), false);
+    });
+
+    test('departmentalScope falls back to departmentId when M2M empty', () {
+      final u = UserModel(
+        id: 'u1',
+        username: 'a',
+        name: 'A',
+        roles: ['APPROVAL_AUTHORITY'],
+        departmentId: 'only',
+      );
+      expect(u.departmentalScopeDepartmentIds, ['only']);
+    });
   });
 }

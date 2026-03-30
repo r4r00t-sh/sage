@@ -96,6 +96,16 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     final me = auth.user;
     final isSelf = me?.id == widget.userId;
     final canHardDelete = me?.canPermanentlyDeleteUsers == true && !isSelf;
+    final roleList = (u['roles'] as List<dynamic>?)?.cast<String>() ?? [];
+    final hasMultiDeptRole = roleList.contains('DEPT_ADMIN') ||
+        roleList.contains('APPROVAL_AUTHORITY');
+    final adRaw = u['administeredDepartments'] as List<dynamic>?;
+    final administered = adRaw == null
+        ? const <Map<String, dynamic>>[]
+        : adRaw
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
     final dept = u['department'] is Map ? (u['department'] as Map)['name']?.toString() : null;
     final division = u['division'] is Map ? (u['division'] as Map)['name']?.toString() : null;
     final points = u['points'] is num ? (u['points'] as num).toInt() : 0;
@@ -196,15 +206,50 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                   const SizedBox(height: 24),
                   const Divider(),
                   const SizedBox(height: 16),
-                  Text('Department & division', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.business_outlined),
-                    title: Text(dept ?? '—'),
-                    subtitle: division != null ? Text(division) : null,
+                  Text(
+                    hasMultiDeptRole ? 'Administered departments' : 'Department & division',
+                    style: theme.textTheme.titleMedium,
                   ),
+                  const SizedBox(height: 8),
+                  if (hasMultiDeptRole && administered.isNotEmpty)
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: administered
+                          .map((d) {
+                            final label = d['name']?.toString() ??
+                                d['code']?.toString() ??
+                                d['id']?.toString() ??
+                                '—';
+                            return Chip(
+                              avatar: const Icon(Icons.business_outlined, size: 18),
+                              label: Text(label),
+                            );
+                          })
+                          .toList(),
+                    )
+                  else if (hasMultiDeptRole && dept != null && dept.isNotEmpty)
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.business_outlined),
+                      title: Text(dept),
+                    )
+                  else if (hasMultiDeptRole)
+                    Text(
+                      'No departments assigned',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    )
+                  else
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.business_outlined),
+                      title: Text(dept ?? '—'),
+                      subtitle: division != null ? Text(division) : null,
+                    ),
                   const SizedBox(height: 16),
                   Text('Activity', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 8),

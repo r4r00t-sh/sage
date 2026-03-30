@@ -29,16 +29,16 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
     return e.toString().replaceFirst('DioException: ', '');
   }
 
-  List<Map<String, dynamic>> _applyDeptAdminFilter(
+  List<Map<String, dynamic>> _applyDepartmentalScopeFilter(
     List<Map<String, dynamic>> raw,
     UserModel? user,
   ) {
     if (user == null) return raw;
-    if (user.hasAnyRole(['DEPT_ADMIN']) && !user.hasGodRole) {
-      final id = user.departmentId;
-      if (id != null) {
-        return raw.where((d) => d['id']?.toString() == id).toList();
-      }
+    if (!user.hasGodRole && user.hasMultiDepartmentRole) {
+      final ids = user.departmentalScopeDepartmentIds;
+      if (ids.isEmpty) return raw;
+      final idSet = ids.toSet();
+      return raw.where((d) => idSet.contains(d['id']?.toString())).toList();
     }
     return raw;
   }
@@ -56,7 +56,8 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
     _accessChecked = true;
     final user = context.read<AuthProvider>().user;
     if (user != null &&
-        !user.hasAnyRole(['SUPER_ADMIN', 'DEPT_ADMIN', 'DEVELOPER'])) {
+        !user.hasAnyRole(
+            ['SUPER_ADMIN', 'DEPT_ADMIN', 'DEVELOPER', 'APPROVAL_AUTHORITY'])) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) context.go('/dashboard');
       });
@@ -82,7 +83,7 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
       final user = context.read<AuthProvider>().user;
       if (mounted) {
         setState(() {
-          _departments = _applyDeptAdminFilter(mapped, user);
+          _departments = _applyDepartmentalScopeFilter(mapped, user);
           _loading = false;
         });
       }
