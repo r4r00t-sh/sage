@@ -33,6 +33,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import api from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api-error';
 import { hasAnyRole, hasGodRole, getRoles } from '@/lib/auth-utils';
 import { cn } from '@/lib/utils';
 import { DepartmentProfileLink, DivisionProfileLink } from '@/components/profile-links';
@@ -90,6 +91,17 @@ interface FileRouting {
 function hasMultiDepartmentRole(roles?: string[]): boolean {
   const list = roles ?? [];
   return list.includes('DEPT_ADMIN') || list.includes('APPROVAL_AUTHORITY');
+}
+
+interface AnalyticsUserListRow {
+  id: string;
+  completedFiles?: number;
+  redListedFiles?: number;
+  extensionRequests?: number;
+  avgProcessingTimeHours?: number | null;
+  totalFilesAssigned?: number;
+  totalFilesCreated?: number;
+  performanceScore?: number;
 }
 
 interface PointsTransaction {
@@ -223,7 +235,7 @@ export default function UserDetailPage() {
     setTabLoading((p) => ({ ...p, analytics: true }));
     try {
       const res = await api.get('/analytics/users');
-      const list = res.data as any[];
+      const list = Array.isArray(res.data) ? (res.data as AnalyticsUserListRow[]) : [];
       const found = list.find((u) => u.id === userId);
       if (found) {
         setUserAnalytics({
@@ -540,8 +552,8 @@ export default function UserDetailPage() {
                               try {
                                 await api.put(`/users/${user.id}/approve-profile`);
                                 setUser((u) => (u ? { ...u, profileApprovalStatus: 'APPROVED', approvedAt: new Date().toISOString() } : null));
-                              } catch (e: any) {
-                                alert(e?.response?.data?.message || 'Failed to approve');
+                              } catch (e: unknown) {
+                                alert(apiErrorMessage(e, 'Failed to approve'));
                               }
                             }}
                           >

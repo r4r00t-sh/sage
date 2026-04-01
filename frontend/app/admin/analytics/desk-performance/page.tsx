@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { BarChart3, Building2, Users, Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api-error';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
 import { hasGodRole } from '@/lib/auth-utils';
@@ -84,9 +85,9 @@ export default function DeskPerformancePage() {
           setDashboard(dashRes.data);
           setUsers(usersRes.data);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         toast.error('Failed to load desk performance analytics', {
-          description: err?.response?.data?.message ?? 'Please try again',
+          description: apiErrorMessage(err, 'Please try again'),
         });
       } finally {
         setLoading(false);

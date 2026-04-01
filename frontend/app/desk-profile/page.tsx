@@ -9,14 +9,47 @@ import { FileText, Clock, LogIn, TrendingUp, AlertCircle, Calendar } from 'lucid
 
 type Period = 'hour' | 'day' | 'week' | 'month' | 'year';
 
+interface DeskVolume {
+  totalFilesOnDesk?: number;
+  incomingInPeriod?: number;
+  outgoingInPeriod?: number;
+  optimumVolume?: number;
+  redListedFiles?: number;
+  redListedInPeriod?: number;
+  extensionRequestsTotal?: number;
+  extensionRequestsInPeriod?: number;
+}
+
+interface DeskVolumeAverages {
+  averageFilesOnDesk?: number;
+  averageIncoming?: number;
+  averageOutgoing?: number;
+  averageRedListed?: number;
+}
+
+interface DeskTimeStats {
+  optimumTimePerFileSeconds?: number;
+  averageTimePerFileSeconds?: number;
+  timeToProcessOptimumVolumeSeconds?: number;
+}
+
+interface LoginStatusRow {
+  status?: string;
+}
+
+interface LoginTimeParts {
+  hours?: number;
+  minutes?: number;
+}
+
 export default function DeskProfilePage() {
   const [period, setPeriod] = useState<Period>('day');
-  const [volume, setVolume] = useState<any>(null);
-  const [volumeAvg, setVolumeAvg] = useState<any>(null);
-  const [timeStats, setTimeStats] = useState<any>(null);
-  const [loginStatus, setLoginStatus] = useState<any>(null);
-  const [loginToday, setLoginToday] = useState<any>(null);
-  const [loginPeriod, setLoginPeriod] = useState<any>(null);
+  const [volume, setVolume] = useState<DeskVolume | null>(null);
+  const [volumeAvg, setVolumeAvg] = useState<DeskVolumeAverages | null>(null);
+  const [timeStats, setTimeStats] = useState<DeskTimeStats | null>(null);
+  const [loginStatus, setLoginStatus] = useState<LoginStatusRow | null>(null);
+  const [loginToday, setLoginToday] = useState<LoginTimeParts | null>(null);
+  const [loginPeriod, setLoginPeriod] = useState<LoginTimeParts | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

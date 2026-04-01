@@ -39,7 +39,7 @@ export function ActivityHeatmap({
   const { grid, monthLabels } = useMemo(() => {
     const jan1 = startOfYear(new Date(year, 0, 1));
     const dec31 = new Date(year, 11, 31);
-    let start = new Date(jan1);
+    const start = new Date(jan1);
     while (start.getDay() !== 0) {
       start.setDate(start.getDate() - 1);
     }

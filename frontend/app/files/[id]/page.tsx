@@ -78,6 +78,11 @@ import { cn } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/api';
 import { getFilePreviewConfig, canPreviewFile } from '@/lib/file-preview';
 
+interface AdminSettingRow {
+  key?: string;
+  value?: string;
+}
+
 // Helper to resolve attachment URLs
 function resolveAttachmentUrl(url: string): string {
   if (!url) return '';
@@ -116,8 +121,10 @@ function TextAttachmentPreview({ url, filename }: { url: string; filename: strin
   useEffect(() => {
     const path = attachmentPathFromUrl(url);
     if (!path) {
-      setError('Invalid URL');
-      setLoading(false);
+      queueMicrotask(() => {
+        setError('Invalid URL');
+        setLoading(false);
+      });
       return;
     }
     api
@@ -167,12 +174,16 @@ function PdfAttachmentPreview({
   useEffect(() => {
     const path = attachmentPathFromUrl(url);
     if (!path) {
-      setError('Invalid URL');
-      setLoading(false);
+      queueMicrotask(() => {
+        setError('Invalid URL');
+        setLoading(false);
+      });
       return;
     }
-    setLoading(true);
-    setError(null);
+    queueMicrotask(() => {
+      setLoading(true);
+      setError(null);
+    });
     let loadingHandled = false;
     const done = () => {
       if (!loadingHandled) {
@@ -249,7 +260,7 @@ function PdfAttachmentPreview({
       .catch((err) => {
         const status = err?.response?.status;
         const data = err?.response?.data;
-        let msg = 'Failed to load PDF';
+        const msg = 'Failed to load PDF';
         if (data instanceof Blob && data.type?.includes('json')) {
           data.text().then((text: string) => {
             try {
@@ -971,8 +982,8 @@ function FileDetailContent() {
     const fetchDefaultDueTime = async () => {
       try {
         const response = await api.get('/admin/settings');
-        const settings = Array.isArray(response.data) ? response.data : [];
-        const defaultSla = settings.find((s: any) => s?.key === 'defaultSlaNormHours');
+        const settings = Array.isArray(response.data) ? (response.data as AdminSettingRow[]) : [];
+        const defaultSla = settings.find((s) => s?.key === 'defaultSlaNormHours');
         if (defaultSla && defaultSla.value) {
           setDefaultDueTimeHours(String(defaultSla.value));
         }

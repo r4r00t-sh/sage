@@ -23,13 +23,13 @@ export function PageTransition({ children }: PageTransitionProps) {
         clearTimeout(timeoutRef.current);
       }
 
-      // Step 1: Fade out current content
-      setIsVisible(false);
+      // Step 1: Fade out current content (defer to avoid sync setState in effect)
+      queueMicrotask(() => setIsVisible(false));
 
       // Step 2: After fade out (200ms), update content
       timeoutRef.current = setTimeout(() => {
         setDisplayChildren(children);
-        
+
         // Step 3: Wait for DOM update, then fade in
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
@@ -41,11 +41,13 @@ export function PageTransition({ children }: PageTransitionProps) {
       prevPathnameRef.current = pathname;
     } else {
       // First render or same pathname - no transition needed
-      setDisplayChildren(children);
-      setIsVisible(true);
-      if (prevPathnameRef.current === null) {
-        prevPathnameRef.current = pathname;
-      }
+      queueMicrotask(() => {
+        setDisplayChildren(children);
+        setIsVisible(true);
+        if (prevPathnameRef.current === null) {
+          prevPathnameRef.current = pathname;
+        }
+      });
     }
 
     return () => {

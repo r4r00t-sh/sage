@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import api from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api-error';
 import { toast } from 'sonner';
 import { DepartmentProfileLink, DivisionProfileLink } from '@/components/profile-links';
 import {
@@ -196,7 +197,7 @@ function InboxContent() {
       await fetchFiles();
       router.push(`/files/${fileId}`);
     } catch (error: unknown) {
-      toast.error(error && typeof (error as any)?.response?.data === 'object' ? (error as any).response?.data?.message : 'Failed to claim file');
+      toast.error(apiErrorMessage(error, 'Failed to claim file'));
     } finally {
       setClaimingId(null);
     }

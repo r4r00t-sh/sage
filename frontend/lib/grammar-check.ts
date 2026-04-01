@@ -19,6 +19,22 @@ export interface GrammarCheckResult {
   hasErrors: boolean;
 }
 
+interface LanguageToolReplacement {
+  value?: string;
+}
+
+interface LanguageToolMatch {
+  offset: number;
+  length: number;
+  message: string;
+  replacements?: LanguageToolReplacement[];
+  rule?: { id?: string; description?: string };
+}
+
+interface LanguageToolCheckResponse {
+  matches?: LanguageToolMatch[];
+}
+
 /**
  * Check grammar using LanguageTool API
  * LanguageTool offers a free public API (rate limited)
@@ -50,13 +66,15 @@ export async function checkGrammar(
       throw new Error('Grammar check API request failed');
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as LanguageToolCheckResponse;
 
-    const errors: GrammarError[] = (data.matches || []).map((match: any) => ({
+    const errors: GrammarError[] = (data.matches || []).map((match) => ({
       offset: match.offset,
       length: match.length,
       message: match.message,
-      replacements: match.replacements?.map((r: any) => r.value) || [],
+      replacements:
+        match.replacements?.map((r) => (typeof r.value === 'string' ? r.value : '')).filter(Boolean) ||
+        [],
       rule: {
         id: match.rule?.id || '',
         description: match.rule?.description || '',

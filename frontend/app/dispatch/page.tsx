@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import api from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api-error';
 import { toast } from 'sonner';
 import {
   Send,
@@ -131,8 +132,8 @@ export default function DispatchPage() {
       setDispatchModalOpen(false);
       setSelectedFile(null);
       fetchFiles();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to dispatch file');
+    } catch (err: unknown) {
+      toast.error(apiErrorMessage(err, 'Failed to dispatch file'));
     } finally {
       setSubmitting(false);
     }

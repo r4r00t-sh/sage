@@ -10,6 +10,17 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LifeBuoy, Plus, MessageSquare, ArrowRight } from 'lucide-react';
 import api from '@/lib/api';
+
+interface SupportTicketListItem {
+  id: string;
+  ticketNumber: string;
+  subject: string;
+  status: string;
+  createdAt: string;
+  createdBy?: { name?: string };
+  assignedTo?: { name: string };
+  _count?: { replies?: number };
+}
 import { hasAnyRole } from '@/lib/auth-utils';
 
 const STATUS_COLOR: Record<string, string> = {
@@ -25,7 +36,7 @@ export default function SupportTicketsPage() {
   const searchParams = useSearchParams();
   const supportView = searchParams.get('supportView') === 'true';
   const { user } = useAuthStore();
-  const [tickets, setTickets] = useState<any[]>([]);
+  const [tickets, setTickets] = useState<SupportTicketListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const isSupport = hasAnyRole(user, ['DEVELOPER', 'SUPPORT', 'SUPER_ADMIN']);
 
@@ -36,7 +47,7 @@ export default function SupportTicketsPage() {
         const params = new URLSearchParams();
         if (supportView && isSupport) params.set('supportView', 'true');
         const res = await api.get(`/tickets?${params.toString()}`);
-        setTickets(res.data || []);
+        setTickets((res.data || []) as SupportTicketListItem[]);
       } catch {
         setTickets([]);
       } finally {

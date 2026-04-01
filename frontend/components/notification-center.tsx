@@ -68,18 +68,31 @@ export function NotificationCenter() {
       const response = await api.get('/notifications');
       const data = Array.isArray(response.data) ? response.data : [];
       setNotifications(
-        data.map((n: any) => ({
-          id: String(n.id),
-          type: parseNotificationType(n.type),
-          title: n.title || 'Notification',
-          message: n.message || '',
-          read: Boolean(n.read ?? n.isRead),
-          createdAt: n.createdAt || new Date().toISOString(),
-          link: n.link ?? n?.metadata?.link,
-          fileId: n.fileId,
-          priority: n.priority,
-          metadata: n.metadata,
-        }))
+        data.map((raw: unknown) => {
+          const n = raw as Record<string, unknown>;
+          const meta =
+            n.metadata && typeof n.metadata === 'object' && n.metadata !== null
+              ? (n.metadata as Record<string, unknown>)
+              : undefined;
+          return {
+            id: String(n.id ?? ''),
+            type: parseNotificationType(n.type),
+            title: (typeof n.title === 'string' ? n.title : null) || 'Notification',
+            message: (typeof n.message === 'string' ? n.message : '') || '',
+            read: Boolean(n.read ?? n.isRead),
+            createdAt:
+              (typeof n.createdAt === 'string' ? n.createdAt : null) || new Date().toISOString(),
+            link:
+              (typeof n.link === 'string' ? n.link : undefined) ??
+              (meta && typeof meta.link === 'string' ? meta.link : undefined),
+            fileId: typeof n.fileId === 'string' ? n.fileId : undefined,
+            priority: typeof n.priority === 'string' ? n.priority : undefined,
+            metadata:
+              n.metadata && typeof n.metadata === 'object' && n.metadata !== null
+                ? (n.metadata as Record<string, unknown>)
+                : undefined,
+          };
+        }),
       );
     } catch (error) {
       console.error('Failed to fetch notifications:', error);
@@ -141,8 +154,12 @@ export function NotificationCenter() {
     }
     // backend-backed notifications: metadata.link or fileId are used for deep-linking
     try {
-      const raw = notifications.find((n) => n.id === notification.id) as any;
-      const metadataLink = raw?.metadata?.link;
+      const raw = notifications.find((n) => n.id === notification.id);
+      const meta = raw?.metadata;
+      const metadataLink =
+        meta && typeof meta === 'object' && meta !== null && 'link' in meta && typeof (meta as { link: unknown }).link === 'string'
+          ? (meta as { link: string }).link
+          : undefined;
       const fileId = raw?.fileId;
       if (typeof metadataLink === 'string' && metadataLink) {
         router.push(metadataLink);

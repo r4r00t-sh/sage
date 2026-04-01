@@ -22,6 +22,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api-error';
 import { useAuthStore } from '@/lib/store';
 import {
   getCachedDepartments,
@@ -198,10 +199,9 @@ export function RequestOpinionModal({
       const data = response.data ?? [];
       setDivisions(data);
       setCachedDivisions(deptId, data);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error('Failed to load divisions', {
-        description:
-          error?.response?.data?.message || 'An error occurred loading divisions',
+        description: apiErrorMessage(error, 'An error occurred loading divisions'),
       });
       setDivisions([]);
     } finally {
@@ -261,10 +261,9 @@ export function RequestOpinionModal({
       });
       onOpenChange(false);
       onSuccess?.();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error('Failed to send opinion request', {
-        description:
-          error?.response?.data?.message || 'An error occurred while requesting opinion',
+        description: apiErrorMessage(error, 'An error occurred while requesting opinion'),
       });
     } finally {
       setLoading(false);

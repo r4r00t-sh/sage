@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select';
 import { ArrowLeft, LifeBuoy } from 'lucide-react';
 import api from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api-error';
 import { toast } from 'sonner';
 
 const PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'URGENT'] as const;
@@ -152,8 +153,8 @@ export default function NewTicketPage() {
       });
       toast.success('Ticket created');
       router.push(`/support/${res.data.id}`);
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to create ticket');
+    } catch (err: unknown) {
+      toast.error(apiErrorMessage(err, 'Failed to create ticket'));
     } finally {
       setSubmitting(false);
     }

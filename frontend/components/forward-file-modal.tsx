@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api-error';
 import { useAuthStore } from '@/lib/store';
 import { hasRole, hasGodRole } from '@/lib/auth-utils';
 import {
@@ -308,9 +309,9 @@ export function ForwardFileModal({
       const data = response.data ?? [];
       setDivisions(data);
       setCachedDivisions(deptId, data);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error('Failed to load divisions', {
-        description: error.response?.data?.message || 'An error occurred',
+        description: apiErrorMessage(error, 'An error occurred'),
       });
       setDivisions([]);
     } finally {

@@ -20,11 +20,32 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowLeft, MessageSquare, User, Headphones, Shield, Key } from 'lucide-react';
 import api from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api-error';
 import { hasAnyRole } from '@/lib/auth-utils';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 
 const STATUS_OPTIONS = ['OPEN', 'IN_PROGRESS', 'WAITING_USER', 'RESOLVED', 'CLOSED'];
+interface TicketReply {
+  id: string;
+  content: string;
+  createdAt: string;
+  isSupportReply?: boolean;
+  repliedBy?: { name?: string };
+}
+
+interface SupportTicketDetail {
+  ticketNumber: string;
+  subject: string;
+  status: string;
+  createdBy?: { name?: string; username?: string };
+  createdAt: string;
+  assignedTo?: { name: string };
+  description: string;
+  category?: string;
+  replies?: TicketReply[];
+}
+
 const STATUS_COLOR: Record<string, string> = {
   OPEN: 'bg-blue-500/10 text-blue-700 border-blue-500/20',
   IN_PROGRESS: 'bg-amber-500/10 text-amber-700 border-amber-500/20',
@@ -38,7 +59,7 @@ export default function TicketDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const { user } = useAuthStore();
-  const [ticket, setTicket] = useState<any>(null);
+  const [ticket, setTicket] = useState<SupportTicketDetail | null>(null);
   const [replyContent, setReplyContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -66,7 +87,7 @@ export default function TicketDetailPage() {
   const loadTicket = async () => {
     try {
       const res = await api.get(`/tickets/${id}`);
-      setTicket(res.data);
+      setTicket(res.data as SupportTicketDetail);
     } catch {
       toast.error('Ticket not found');
       router.replace('/support');
@@ -97,8 +118,8 @@ export default function TicketDetailPage() {
       setReplyContent('');
       await loadTicket();
       toast.success('Reply sent');
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to send reply');
+    } catch (err: unknown) {
+      toast.error(apiErrorMessage(err, 'Failed to send reply'));
     } finally {
       setSubmitting(false);
     }
@@ -110,8 +131,8 @@ export default function TicketDetailPage() {
       await api.post(`/tickets/${id}/status`, { status });
       await loadTicket();
       toast.success('Status updated');
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to update status');
+    } catch (err: unknown) {
+      toast.error(apiErrorMessage(err, 'Failed to update status'));
     }
   };
 
@@ -153,8 +174,8 @@ export default function TicketDetailPage() {
         divisionId: '',
       });
       await loadTicket();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to create user');
+    } catch (err: unknown) {
+      toast.error(apiErrorMessage(err, 'Failed to create user'));
     } finally {
       setCreatingUser(false);
     }
@@ -363,7 +384,7 @@ export default function TicketDetailPage() {
         </h2>
         {ticket.replies?.length ? (
           <div className="space-y-3">
-            {ticket.replies.map((r: any) => (
+            {ticket.replies.map((r: TicketReply) => (
               <Card key={r.id} className={r.isSupportReply ? 'border-l-4 border-l-primary' : ''}>
                 <CardContent className="py-3">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">

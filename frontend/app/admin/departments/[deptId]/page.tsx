@@ -48,6 +48,16 @@ import {
   Loader2,
 } from 'lucide-react';
 import api from '@/lib/api';
+
+interface DepartmentAnalyticsListRow {
+  id: string;
+  totalFiles?: number;
+  pendingFiles?: number;
+  completedFiles?: number;
+  redListedFiles?: number;
+  avgProcessingTimeHours?: number | null;
+  efficiency?: number;
+}
 import { hasAnyRole, getRoles, hasGodRole } from '@/lib/auth-utils';
 import { toast } from 'sonner';
 
@@ -139,7 +149,9 @@ export default function DepartmentProfilePage() {
     try {
       if (isSuperAdmin) {
         const res = await api.get('/analytics/departments');
-        const list = res.data as any[];
+        const list = Array.isArray(res.data)
+          ? (res.data as DepartmentAnalyticsListRow[])
+          : [];
         const found = list.find((d) => d.id === departmentId);
         if (found) {
           setAnalytics({

@@ -86,7 +86,7 @@ export default function CapacityManagementPage() {
   const { user } = useAuthStore();
   const canEditCapacity = hasRole(user, 'DEVELOPER');
   const [loading, setLoading] = useState(true);
-  const [departments, setDepartments] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<{ id: string; name: string; code: string }[]>([]);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
   const [capacityData, setCapacityData] = useState<DepartmentCapacity | null>(null);
   const [expandedDivisions, setExpandedDivisions] = useState<Set<string>>(new Set());
