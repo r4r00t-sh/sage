@@ -65,6 +65,7 @@ interface UserOption {
   name: string;
   username: string;
   role?: string;
+  roles?: string[];
 }
 
 interface ForwardFileModalProps {
@@ -329,7 +330,10 @@ export function ForwardFileModal({
       // Inward Desk: can only forward to internal Section Officer or Dept Admin
       if (isInwardDesk) {
         data = data.filter(
-          (u) => u.role === 'SECTION_OFFICER' || u.role === 'DEPT_ADMIN',
+          (u) => {
+            const roles = Array.isArray(u.roles) ? u.roles : u.role ? [u.role] : [];
+            return roles.includes('SECTION_OFFICER') || roles.includes('DEPT_ADMIN');
+          },
         );
       }
 
